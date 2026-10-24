@@ -137,3 +137,18 @@ You have no access to this counterparty.,Sie haben keinen Zugriff auf diese Gege
 "Once archiving has started, this date can only move later.",Nach Beginn der Archivierung kann dieses Datum nur noch nach hinten verschoben werden.
 "Once archiving has started, the contract end date can only move later.",Nach Beginn der Archivierung kann das Vertragsende nur noch nach hinten verschoben werden.
 Archived files cannot be changed.,Archivierte Dateien können nicht geändert werden.
+Document Integration,Dokumentenschnittstelle
+Source Party Name,Name der Gegenpartei in der Quelle
+Source Party Email,E-Mail der Gegenpartei in der Quelle
+Document type is missing.,Die Dokumentart fehlt.
+Unknown document type {0}.,Unbekannte Dokumentart {0}.
+{0} is missing.,{0} fehlt.
+{0} must be a date in the format YYYY-MM-DD.,{0} muss ein Datum im Format JJJJ-MM-TT sein.
+"This document type needs a counterparty: send source_party_id, source_party_name or source_party_email.","Diese Dokumentart braucht eine Gegenpartei: bitte source_party_id, source_party_name oder source_party_email senden."
+content_base64 is not valid Base64.,content_base64 ist kein gültiges Base64.
+No file was sent. Send it as multipart field file or as content_base64.,Es wurde keine Datei gesendet. Bitte als Multipart-Feld file oder als content_base64 senden.
+The file needs a file name without slashes.,Die Datei braucht einen Dateinamen ohne Schrägstriche.
+The file is empty.,Die Datei ist leer.
+The file is larger than {0} MB.,Die Datei ist größer als {0} MB.
+The file is damaged or does not match its file type.,Die Datei ist beschädigt oder passt nicht zu ihrem Dateityp.
+This source_key is already used by another source.,Dieser source_key wird bereits von einer anderen Quelle verwendet.
