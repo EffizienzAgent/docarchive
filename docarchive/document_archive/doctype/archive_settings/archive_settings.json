@@ -1,0 +1,121 @@
+{
+ "docstatus": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Document Archive",
+ "custom": 0,
+ "name": "Archive Settings",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "issingle": 1,
+ "track_changes": 1,
+ "field_order": [
+  "enabled",
+  "min_age_hours",
+  "companies_section",
+  "default_own_company",
+  "successor_own_company",
+  "successor_from_date",
+  "documents_section",
+  "default_upload_type",
+  "manager_roles",
+  "retention_section",
+  "retention_rules",
+  "storage_section",
+  "storage_targets"
+ ],
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "0",
+   "description": "Archive documents every night. Needs at least one enabled storage target."
+  },
+  {
+   "fieldname": "min_age_hours",
+   "fieldtype": "Int",
+   "label": "Minimum Age (Hours)",
+   "default": "24",
+   "description": "Documents are archived only after this many hours without changes."
+  },
+  {
+   "fieldname": "companies_section",
+   "fieldtype": "Section Break",
+   "label": "Own Companies"
+  },
+  {
+   "fieldname": "default_own_company",
+   "fieldtype": "Link",
+   "label": "Default Own Company",
+   "options": "Own Company"
+  },
+  {
+   "fieldname": "successor_own_company",
+   "fieldtype": "Link",
+   "label": "Successor Own Company",
+   "options": "Own Company"
+  },
+  {
+   "fieldname": "successor_from_date",
+   "fieldtype": "Date",
+   "label": "Successor From Date",
+   "description": "Documents dated on or after this day belong to the successor company."
+  },
+  {
+   "fieldname": "documents_section",
+   "fieldtype": "Section Break",
+   "label": "Documents"
+  },
+  {
+   "fieldname": "default_upload_type",
+   "fieldtype": "Link",
+   "label": "Default Upload Type",
+   "options": "Business Document Type",
+   "description": "Preselected in the upload dialog until the user has filed a document."
+  },
+  {
+   "fieldname": "manager_roles",
+   "fieldtype": "Table MultiSelect",
+   "label": "Manager Roles",
+   "options": "Archive Manager Role",
+   "description": "Roles that may file and read documents, in addition to Document Manager."
+  },
+  {
+   "fieldname": "retention_section",
+   "fieldtype": "Section Break",
+   "label": "Retention"
+  },
+  {
+   "fieldname": "retention_rules",
+   "fieldtype": "Table",
+   "label": "Retention Rules",
+   "options": "Archive Retention Rule"
+  },
+  {
+   "fieldname": "storage_section",
+   "fieldtype": "Section Break",
+   "label": "Storage"
+  },
+  {
+   "fieldname": "storage_targets",
+   "fieldtype": "Table",
+   "label": "Storage Targets",
+   "options": "Archive Storage Target",
+   "description": "Every enabled target gets a locked copy of each archived document."
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Document Manager",
+   "read": 1
+  }
+ ]
+}

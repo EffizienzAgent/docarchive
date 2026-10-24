@@ -1,0 +1,103 @@
+{
+ "docstatus": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Document Archive",
+ "custom": 0,
+ "name": "Business Document Type",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "field:type_name",
+ "title_field": "type_name",
+ "translated_doctype": 1,
+ "track_changes": 1,
+ "field_order": [
+  "type_name",
+  "slug",
+  "archive",
+  "retention_from",
+  "default_retention_years",
+  "requirements_section",
+  "counterparty_required",
+  "number_required",
+  "contract_end_required"
+ ],
+ "fields": [
+  {
+   "fieldname": "type_name",
+   "fieldtype": "Data",
+   "label": "Type Name",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "slug",
+   "fieldtype": "Data",
+   "label": "Slug",
+   "reqd": 1,
+   "unique": 1,
+   "set_only_once": 1,
+   "in_list_view": 1,
+   "description": "Lowercase letters, digits and hyphens. Used as the archive folder name."
+  },
+  {
+   "fieldname": "archive",
+   "fieldtype": "Check",
+   "label": "Archive",
+   "in_list_view": 1,
+   "description": "Documents of this type are archived unchangeably every night."
+  },
+  {
+   "fieldname": "retention_from",
+   "fieldtype": "Select",
+   "label": "Retention Counts From",
+   "options": "Document Date\nContract End Date",
+   "default": "Document Date",
+   "description": "Retention runs until the end of this year plus the retention years."
+  },
+  {
+   "fieldname": "default_retention_years",
+   "fieldtype": "Int",
+   "label": "Default Retention Years",
+   "description": "Used when Archive Settings have no rule for the company and this type."
+  },
+  {
+   "fieldname": "requirements_section",
+   "fieldtype": "Section Break",
+   "label": "Required Before Archiving"
+  },
+  {
+   "fieldname": "counterparty_required",
+   "fieldtype": "Check",
+   "label": "Counterparty Required"
+  },
+  {
+   "fieldname": "number_required",
+   "fieldtype": "Check",
+   "label": "Number Required"
+  },
+  {
+   "fieldname": "contract_end_required",
+   "fieldtype": "Check",
+   "label": "Contract End Date Required",
+   "depends_on": "eval:doc.retention_from == 'Contract End Date'"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1
+  },
+  {
+   "role": "Document Manager",
+   "read": 1,
+   "report": 1
+  }
+ ]
+}

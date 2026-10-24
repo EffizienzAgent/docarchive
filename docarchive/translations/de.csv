@@ -1,0 +1,129 @@
+Archive Manager Role,Verwaltungsrolle
+Role,Rolle
+Archive Retention Rule,Aufbewahrungsregel
+Own Company,Eigene Firma
+Business Document Type,Dokumentart
+Years,Jahre
+Archive Settings,Archiveinstellungen
+Enabled,Aktiviert
+Archive documents every night. Needs at least one enabled storage target.,Dokumente jede Nacht archivieren. Braucht mindestens ein aktives Speicherziel.
+Minimum Age (Hours),Mindestalter (Stunden)
+Documents are archived only after this many hours without changes.,Dokumente werden erst nach so vielen Stunden ohne Änderung archiviert.
+Own Companies,Eigene Firmen
+Default Own Company,Standardfirma
+Successor Own Company,Nachfolgefirma
+Successor From Date,Nachfolgefirma ab
+Documents dated on or after this day belong to the successor company.,Dokumente ab diesem Datum gehören zur Nachfolgefirma.
+Documents,Dokumente
+Default Upload Type,Standard-Dokumentart beim Hochladen
+Preselected in the upload dialog until the user has filed a document.,"Im Upload-Dialog vorausgewählt, bis die Person selbst ein Dokument abgelegt hat."
+Manager Roles,Verwaltungsrollen
+"Roles that may file and read documents, in addition to Document Manager.","Rollen, die zusätzlich zu Dokumentenverwaltung Dokumente ablegen und lesen dürfen."
+Retention,Aufbewahrung
+Retention Rules,Aufbewahrungsregeln
+Storage,Speicher
+Storage Targets,Speicherziele
+Every enabled target gets a locked copy of each archived document.,Jedes aktive Ziel bekommt eine gesperrte Kopie jedes archivierten Dokuments.
+Archive Storage Target,Speicherziel
+Target Name,Name des Ziels
+"Lowercase letters, digits and hyphens. Used as the archive folder name.","Kleinbuchstaben, Ziffern und Bindestriche. Wird als Ordnername im Archiv verwendet."
+Lock Mode,Sperrmodus
+GOVERNANCE,GOVERNANCE
+COMPLIANCE,COMPLIANCE
+Config Source,Konfigurationsquelle
+Site Config,Site-Konfiguration
+Fields,Felder
+Site Config Prefix,Präfix in der Site-Konfiguration
+"Reads <prefix>_endpoint, <prefix>_region and <prefix>_bucket from the site config.","Liest <prefix>_endpoint, <prefix>_region und <prefix>_bucket aus der Site-Konfiguration."
+Endpoint,Endpunkt
+Region,Region
+Bucket,Bucket
+Credentials,Zugangsdaten
+Access Key Config Key,Konfigurationsschlüssel für den Access Key
+Name of the site config key that holds the access key.,"Name des Schlüssels in der Site-Konfiguration, der den Access Key enthält."
+Secret Key Config Key,Konfigurationsschlüssel für den Secret Key
+Name of the site config key that holds the secret key.,"Name des Schlüssels in der Site-Konfiguration, der den Secret Key enthält."
+Access Key,Access Key
+Secret Key,Secret Key
+Business Document,Dokument
+Title,Titel
+File,Datei
+Retention Counts From,Aufbewahrung zählt ab
+Document Date,Belegdatum
+Document Number,Belegnummer
+Contract End Date,Vertragsende
+Counterparty Type,Art der Gegenpartei
+Counterparty,Gegenpartei
+Empty: set by the host app or taken from the Archive Settings.,Leer: wird von der Host-App gesetzt oder aus den Archiveinstellungen übernommen.
+Source,Quelle
+Source System,Quellsystem
+Source Account,Quellkonto
+Source Party Type,Art der Partei in der Quelle
+Source Party ID,ID der Partei in der Quelle
+Source Key,Quellschlüssel
+Replaces,Ersetzt
+Content SHA-256,Inhalt SHA-256
+Archive,Archivieren
+Archive Status,Archivstatus
+Pending,Ausstehend
+Archived,Archiviert
+Failed,Fehlgeschlagen
+Archive Started At,Archivierung begonnen am
+Archived At,Archiviert am
+Archive Attempts,Archivierungsversuche
+Archive Error,Archivfehler
+Archive SHA-256,Archiv SHA-256
+Archive Size,Archivgröße
+Object Key,Objektschlüssel
+Meta Key,Meta-Schlüssel
+Retention Mode,Aufbewahrungsmodus
+Retain Until,Aufbewahren bis
+Type Name,Name der Art
+Slug,Kürzel
+Documents of this type are archived unchangeably every night.,Dokumente dieser Art werden jede Nacht unveränderbar archiviert.
+Retention runs until the end of this year plus the retention years.,Die Aufbewahrung läuft bis zum Ende dieses Jahres plus die Aufbewahrungsjahre.
+Default Retention Years,Standard-Aufbewahrungsjahre
+Used when Archive Settings have no rule for the company and this type.,"Gilt, wenn die Archiveinstellungen keine Regel für die Firma und diese Art haben."
+Required Before Archiving,Vor dem Archivieren erforderlich
+Counterparty Required,Gegenpartei erforderlich
+Number Required,Nummer erforderlich
+Contract End Date Required,Vertragsende erforderlich
+Company Name,Firmenname
+Disabled,Deaktiviert
+Choose the counterparty type.,Bitte die Art der Gegenpartei wählen.
+{0} cannot be a counterparty.,{0} kann keine Gegenpartei sein.
+Retention years must be positive.,Die Aufbewahrungsjahre müssen größer als null sein.
+There is more than one retention rule for {0} and {1}.,Es gibt mehr als eine Aufbewahrungsregel für {0} und {1}.
+Archived documents cannot be deleted.,Archivierte Dokumente können nicht gelöscht werden.
+This document is being archived and cannot be changed.,Dieses Dokument wird archiviert und kann nicht mehr geändert werden.
+{0} cannot be changed once archiving has started.,"{0} kann nicht mehr geändert werden, seit die Archivierung begonnen hat."
+No own company is set. A System Manager has to create one and set it as default in the Archive Settings.,Es ist keine eigene Firma festgelegt. Ein System Manager muss eine anlegen und in den Archiveinstellungen als Standardfirma festlegen.
+Documents must be uploaded as private files.,Dokumente müssen als private Dateien hochgeladen werden.
+Please upload the file directly to this document.,Bitte die Datei direkt in dieses Dokument hochladen.
+File {0} does not exist.,Datei {0} existiert nicht.
+Only contracts have a contract end date.,Nur Verträge haben ein Vertragsende.
+The contract end date cannot be before the document date.,Das Vertragsende darf nicht vor dem Belegdatum liegen.
+This file belongs to an archived document and cannot be deleted.,Diese Datei gehört zu einem archivierten Dokument und kann nicht gelöscht werden.
+This file belongs to an archived document and cannot be changed.,Diese Datei gehört zu einem archivierten Dokument und kann nicht geändert werden.
+{0} is linked from archived documents and cannot be renamed or merged.,{0} ist mit archivierten Dokumenten verknüpft und kann nicht umbenannt oder zusammengeführt werden.
+Own company {0} does not exist or is disabled.,Eigene Firma {0} gibt es nicht oder sie ist deaktiviert.
+"{0} may only contain lowercase letters, digits and single hyphens.","{0} darf nur Kleinbuchstaben, Ziffern und einzelne Bindestriche enthalten."
+There is more than one storage target named {0}.,Es gibt mehr als ein Speicherziel namens {0}.
+Storage target {0} points to the same bucket as another target.,Speicherziel {0} zeigt auf denselben Bucket wie ein anderes Ziel.
+{0} of storage target {1} must be a site config key name.,{0} von Speicherziel {1} muss ein Schlüsselname der Site-Konfiguration sein.
+The endpoint of storage target {0} must start with https://.,Der Endpunkt von Speicherziel {0} muss mit https:// beginnen.
+Storage target {0} has no valid bucket name.,Speicherziel {0} hat keinen gültigen Bucket-Namen.
+Storage target {0} needs a region.,Speicherziel {0} braucht eine Region.
+Storage target {0} needs an access key and a secret key.,Speicherziel {0} braucht einen Access Key und einen Secret Key.
+Enable at least one storage target before enabling the archive.,"Bitte mindestens ein Speicherziel aktivieren, bevor das Archiv eingeschaltet wird."
+Storage target {0} misses these site config keys: {1},Speicherziel {0} fehlen diese Schlüssel in der Site-Konfiguration: {1}
+No documents yet,Noch keine Dokumente
+Upload documents,Dokumente hochladen
+Save,Speichern
+Show all documents,Alle Dokumente anzeigen
+Upload,Hochladen
+Document Manager,Dokumentenverwaltung
+Outgoing Invoice,Ausgangsrechnung
+Incoming Invoice,Eingangsrechnung
+Contract,Vertrag
+Bank Statement,Kontoauszug
