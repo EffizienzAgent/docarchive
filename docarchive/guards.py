@@ -75,11 +75,11 @@ def protect_file(file_doc, *args, **kwargs):
 		refuse_delete()
 
 
-def protect_object(file_url=None, *args, key=None, **kwargs):
+def protect_object(file_url=None, key=None, **kwargs):
 	if key and not file_url:
 		file_url = url_for_key(key)
 	if archived_url(file_url):
-		refuse_change()
+		frappe.throw(_("Archived files cannot be changed."))
 
 
 def url_for_key(key):

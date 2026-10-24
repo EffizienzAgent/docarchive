@@ -148,13 +148,15 @@ class TestSharedObjectGuards(IntegrationTestCase):
 		guards.protect_object(make_file().file_url)
 		guards.protect_object(self.doc.file.upper())
 
-	def test_object_change_hook_as_s3storage_calls_it(self):
-		hooks = frappe.get_hooks("s3storage_before_object_change")
-		self.assertIn("docarchive.guards.protect_object", hooks)
-		for action in ("delete", "write"):
-			with self.subTest(action=action), self.assertRaises(frappe.ValidationError):
-				for method in hooks:
-					frappe.get_attr(method)(self.doc.file, action, self.file)
-		other = make_file()
-		for method in hooks:
-			frappe.get_attr(method)(other.file_url, "write", other)
+	def test_object_hooks_as_s3storage_calls_them(self):
+		key = "private/files/" + self.doc.file.rsplit("/", 1)[-1]
+		for hook in ("s3storage_before_object_delete", "s3storage_before_object_write"):
+			methods = frappe.get_hooks(hook)
+			self.assertIn("docarchive.guards.protect_object", methods, hook)
+			with self.subTest(hook=hook), self.assertRaisesRegex(frappe.ValidationError, "cannot be changed"):
+				for method in methods:
+					frappe.get_attr(method)(file_url=self.doc.file, key=key)
+			fresh = make_file()
+			for method in methods:
+				frappe.get_attr(method)(file_url=fresh.file_url, key="private/files/" + fresh.file_name)
+		self.assertFalse(frappe.get_hooks("s3storage_before_object_change"))
