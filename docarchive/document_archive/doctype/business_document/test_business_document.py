@@ -378,6 +378,40 @@ class TestBusinessDocumentFiles(BusinessDocumentTestCase):
 			frappe.db.exists("File", {"attached_to_doctype": "Contact", "attached_to_name": party.name})
 		)
 
+	def unsaved_document(self, file_url, temporary):
+		doc = frappe.get_doc(
+			{
+				"doctype": "Business Document",
+				"document_type": self.invoice,
+				"document_date": "2026-03-15",
+				"file": file_url,
+			}
+		)
+		doc.set("__temporary_name", temporary)
+		return doc
+
+	def test_upload_on_unsaved_document(self):
+		temporary = f"new-business-document-{unique('tmp')}"
+		frappe.set_user(make_manager("archive-unsaved@example.com"))
+		upload = make_file(
+			attached_to_doctype="Business Document", attached_to_name=temporary, attached_to_field="file"
+		)
+		doc = self.unsaved_document(upload.file_url, temporary).insert()
+		frappe.set_user("Administrator")
+		self.assertEqual(frappe.db.get_value("File", upload.name, "attached_to_name"), doc.name)
+
+	def test_upload_on_other_unsaved_document_rejected(self):
+		temporary = f"new-business-document-{unique('tmp')}"
+		frappe.set_user(make_manager("archive-unsaved-owner@example.com"))
+		upload = make_file(
+			attached_to_doctype="Business Document", attached_to_name=temporary, attached_to_field="file"
+		)
+		with self.assertRaises(frappe.ValidationError):
+			self.unsaved_document(upload.file_url, f"{temporary}-other").insert()
+		frappe.set_user(make_manager("archive-unsaved-other@example.com"))
+		with self.assertRaises(frappe.ValidationError):
+			self.unsaved_document(upload.file_url, temporary).insert()
+
 	def test_file_url_must_match_exactly(self):
 		upload = make_file(file_name=f"{unique('CaseTest')}.pdf")
 		with self.assertRaises(frappe.ValidationError):

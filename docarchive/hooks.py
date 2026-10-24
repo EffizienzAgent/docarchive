@@ -16,8 +16,7 @@ doc_events = {
 }
 has_permission = {"File": "docarchive.guards.file_permission"}
 s3storage_before_file_delete = ["docarchive.guards.protect_file"]
-s3storage_before_object_delete = ["docarchive.guards.protect_object"]
-s3storage_before_object_write = ["docarchive.guards.protect_object"]
+s3storage_before_object_change = ["docarchive.guards.protect_object"]
 
 # Extension hooks for host apps:
 # docarchive_assign: callables that fill own_company / counterparty_type / counterparty on a document.

@@ -147,5 +147,14 @@ class TestSharedObjectGuards(IntegrationTestCase):
 			guards.protect_object(key=key)
 		guards.protect_object(make_file().file_url)
 		guards.protect_object(self.doc.file.upper())
-		self.assertIn("docarchive.guards.protect_object", frappe.get_hooks("s3storage_before_object_delete"))
-		self.assertIn("docarchive.guards.protect_object", frappe.get_hooks("s3storage_before_object_write"))
+
+	def test_object_change_hook_as_s3storage_calls_it(self):
+		hooks = frappe.get_hooks("s3storage_before_object_change")
+		self.assertIn("docarchive.guards.protect_object", hooks)
+		for action in ("delete", "write"):
+			with self.subTest(action=action), self.assertRaises(frappe.ValidationError):
+				for method in hooks:
+					frappe.get_attr(method)(self.doc.file, action, self.file)
+		other = make_file()
+		for method in hooks:
+			frappe.get_attr(method)(other.file_url, "write", other)

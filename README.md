@@ -54,7 +54,7 @@ Own company resolution: an explicit value, then the `docarchive_assign` hooks, t
 
 File deletion runs inside the File controller, before any `doc_events` hook. So the delete guard also has to run there:
 
-- With the `s3storage` app, docarchive registers `docarchive.guards.protect_file` under `s3storage_before_file_delete`, and `docarchive.guards.protect_object(file_url=None, key=None)` under `s3storage_before_object_delete` and `s3storage_before_object_write`, so object deletes and overwrites (for example through `optimize_file`) of an archived object are refused.
+- With the `s3storage` app, docarchive registers `docarchive.guards.protect_file` under `s3storage_before_file_delete`, and `docarchive.guards.protect_object` under `s3storage_before_object_change`, which s3storage calls as `(file_url, action, file)` before it deletes or overwrites an object. So deletes and overwrites of an archived object (for example through `optimize_file`) are refused.
 - If your app overrides the File class itself, call `docarchive.guards.protect_file(self)` at the start of `on_trash`, before `super().on_trash()`.
 - Without either, deletes by users are still refused through `has_permission`. But a server-side delete with `ignore_permissions` would remove the bytes before the guard runs.
 

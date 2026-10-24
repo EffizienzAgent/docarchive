@@ -57,8 +57,12 @@ def own_file(doc):
 	for row in rows:
 		if row.attached_to_doctype == doc.doctype and row.attached_to_name == doc.name:
 			return row
+	temporary = doc.get("__temporary_name")
 	for row in rows:
-		if row.owner == frappe.session.user and not row.attached_to_doctype:
+		if row.owner == frappe.session.user and (
+			not row.attached_to_doctype
+			or (temporary and row.attached_to_doctype == doc.doctype and row.attached_to_name == temporary)
+		):
 			return row
 	return None
 
