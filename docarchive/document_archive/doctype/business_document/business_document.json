@@ -106,7 +106,7 @@
    "fieldtype": "Date",
    "label": "Contract End Date",
    "depends_on": "eval:doc.retention_from == 'Contract End Date'",
-   "read_only_depends_on": "eval:doc.archive_started_at"
+   "description": "Once archiving has started, this date can only move later."
   },
   {
    "fieldname": "column_break_main",

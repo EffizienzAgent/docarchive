@@ -134,3 +134,5 @@ Only these file types can be filed: {0},Nur diese Dateitypen können abgelegt we
 The endpoint of storage target {0} must be a public host.,Der Endpunkt von Speicherziel {0} muss ein öffentlicher Host sein.
 You have no access to this counterparty.,Sie haben keinen Zugriff auf diese Gegenpartei.
 {0} cannot be a manager role.,{0} kann keine Verwaltungsrolle sein.
+"Once archiving has started, this date can only move later.",Nach Beginn der Archivierung kann dieses Datum nur noch nach hinten verschoben werden.
+"Once archiving has started, the contract end date can only move later.",Nach Beginn der Archivierung kann das Vertragsende nur noch nach hinten verschoben werden.

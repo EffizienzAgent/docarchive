@@ -17,7 +17,6 @@ LOCKED_FIELDS = (
 	"counterparty_type",
 	"counterparty",
 	"file",
-	"contract_end_date",
 	*SOURCE_FIELDS,
 )
 PROTECTED_FIELDS = (
@@ -132,6 +131,10 @@ class BusinessDocument(Document):
 		return cast(fieldtype, self.get(field)) != cast(fieldtype, before.get(field))
 
 	def enforce_lock(self, before):
+		if before.contract_end_date and (
+			not self.contract_end_date or getdate(self.contract_end_date) < getdate(before.contract_end_date)
+		):
+			frappe.throw(_("Once archiving has started, the contract end date can only move later."))
 		for field in (*LOCKED_FIELDS, "archive_started_at"):
 			if self.changed(before, field):
 				frappe.throw(

@@ -168,7 +168,6 @@ class TestBusinessDocumentLock(BusinessDocumentTestCase):
 			"counterparty_type": "User",
 			"counterparty": user.name,
 			"file": make_file().file_url,
-			"contract_end_date": "2031-06-30",
 			**{field: "changed" for field in SOURCE_FIELDS},
 		}
 		self.assertEqual(set(values), set(LOCKED_FIELDS))
@@ -273,6 +272,30 @@ class TestBusinessDocumentProtectedFields(BusinessDocumentTestCase):
 		doc.archive_error = "Bucket unreachable"
 		doc.save()
 		self.assertEqual(frappe.db.get_value("Business Document", doc.name, "archive_status"), "Failed")
+
+	def test_contract_end_date_only_moves_later_after_archive_start(self):
+		doc = start_archive(
+			make_business_document(
+				document_type=self.contract, contract_end_date="2030-12-31", **party_fields(make_party())
+			)
+		)
+		for value in ("2030-06-30", None):
+			with self.subTest(value=value):
+				doc = frappe.get_doc("Business Document", doc.name)
+				doc.contract_end_date = value
+				with self.assertRaises(frappe.ValidationError):
+					doc.save()
+		doc = frappe.get_doc("Business Document", doc.name)
+		doc.contract_end_date = "2031-06-30"
+		doc.save()
+		self.assertEqual(
+			str(frappe.db.get_value("Business Document", doc.name, "contract_end_date")), "2031-06-30"
+		)
+
+	def test_contract_end_date_can_be_added_after_archive_start(self):
+		doc = start_archive(make_business_document(document_type=self.contract, **party_fields(make_party())))
+		doc.contract_end_date = "2031-06-30"
+		doc.save()
 
 	def test_title_editable_after_archive_start(self):
 		doc = start_archive(make_business_document(document_type=self.contract, **party_fields(make_party())))
