@@ -151,3 +151,4 @@ The file needs a file name without slashes.,Die Datei braucht einen Dateinamen o
 The file is empty.,Die Datei ist leer.
 The file is larger than {0} MB.,Die Datei ist größer als {0} MB.
 The file is damaged or does not match its file type.,Die Datei ist beschädigt oder passt nicht zu ihrem Dateityp.
+This source_key is already used by another source.,Dieser source_key wird bereits von einer anderen Quelle verwendet.
