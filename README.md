@@ -25,7 +25,7 @@ docarchive is a technical tool. It does not make you compliant with GoBD, the GD
 
 ## Roles
 
-The app creates the role **Document Manager** (read, write and create documents; no delete) and the role **Document Integration** for the [upload API](#upload-api) (no desk access and no document permissions; it can only call the upload endpoint). Only System Manager can read or change Archive Settings, so storage endpoints, buckets and key names stay hidden from document managers. To let a host role in, add it to **Archive Settings → Manager Roles** (Guest, All and Desk User are refused). The app then grants that role the same rights through Custom DocPerm and remembers which rows it created. On every save of the settings and on every migrate, it removes only those rows for roles that are no longer listed; permission rows set by an admin stay.
+The app creates the role **Document Manager** (read, write and create documents; no delete) and the role **Document Integration** for the [upload API](#upload-api) (no desk access and no document permissions; it can only call the upload endpoint). Files attached to a Business Document can only be changed or deleted by users who may write that document, so an integration user cannot touch the files it uploaded. Only System Manager can read or change Archive Settings, so storage endpoints, buckets and key names stay hidden from document managers. To let a host role in, add it to **Archive Settings → Manager Roles** (Guest, All and Desk User are refused). The app then grants that role the same rights through Custom DocPerm and remembers which rows it created. On every save of the settings and on every migrate, it removes only those rows for roles that are no longer listed; permission rows set by an admin stay.
 
 Custom DocPerm replaces the standard permissions of a doctype. If you edit permissions on these doctypes by hand, keep the manager rows.
 
@@ -107,7 +107,7 @@ A type with **Counterparty Required** needs at least one of `source_party_id`, `
 
 Retries are safe:
 
-- The same `source_key` with the same content returns the existing document (`"status": "exists"`).
+- The same `source_key` with the same content returns the existing document (`"status": "exists"`, only `name` and `status`). A `source_key` belongs to its `source_system` and `source_account`; reusing it from another source is refused. Two parallel requests with the same new `source_key` create one document.
 - The same content for the same document type returns the existing document, with or without a `source_key`.
 - A different file under a known `source_key` creates a new document whose `replaces` points to the latest version (`"status": "replaced"`). Existing documents are never changed, archived or not.
 
@@ -138,7 +138,7 @@ Response (HTTP 200):
 
 `status` is `created`, `exists` or `replaced`. `missing` lists what the document still needs before it can be archived (`File`, `Counterparty`, `Document Number`, `Contract End Date`).
 
-Errors come back as JSON with an HTTP status: 400 for an invalid request (unknown type, missing or invalid date, missing required field, file type, size, empty or damaged file), 403 without the role, 417 for other validation errors, 429 when rate limited:
+Errors come back as JSON with an HTTP status: 400 for an invalid request (unknown type, missing or invalid date, missing required field, file type, size, empty or damaged file), 403 without the role, 417 for other validation errors, 429 when rate limited, and 5xx for storage or internal errors (retry those):
 
 ```json
 {"errors": [{"type": "UploadError", "message": "Unknown document type invoice."}]}

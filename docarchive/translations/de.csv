@@ -183,3 +183,4 @@ Missing before archiving: {0},Fehlt vor dem Archivieren: {0}
 No storage target is configured.,Es ist kein Speicherziel eingerichtet.
 Source Record Type,Art des Quelldatensatzes
 Source Record,Quelldatensatz
+This source_key is already used by another source.,Dieser source_key wird bereits von einer anderen Quelle verwendet.

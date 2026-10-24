@@ -223,3 +223,51 @@ class TestUploadApi(IntegrationTestCase):
 		before = archived.as_dict()
 		archived.reload()
 		self.assertEqual(str(archived.modified), str(before.modified))
+
+	def test_exists_returns_minimal_fields(self):
+		data = pdf(b"minimal")
+		self.upload(data)
+		self.assertEqual(set(self.upload(data)), {"name", "status"})
+
+	def test_source_key_is_scoped_to_system_and_account(self):
+		key = unique("shared-key")
+		data = pdf(b"scoped")
+		first = self.upload(data, source_key=key, source_system="Billing", source_account="a")
+		again = self.upload(data, source_key=key, source_system="Billing", source_account="a")
+		self.assertEqual(again["name"], first["name"])
+		for scope in ({"source_account": "b"}, {"source_system": "Other"}):
+			with self.subTest(scope), self.assertRaisesRegex(api.UploadError, "another source"):
+				self.upload(
+					pdf(unique("x").encode()),
+					source_key=key,
+					**{"source_system": "Billing", "source_account": "a", **scope},
+				)
+
+	def test_concurrent_source_key_returns_existing(self):
+		key = unique("race")
+		data = pdf(b"race")
+		real_find, real_versions = api.find_existing, api.source_versions
+		first = self.upload(data, source_key=key)
+		finds = iter([lambda *args: None, real_find])
+		versions = iter([lambda *args: [], real_versions, real_versions])
+		with (
+			patch("docarchive.api.find_existing", side_effect=lambda *args: next(finds)(*args)),
+			patch("docarchive.api.source_versions", side_effect=lambda *args: next(versions)(*args)),
+		):
+			result = self.upload(data, source_key=key)
+		self.assertEqual((result["status"], result["name"]), ("exists", first["name"]))
+		self.assertEqual(frappe.db.count("Business Document", {"source_key": key}), 1)
+
+	def test_storage_errors_are_not_client_errors(self):
+		with patch("frappe.core.doctype.file.file.File.insert", side_effect=RuntimeError("storage down")):
+			with self.assertRaises(RuntimeError):
+				self.upload()
+
+	def test_integration_user_cannot_change_uploaded_file(self):
+		result = self.upload()
+		file = frappe.get_doc("File", {"attached_to_name": result["name"]})
+		for ptype in ("write", "delete"):
+			with self.subTest(ptype):
+				self.assertFalse(frappe.has_permission("File", ptype, file, user=self.user))
+		manager = make_user("docarchive-file-manager@example.com", [MANAGER_ROLE])
+		self.assertTrue(frappe.has_permission("File", "write", file, user=manager))
