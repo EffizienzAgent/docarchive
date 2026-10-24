@@ -59,7 +59,7 @@ jobs:
         with:
           node-version: '24'
       - name: Read pinned versions
-        run: grep -E '^[A-Z_]+=' .github/versions.env >> "$GITHUB_ENV"
+        run: grep -E '^[A-Z0-9_]+=' .github/versions.env >> "$GITHUB_ENV"
       - uses: actions/cache@v6
         with:
           path: |
