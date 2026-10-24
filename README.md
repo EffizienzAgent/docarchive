@@ -20,6 +20,7 @@ docarchive is a technical tool. It does not make you compliant with GoBD, the GD
 - **Retention**: the retention period ends on January 1 after the document year plus the retention years. For contracts it can count from the contract end date instead. Years come from a rule per own company and document type in Archive Settings, or from the type's default. The seeded types (Outgoing Invoice, Incoming Invoice, Contract, Bank Statement) ship with editable defaults. Check them for your jurisdiction.
 - **Locking**: once archiving starts (`archive_started_at`), the fields that make up the object key and the source fields can no longer change: own company, type, date, number, counterparty, file and `source_*`. The contract end date can still move later (which extends retention), but never earlier, and it cannot be cleared. Deleting the document is refused. Its file cannot be deleted, moved, made public or detached. Other File rows that share the archived object (the same `file_url` through deduplication, the same `content_hash`, or a `thumbnail_url` pointing at it) cannot change their URL, hash, thumbnail or privacy either. A counterparty linked from an archived document cannot be renamed or merged.
 - **Server-only fields**: the checksum, the archive status, keys and retention fields, and the `source_*` fields are restored on every save, unless server code sets `doc.flags.archive_write`.
+- **Plausible dates**: a document date may be at most **Max. Days in the Future** (default 31) after today, and a contract end at most **Max. Contract Years** (default 50) after the document date.
 - **File types**: only the extensions listed in Archive Settings → Allowed File Types can be filed (default: pdf, png, jpg, jpeg, tif, tiff, xml). Both the file name and the file URL must match.
 - **Access**: files are always private and attached to their Business Document, so Frappe's File permission follows the document permission. A user who sets or changes a counterparty needs read permission on it; an unknown counterparty gets the same answer as one without access. Queries go through `frappe.get_list`.
 
@@ -159,10 +160,10 @@ For each document the run:
 1. gets the bytes and the file extension from `docarchive.content.content_for(doc)` and checks that they still match `content_sha256`,
 2. computes the retention (see below) and checks it against every target's lock mode, before anything is written,
 3. sets `archive_started_at`, the object keys, the checksum, `retain_until` and the metadata, and commits. From now on the document is locked,
-4. writes the file and its `.meta.json` to every enabled target, then reads the file back and compares the SHA-256,
+4. writes the file and its `.meta.json` to every enabled target and records each object's version ID. It then reads that version back and checks its lock mode, retain-until date and SHA-256 (for both objects),
 5. sets **Archived** when every enabled target holds both objects. Otherwise it sets **Failed** with the error per target; the next run retries only the failed targets.
 
-Each target has its own row under **Archive Copies** with its status, lock mode, retain-until date and error. A target added later gets its copy on the next run. Before writing, the run sends a HEAD request: an object with the same key and the same SHA-256 counts as done, and the same key with a different SHA-256 is a hard error that goes to the Error Log. Nothing is ever overwritten.
+Each target has its own row under **Archive Copies** with its status, lock mode, retain-until date, the version IDs of both objects and the error. A target added later gets its copy on the next run, also for documents that are already archived. A document is processed by one run at a time (a lock per document), so the nightly run and "Archive now" cannot write twice. Before writing, the run sends a HEAD request: an object with the same key, the same SHA-256 and the expected lock counts as done. The same key with a different SHA-256, a weaker lock or a version other than the recorded one is a hard error that goes to the Error Log. Nothing is ever overwritten.
 
 ### Object keys
 
@@ -177,11 +178,11 @@ The `.meta.json` holds the document data (ID, title, type, date, number, contrac
 
 ### Retention
 
-`retain_until` is January 1, 00:00 UTC, of the year after (start year + retention years). The start is the document date, or the contract end date for types whose retention counts from it. Years come from the Archive Settings rule for own company and type, else the type's default. Without either, the document fails with an error and nothing is written.
+`retain_until` is January 2, 00:00 UTC, of the year after (start year + retention years). The extra day covers the end of the year in every time zone. The start is the document date, or the contract end date for types whose retention counts from it. Years come from the Archive Settings rule for own company and type, else the type's default. Without either, the document fails with an error and nothing is written.
 
 ### Object Lock writes
 
-`docarchive.store.put_locked(target, key, body, mode, retain_until)` is the only code that calls `PutObject`. Before any request it checks that the mode is `GOVERNANCE` or `COMPLIANCE` and that `retain_until` is a timezone-aware datetime in the future. It always sends `ObjectLockMode`, `ObjectLockRetainUntilDate`, `ContentMD5` and the SHA-256 as object metadata. A test parses the app's source and fails if any other function reaches the raw S3 client.
+`docarchive.store.put_locked(target, key, body, mode, retain_until)` is the only code that calls `PutObject`. Before any request it checks that the mode is `GOVERNANCE` or `COMPLIANCE` and that `retain_until` is a timezone-aware datetime in the future. It always sends `ObjectLockMode`, `ObjectLockRetainUntilDate`, `ContentMD5` and the SHA-256 as object metadata. A test parses the app's source: each S3 client method may be used in exactly one function of `store.py`, copy, multipart, presigned URL, legal hold and policy calls are banned, `BypassGovernanceRetention` is only allowed in the smoke check, and only `store.py` may import boto3, botocore or `s3storage.client`.
 
 The lock mode comes from the storage target and is recorded per copy. Switch a target to COMPLIANCE once your trial is done. New documents then use COMPLIANCE; see [docs/hetzner-example.md](docs/hetzner-example.md) for switching existing objects.
 
@@ -197,7 +198,7 @@ bench --site <site> docarchive-run             # archive now (needs Enabled)
 bench --site <site> docarchive-smoke --target primary
 ```
 
-`docarchive-smoke` works without Enabled. It uploads a tiny `_smoke/` object with a 1-day GOVERNANCE lock, reads it back, checks its retention and checks that deleting that version with the target's credentials is refused. It exits with status 1 if any check fails. Each run leaves one small object that expires after a day.
+`docarchive-smoke` works without Enabled. It uploads a tiny `_smoke/` object with a 1-day GOVERNANCE lock, reads it back and checks its retention. Then it tries to delete that version with the target's credentials, once normally and once with `BypassGovernanceRetention`. Both must be refused with AccessDenied (or the provider's object-lock error), and a versioned HEAD must still find the object. It exits with status 1 if any check fails. Each run leaves one small object that expires after a day.
 
 ## Installation
 

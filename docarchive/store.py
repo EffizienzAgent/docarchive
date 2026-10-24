@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import re
 from datetime import UTC, datetime
 
 import frappe
@@ -11,9 +12,15 @@ MODES = ("GOVERNANCE", "COMPLIANCE")
 CLIENT_FIELDS = ("endpoint", "region", "bucket", "access_key", "secret_key")
 MISSING = ("404", "NoSuchKey", "NotFound")
 SMOKE_PREFIX = "_smoke/"
+SMOKE_KEY = re.compile(r"^_smoke/\d{8}T\d{6}Z-[0-9a-f]{8}\.txt$")
+REFUSED = ("AccessDenied", "ObjectLocked")
 
 
 class LockError(frappe.ValidationError):
+	pass
+
+
+class VerifyError(frappe.ValidationError):
 	pass
 
 
@@ -25,14 +32,14 @@ class Target:
 		self._client = client
 
 
-def client(config):
+def _client_for(config):
 	from s3storage.client import get_client
 
 	return get_client(config={field: config[field] for field in CLIENT_FIELDS})[0]
 
 
 def from_config(config) -> Target:
-	return Target(config.name, config.bucket, config.lock_mode, client(config))
+	return Target(config.name, config.bucket, config.lock_mode, _client_for(config))
 
 
 def targets() -> list[Target] | None:
@@ -43,6 +50,14 @@ def targets() -> list[Target] | None:
 def error_code(error):
 	response = getattr(error, "response", None)
 	return (response or {}).get("Error", {}).get("Code") if isinstance(response, dict) else None
+
+
+def refused(error) -> bool:
+	code = error_code(error)
+	if code in REFUSED:
+		return True
+	message = str(getattr(error, "response", {}).get("Error", {}).get("Message", "")).lower()
+	return code == "InvalidRequest" and ("worm" in message or "lock" in message)
 
 
 def validate_lock(mode, retain_until) -> datetime:
@@ -78,30 +93,52 @@ def put_locked(target, key, body, mode, retain_until, content_type="application/
 	return {"sha256": sha256, "version_id": response.get("VersionId")}
 
 
-def head(target, key) -> dict | None:
+def versioned(version_id):
+	if not version_id:
+		raise LockError(_("An archive object version is missing. The bucket needs Object Lock."))
+	return {"VersionId": version_id}
+
+
+def head(target, key, version_id=None) -> dict | None:
+	kwargs = versioned(version_id) if version_id else {}
 	try:
-		return target._client.head_object(Bucket=target.bucket, Key=key)
+		return target._client.head_object(Bucket=target.bucket, Key=key, **kwargs)
 	except Exception as e:
 		if error_code(e) in MISSING:
 			return None
 		raise
 
 
-def read_sha256(target, key) -> str:
-	body = target._client.get_object(Bucket=target.bucket, Key=key)["Body"]
+def read_sha256(target, key, version_id) -> str:
+	response = target._client.get_object(Bucket=target.bucket, Key=key, **versioned(version_id))
 	digest = hashlib.sha256()
-	for chunk in iter(lambda: body.read(1024 * 1024), b""):
+	for chunk in iter(lambda: response["Body"].read(1024 * 1024), b""):
 		digest.update(chunk)
 	return digest.hexdigest()
 
 
-def retention(target, key, version_id=None) -> dict:
-	kwargs = {"VersionId": version_id} if version_id else {}
-	value = target._client.get_object_retention(Bucket=target.bucket, Key=key, **kwargs)["Retention"]
+def retention(target, key, version_id) -> dict:
+	response = target._client.get_object_retention(Bucket=target.bucket, Key=key, **versioned(version_id))
+	value = response.get("Retention") or {}
 	return {"mode": value.get("Mode"), "retain_until": value.get("RetainUntilDate")}
 
 
-def smoke_delete(target, key, version_id):
-	if not key.startswith(SMOKE_PREFIX):
+def verify(target, key, version_id, sha256, mode, retain_until):
+	retain_until = validate_lock(mode, retain_until)
+	found = head(target, key, version_id)
+	if not found:
+		raise VerifyError(_("{0} is missing on the storage target.").format(key))
+	until = found.get("ObjectLockRetainUntilDate")
+	if found.get("ObjectLockMode") != mode or not until or until < retain_until:
+		raise VerifyError(_("{0} is not locked as expected.").format(key))
+	if (found.get("Metadata") or {}).get("sha256") != sha256 or read_sha256(
+		target, key, version_id
+	) != sha256:
+		raise VerifyError(_("{0} does not match its checksum.").format(key))
+
+
+def smoke_delete(target, key, version_id, bypass=False):
+	if not SMOKE_KEY.match(key or "") or not version_id:
 		raise LockError(_("Only smoke test objects may be deleted."))
-	target._client.delete_object(Bucket=target.bucket, Key=key, VersionId=version_id)
+	kwargs = {"BypassGovernanceRetention": True} if bypass else {}
+	target._client.delete_object(Bucket=target.bucket, Key=key, VersionId=version_id, **kwargs)

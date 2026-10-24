@@ -29,7 +29,7 @@ class ArchiveRunTestCase(IntegrationTestCase):
 		self.type = make_document_type(default_retention_years=8)
 		self.party = make_party()
 		self.fakes = {}
-		self.enterContext(patch("docarchive.store.client", side_effect=self.fake_for))
+		self.enterContext(patch("docarchive.store._client_for", side_effect=self.fake_for))
 		self.configure(["primary", "secondary"])
 
 	def fake_for(self, config):
@@ -149,7 +149,7 @@ class TestArchiveDocument(ArchiveRunTestCase):
 				doc = self.document()
 				self.assertEqual(self.archive(doc), "Archived")
 				doc.reload()
-				until = datetime(2035, 1, 1, tzinfo=UTC)
+				until = datetime(2035, 1, 2, tzinfo=UTC)
 				puts = self.puts()
 				self.assertEqual(len(puts), 2 * len(names))
 				for put in puts:
@@ -175,7 +175,7 @@ class TestArchiveDocument(ArchiveRunTestCase):
 			f"{self.company}/2026/{type_slug}/{self.party.name.lower()}/2026-03-15_inv-2026-017_{doc.name.lower()}.pdf",
 		)
 		self.assertEqual(doc.meta_key, doc.object_key + ".meta.json")
-		self.assertEqual((doc.retention_mode, str(doc.retain_until)), ("GOVERNANCE", "2035-01-01 00:00:00"))
+		self.assertEqual((doc.retention_mode, str(doc.retain_until)), ("GOVERNANCE", "2035-01-02 00:00:00"))
 		self.assertEqual(
 			[(c.target_name, c.status, c.lock_mode) for c in doc.archive_copies],
 			[("primary", "Archived", "GOVERNANCE"), ("secondary", "Archived", "GOVERNANCE")],
@@ -201,7 +201,7 @@ class TestArchiveDocument(ArchiveRunTestCase):
 				"counts_from": "Document Date",
 				"start_date": "2026-03-15",
 				"years": 8,
-				"retain_until": "2035-01-01T00:00:00Z",
+				"retain_until": "2035-01-02T00:00:00Z",
 				"mode": "GOVERNANCE",
 			},
 		)
@@ -306,12 +306,72 @@ class TestArchiveDocument(ArchiveRunTestCase):
 	def test_existing_object_with_same_sha_is_skipped(self):
 		doc = self.document()
 		self.fakes["archive-secondary"] = LockedFakeS3(fail={"get_object"})
-		self.archive(doc)
-		self.assertEqual(len(self.fake("secondary").puts()), 2)
+		self.assertEqual(self.archive(doc), "Failed")
+		self.assertEqual(len(self.fake("secondary").puts()), 1)
 		self.fake("secondary").fail.clear()
 		self.assertEqual(self.archive(doc), "Archived")
-		self.assertEqual(len(self.fake("secondary").puts()), 2)
+		doc.reload()
+		self.assertEqual([p["Key"] for p in self.fake("secondary").puts()], [doc.object_key, doc.meta_key])
 		self.assertTrue(all(len(v) == 1 for v in self.fake("secondary").versions.values()))
+
+	def test_existing_object_must_carry_the_expected_lock(self):
+		doc = self.document()
+		with patch("docarchive.store.head", side_effect=RuntimeError):
+			self.archive(doc)
+		doc.reload()
+		data = run.content.read_bytes(doc.file)
+		cases = {
+			"wrong mode": ("COMPLIANCE", datetime(2035, 1, 2, tzinfo=UTC)),
+			"shorter date": ("GOVERNANCE", datetime(2030, 1, 1, tzinfo=UTC)),
+		}
+		for case, (mode, until) in cases.items():
+			with self.subTest(case):
+				self.fakes.clear()
+				store.put_locked(store.targets()[0], doc.object_key, data, mode, until)
+				self.assertEqual(self.archive(doc), "Failed")
+				self.assertIn(
+					"is not locked as expected", frappe.db.get_value(DOCUMENT, doc.name, "archive_error")
+				)
+
+	def test_versions_are_recorded_and_used(self):
+		doc = self.document()
+		self.archive(doc)
+		doc.reload()
+		for copy in doc.archive_copies:
+			fake = self.fake(copy.target_name)
+			versions = {
+				key: fake.latest(f"archive-{copy.target_name}", key)["VersionId"]
+				for key in (doc.object_key, doc.meta_key)
+			}
+			self.assertEqual(
+				(copy.object_version_id, copy.meta_version_id),
+				(versions[doc.object_key], versions[doc.meta_key]),
+			)
+			reads = [kw for op, kw in fake.calls if op == "get_object"]
+			self.assertEqual({kw["VersionId"] for kw in reads}, set(versions.values()))
+
+	def test_new_version_under_the_key_is_an_error(self):
+		doc = self.document()
+		self.fake("primary").fail.add("get_object")
+		self.archive(doc)
+		doc.reload()
+		fake = self.fake("primary")
+		fake.fail.clear()
+		[version] = fake.versions[("archive-primary", doc.object_key)]
+		fake.versions[("archive-primary", doc.object_key)].append({**version, "VersionId": "other"})
+		self.assertEqual(self.archive(doc), "Failed")
+		self.assertIn("has a new version", frappe.db.get_value(DOCUMENT, doc.name, "archive_error"))
+
+	def test_concurrent_runs_do_not_double_write(self):
+		doc = self.document()
+		lock = run.document_lock(doc.name)
+		self.assertTrue(lock.acquire(blocking=False))
+		try:
+			self.assertEqual(self.archive(doc), "Pending")
+		finally:
+			lock.release()
+		self.assertEqual(self.puts(), [])
+		self.assertEqual(self.archive(doc), "Archived")
 
 	def test_sha_mismatch_is_a_hard_error(self):
 		doc = self.document()
@@ -320,7 +380,7 @@ class TestArchiveDocument(ArchiveRunTestCase):
 		doc.reload()
 		target = store.targets()[0]
 		store.put_locked(
-			target, doc.object_key, b"other bytes", "GOVERNANCE", datetime(2035, 1, 1, tzinfo=UTC)
+			target, doc.object_key, b"other bytes", "GOVERNANCE", datetime(2035, 1, 2, tzinfo=UTC)
 		)
 		before = len(self.puts())
 		self.assertEqual(self.archive(doc), "Failed")
@@ -335,7 +395,7 @@ class TestArchiveDocument(ArchiveRunTestCase):
 		with patch("docarchive.store.read_sha256", return_value="0" * 64):
 			self.assertEqual(self.archive(doc), "Failed")
 		doc.reload()
-		self.assertIn("does not match the checksum", doc.archive_error)
+		self.assertIn("does not match its checksum", doc.archive_error)
 
 	def test_changed_file_bytes_fail(self):
 		doc = self.document()
@@ -348,8 +408,9 @@ class TestArchiveDocument(ArchiveRunTestCase):
 		doc = self.document()
 		self.archive(doc)
 		self.configure(["primary", "secondary"])
-		frappe.db.set_value(DOCUMENT, doc.name, "archive_status", "Pending")
-		self.archive(doc)
+		self.assertIn(doc.name, run.eligible({"primary", "secondary"}))
+		self.assertNotIn(doc.name, run.eligible({"primary"}))
+		run.nightly()
 		doc.reload()
 		self.assertEqual([c.target_name for c in doc.archive_copies], ["primary", "secondary"])
 		self.assertEqual(len(self.fake("primary").puts()), 2)
@@ -410,6 +471,31 @@ class TestSmoke(ArchiveRunTestCase):
 		result = run.smoke("primary")
 		self.assertFalse(result["ok"])
 		self.assertFalse(result["checks"]["delete_refused"])
+
+	def test_smoke_tries_a_bypass_delete(self):
+		run.smoke("primary")
+		calls = [kw for op, kw in self.fake("primary").calls if op == "delete_object"]
+		self.assertEqual([kw["Bypass"] for kw in calls], [False, True])
+		self.assertTrue(all(kw["VersionId"] for kw in calls))
+
+	def test_smoke_reports_a_bypass_that_works(self):
+		self.fakes["archive-primary"] = LockedFakeS3(bypass_allowed=True)
+		result = run.smoke("primary")
+		self.assertFalse(result["ok"])
+		self.assertTrue(result["checks"]["delete_refused"])
+		self.assertFalse(result["checks"]["bypass_delete_refused"])
+		self.assertFalse(result["checks"]["still_there"])
+
+	def test_smoke_other_errors_are_not_a_refusal(self):
+		from docarchive.tests.fake_s3 import error
+
+		def broken(**kwargs):
+			raise error("InternalError", "DeleteObject")
+
+		self.fake("primary").delete_object = broken
+		result = run.smoke("primary")
+		self.assertFalse(result["checks"]["delete_refused"])
+		self.assertFalse(result["ok"])
 
 	def test_smoke_unknown_target(self):
 		with self.assertRaises(frappe.ValidationError):
