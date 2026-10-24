@@ -19,7 +19,7 @@ class TestManagerRoles(IntegrationTestCase):
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
-		make_settings(default_own_company=self.company)
+		make_settings(default_own_company=self.company, manager_roles=[])
 
 	def can_list(self):
 		with self.set_user(self.user):

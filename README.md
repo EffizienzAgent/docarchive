@@ -4,8 +4,6 @@ A WORM document archive app for the Frappe Framework
 
 docarchive files business documents such as invoices, contracts and bank statements in a Frappe site. It is meant to copy each one, unchanged, into write-once (WORM) object storage for its retention period.
 
-Want it set up for your company? See [mittelstandshub.de](https://mittelstandshub.de).
-
 ## Status
 
 This version has the document model, the locks and the storage configuration. The nightly copy to Object Lock storage comes in a later release. Until then, nothing leaves the site.
@@ -95,6 +93,10 @@ bench --site <site> run-tests --app docarchive
 ```
 
 CI runs the suite on a Frappe v16 bench at the commit pinned in `.github/versions.env`.
+
+## Professional setup & support
+
+Need help setting this up or integrating it into your Frappe stack? Write to oss@effizienzagent.de (English or German). German-speaking SMEs: see [mittelstandshub.de](https://mittelstandshub.de).
 
 ## License
 

@@ -41,7 +41,7 @@ def make_own_company(slug="acme-gmbh", **fields):
 	).insert(ignore_permissions=True)
 
 
-def make_settings(rules=(), targets=(), manager_roles=(), **fields):
+def make_settings(rules=(), targets=None, manager_roles=None, **fields):
 	settings = frappe.get_single("Archive Settings")
 	settings.update(
 		{
@@ -58,8 +58,10 @@ def make_settings(rules=(), targets=(), manager_roles=(), **fields):
 		settings.append(
 			"retention_rules", {"own_company": own_company, "document_type": document_type, "years": years}
 		)
-	settings.set("storage_targets", [dict(target) for target in targets])
-	settings.set("manager_roles", [{"role": role} for role in manager_roles])
+	if targets is not None:
+		settings.set("storage_targets", [dict(target) for target in targets])
+	if manager_roles is not None:
+		settings.set("manager_roles", [{"role": role} for role in manager_roles])
 	settings.save(ignore_permissions=True)
 	return settings
 
