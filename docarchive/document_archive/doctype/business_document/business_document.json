@@ -32,6 +32,8 @@
   "source_account",
   "source_party_type",
   "source_party_id",
+  "source_party_name",
+  "source_party_email",
   "column_break_source",
   "source_key",
   "replaces",
@@ -168,6 +170,18 @@
    "fieldname": "source_party_id",
    "fieldtype": "Data",
    "label": "Source Party ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_party_name",
+   "fieldtype": "Data",
+   "label": "Source Party Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_party_email",
+   "fieldtype": "Data",
+   "label": "Source Party Email",
    "read_only": 1
   },
   {

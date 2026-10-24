@@ -8,7 +8,14 @@ from frappe.utils.data import cast
 
 from docarchive import assignment, content, counterparty, settings
 
-SOURCE_FIELDS = ("source_system", "source_account", "source_party_type", "source_party_id")
+SOURCE_FIELDS = (
+	"source_system",
+	"source_account",
+	"source_party_type",
+	"source_party_id",
+	"source_party_name",
+	"source_party_email",
+)
 LOCKED_FIELDS = (
 	"own_company",
 	"document_type",

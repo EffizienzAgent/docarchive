@@ -5,8 +5,9 @@ from frappe import _
 from frappe.permissions import setup_custom_perms
 
 MANAGER_ROLE = "Document Manager"
+INTEGRATION_ROLE = "Document Integration"
 BUILT_IN_ROLES = {MANAGER_ROLE, "System Manager", "Administrator"}
-EXCLUDED_ROLES = {"Guest", "All", "Desk User"}
+EXCLUDED_ROLES = {"Guest", "All", "Desk User", INTEGRATION_ROLE}
 MANAGER_RIGHTS = {
 	"Business Document": ("read", "write", "create", "report", "print", "email"),
 	"Business Document Type": ("read", "report"),
@@ -32,10 +33,11 @@ def manager_roles() -> set[str]:
 
 
 def ensure_role():
-	if not frappe.db.exists("Role", MANAGER_ROLE):
-		frappe.get_doc({"doctype": "Role", "role_name": MANAGER_ROLE, "desk_access": 1}).insert(
-			ignore_permissions=True
-		)
+	for role, desk_access in ((MANAGER_ROLE, 1), (INTEGRATION_ROLE, 0)):
+		if not frappe.db.exists("Role", role):
+			frappe.get_doc({"doctype": "Role", "role_name": role, "desk_access": desk_access}).insert(
+				ignore_permissions=True
+			)
 
 
 def granted() -> set[tuple[str, str]]:
