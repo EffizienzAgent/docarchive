@@ -1,0 +1,299 @@
+{
+ "docstatus": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Document Archive",
+ "custom": 0,
+ "name": "Business Document",
+ "sort_field": "document_date",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "DOC-.YYYY.-.#####",
+ "naming_rule": "Expression (old style)",
+ "title_field": "title",
+ "show_title_field_in_link": 1,
+ "search_fields": "document_number,document_type,counterparty",
+ "quick_entry": 1,
+ "track_changes": 1,
+ "field_order": [
+  "title",
+  "file",
+  "document_type",
+  "retention_from",
+  "document_date",
+  "document_number",
+  "contract_end_date",
+  "column_break_main",
+  "counterparty_type",
+  "counterparty",
+  "own_company",
+  "source_section",
+  "source_system",
+  "source_account",
+  "source_party_type",
+  "source_party_id",
+  "column_break_source",
+  "source_key",
+  "replaces",
+  "content_sha256",
+  "archive_section",
+  "archive_status",
+  "archive_started_at",
+  "archived_at",
+  "archive_attempts",
+  "archive_error",
+  "column_break_archive",
+  "archive_sha256",
+  "archive_size",
+  "object_key",
+  "meta_key",
+  "retention_mode",
+  "retain_until"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "in_list_view": 1,
+   "in_global_search": 1,
+   "bold": 1,
+   "allow_in_quick_entry": 1
+  },
+  {
+   "fieldname": "file",
+   "fieldtype": "Attach",
+   "label": "File",
+   "allow_in_quick_entry": 1,
+   "read_only_depends_on": "eval:doc.archive_started_at"
+  },
+  {
+   "fieldname": "document_type",
+   "fieldtype": "Link",
+   "label": "Business Document Type",
+   "options": "Business Document Type",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only_depends_on": "eval:doc.archive_started_at"
+  },
+  {
+   "fieldname": "retention_from",
+   "fieldtype": "Data",
+   "label": "Retention Counts From",
+   "fetch_from": "document_type.retention_from",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "document_date",
+   "fieldtype": "Date",
+   "label": "Document Date",
+   "reqd": 1,
+   "in_list_view": 1,
+   "read_only_depends_on": "eval:doc.archive_started_at"
+  },
+  {
+   "fieldname": "document_number",
+   "fieldtype": "Data",
+   "label": "Document Number",
+   "in_global_search": 1,
+   "allow_in_quick_entry": 1,
+   "read_only_depends_on": "eval:doc.archive_started_at"
+  },
+  {
+   "fieldname": "contract_end_date",
+   "fieldtype": "Date",
+   "label": "Contract End Date",
+   "depends_on": "eval:doc.retention_from == 'Contract End Date'",
+   "description": "Once archiving has started, this date can only move later."
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "counterparty_type",
+   "fieldtype": "Link",
+   "label": "Counterparty Type",
+   "options": "DocType",
+   "allow_in_quick_entry": 1,
+   "read_only_depends_on": "eval:doc.archive_started_at"
+  },
+  {
+   "fieldname": "counterparty",
+   "fieldtype": "Dynamic Link",
+   "label": "Counterparty",
+   "options": "counterparty_type",
+   "search_index": 1,
+   "in_standard_filter": 1,
+   "in_list_view": 1,
+   "allow_in_quick_entry": 1,
+   "read_only_depends_on": "eval:doc.archive_started_at"
+  },
+  {
+   "fieldname": "own_company",
+   "fieldtype": "Link",
+   "label": "Own Company",
+   "options": "Own Company",
+   "in_standard_filter": 1,
+   "read_only_depends_on": "eval:doc.archive_started_at",
+   "description": "Empty: set by the host app or taken from the Archive Settings."
+  },
+  {
+   "fieldname": "source_section",
+   "fieldtype": "Section Break",
+   "label": "Source",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "source_system",
+   "fieldtype": "Data",
+   "label": "Source System",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_account",
+   "fieldtype": "Data",
+   "label": "Source Account",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_party_type",
+   "fieldtype": "Data",
+   "label": "Source Party Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_party_id",
+   "fieldtype": "Data",
+   "label": "Source Party ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_source",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "source_key",
+   "fieldtype": "Data",
+   "label": "Source Key",
+   "unique": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "replaces",
+   "fieldtype": "Link",
+   "label": "Replaces",
+   "options": "Business Document",
+   "read_only": 1
+  },
+  {
+   "fieldname": "content_sha256",
+   "fieldtype": "Data",
+   "label": "Content SHA-256",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_section",
+   "fieldtype": "Section Break",
+   "label": "Archive",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "archive_status",
+   "fieldtype": "Select",
+   "label": "Archive Status",
+   "options": "Pending\nArchived\nFailed",
+   "default": "Pending",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_started_at",
+   "fieldtype": "Datetime",
+   "label": "Archive Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archived_at",
+   "fieldtype": "Datetime",
+   "label": "Archived At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_attempts",
+   "fieldtype": "Int",
+   "label": "Archive Attempts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_error",
+   "fieldtype": "Small Text",
+   "label": "Archive Error",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_archive",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "archive_sha256",
+   "fieldtype": "Data",
+   "label": "Archive SHA-256",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_size",
+   "fieldtype": "Int",
+   "label": "Archive Size",
+   "read_only": 1
+  },
+  {
+   "fieldname": "object_key",
+   "fieldtype": "Data",
+   "label": "Object Key",
+   "read_only": 1
+  },
+  {
+   "fieldname": "meta_key",
+   "fieldtype": "Data",
+   "label": "Meta Key",
+   "read_only": 1
+  },
+  {
+   "fieldname": "retention_mode",
+   "fieldtype": "Data",
+   "label": "Retention Mode",
+   "read_only": 1
+  },
+  {
+   "fieldname": "retain_until",
+   "fieldtype": "Datetime",
+   "label": "Retain Until",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "print": 1,
+   "email": 1
+  },
+  {
+   "role": "Document Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "print": 1,
+   "email": 1
+  }
+ ]
+}

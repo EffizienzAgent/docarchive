@@ -1,0 +1,119 @@
+{
+ "docstatus": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Document Archive",
+ "custom": 0,
+ "name": "Archive Storage Target",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "field_order": [
+  "target_name",
+  "enabled",
+  "lock_mode",
+  "config_source",
+  "config_prefix",
+  "endpoint",
+  "region",
+  "bucket",
+  "credentials_section",
+  "access_key_config_key",
+  "secret_key_config_key",
+  "access_key",
+  "secret_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "target_name",
+   "fieldtype": "Data",
+   "label": "Target Name",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Lowercase letters, digits and hyphens. Used as the archive folder name."
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "lock_mode",
+   "fieldtype": "Select",
+   "label": "Lock Mode",
+   "options": "GOVERNANCE\nCOMPLIANCE",
+   "default": "GOVERNANCE",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "config_source",
+   "fieldtype": "Select",
+   "label": "Config Source",
+   "options": "Site Config\nFields",
+   "default": "Site Config",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "config_prefix",
+   "fieldtype": "Data",
+   "label": "Site Config Prefix",
+   "depends_on": "eval:doc.config_source == 'Site Config'",
+   "description": "Reads <prefix>_endpoint, <prefix>_region and <prefix>_bucket from the site config."
+  },
+  {
+   "fieldname": "endpoint",
+   "fieldtype": "Data",
+   "label": "Endpoint",
+   "depends_on": "eval:doc.config_source == 'Fields'"
+  },
+  {
+   "fieldname": "region",
+   "fieldtype": "Data",
+   "label": "Region",
+   "depends_on": "eval:doc.config_source == 'Fields'"
+  },
+  {
+   "fieldname": "bucket",
+   "fieldtype": "Data",
+   "label": "Bucket",
+   "depends_on": "eval:doc.config_source == 'Fields'"
+  },
+  {
+   "fieldname": "credentials_section",
+   "fieldtype": "Section Break",
+   "label": "Credentials"
+  },
+  {
+   "fieldname": "access_key_config_key",
+   "fieldtype": "Data",
+   "label": "Access Key Config Key",
+   "depends_on": "eval:doc.config_source == 'Site Config'",
+   "description": "Name of the site config key that holds the access key."
+  },
+  {
+   "fieldname": "secret_key_config_key",
+   "fieldtype": "Data",
+   "label": "Secret Key Config Key",
+   "depends_on": "eval:doc.config_source == 'Site Config'",
+   "description": "Name of the site config key that holds the secret key."
+  },
+  {
+   "fieldname": "access_key",
+   "fieldtype": "Password",
+   "label": "Access Key",
+   "depends_on": "eval:doc.config_source == 'Fields'"
+  },
+  {
+   "fieldname": "secret_key",
+   "fieldtype": "Password",
+   "label": "Secret Key",
+   "depends_on": "eval:doc.config_source == 'Fields'"
+  }
+ ],
+ "permissions": []
+}
