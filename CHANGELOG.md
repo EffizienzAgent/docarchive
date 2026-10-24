@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/EffizienzAgent/docarchive/compare/v0.1.0...v0.1.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* register protect_object under the final s3storage object hooks ([f23a057](https://github.com/EffizienzAgent/docarchive/commit/f23a0579796be0b88865fc248fa24dc91b99be4f))
+
 ## 0.1.0 (2026-10-24)
 
 
