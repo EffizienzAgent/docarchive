@@ -1,0 +1,6 @@
+app_name = "docarchive"
+app_title = "Document Archive"
+app_publisher = "EffizienzAgent"
+app_description = "A WORM document archive app for the Frappe Framework"
+app_email = "info@effizienzagent.de"
+app_license = "mit"
