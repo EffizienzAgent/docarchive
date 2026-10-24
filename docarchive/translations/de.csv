@@ -181,3 +181,5 @@ Archiving has already started.,Die Archivierung hat bereits begonnen.
 Documents of this type are not archived.,Dokumente dieser Art werden nicht archiviert.
 Missing before archiving: {0},Fehlt vor dem Archivieren: {0}
 No storage target is configured.,Es ist kein Speicherziel eingerichtet.
+Source Record Type,Art des Quelldatensatzes
+Source Record,Quelldatensatz

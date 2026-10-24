@@ -98,7 +98,7 @@ class TestEligibility(ArchiveRunTestCase):
 		doc = self.document()
 		result = run.nightly(dry_run=True)
 		self.assertEqual(result["status"], "dry run")
-		self.assertIn({"name": doc.name, "object_key": run.object_key(doc)}, result["documents"])
+		self.assertIn({"name": doc.name, "object_key": run.object_key(doc, "pdf")}, result["documents"])
 		self.assertEqual(self.puts(), [])
 		self.assertIsNone(frappe.db.get_value(DOCUMENT, doc.name, "archive_started_at"))
 
@@ -206,6 +206,23 @@ class TestArchiveDocument(ArchiveRunTestCase):
 			},
 		)
 		self.assertTrue(meta["archived_at"].endswith("Z"))
+
+	def test_bytes_and_extension_come_from_content_for(self):
+		doc = self.document()
+		data = run.content.read_bytes(doc.file)
+		with patch("docarchive.content.content_for", return_value=(data, "eml")) as content_for:
+			self.assertEqual(self.archive(doc), "Archived")
+		content_for.assert_called()
+		doc.reload()
+		self.assertTrue(doc.object_key.endswith(".eml"))
+
+	def test_meta_records_source_record(self):
+		party = make_party()
+		doc = self.document(archive_write=True, source_doctype="Contact", source_name=party.name)
+		self.archive(doc)
+		doc.reload()
+		meta = json.loads(self.fake("primary").body("archive-primary", doc.meta_key))
+		self.assertEqual((meta["source"]["doctype"], meta["source"]["name"]), ("Contact", party.name))
 
 	def test_mode_follows_target(self):
 		self.archive(self.document())

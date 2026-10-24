@@ -156,7 +156,7 @@ A document is archived when its type has **Archive** set, nothing is missing (fi
 
 For each document the run:
 
-1. checks that the file bytes still match `content_sha256`,
+1. gets the bytes and the file extension from `docarchive.content.content_for(doc)` and checks that they still match `content_sha256`,
 2. computes the retention (see below) and checks it against every target's lock mode, before anything is written,
 3. sets `archive_started_at`, the object keys, the checksum, `retain_until` and the metadata, and commits. From now on the document is locked,
 4. writes the file and its `.meta.json` to every enabled target, then reads the file back and compares the SHA-256,
@@ -173,7 +173,7 @@ Each target has its own row under **Archive Copies** with its status, lock mode,
 
 For example `acme-gmbh/2026/outgoing-invoice/cust-0042/2026-03-15_inv-2026-017_doc-2026-00017.pdf`. Each segment is lowercased and transliterated, and every character other than `a-z` and `0-9` becomes a hyphen. A document without a counterparty goes to `ohne-gegenpartei`, one without a number gets `ohne-nummer`. The key only uses fields that are locked once archiving starts, so a retry always computes the same key.
 
-The `.meta.json` holds the document data (ID, title, type, date, number, contract end, own company), the counterparty, the file name, SHA-256 and size, the source fields, and the retention (counts from, start date, years, retain-until date, mode). It is frozen at archive start (`archive_meta`), so retries write the same bytes.
+The `.meta.json` holds the document data (ID, title, type, date, number, contract end, own company), the counterparty, the file name, SHA-256 and size, the source fields (including the optional source record `source_doctype` / `source_name`), and the retention (counts from, start date, years, retain-until date, mode). It is frozen at archive start (`archive_meta`), so retries write the same bytes.
 
 ### Retention
 

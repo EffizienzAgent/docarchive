@@ -10,7 +10,6 @@ from frappe.utils import add_to_date, get_system_timezone, now_datetime
 
 from docarchive import assignment, content, keys, retention, settings, storage_targets, store
 from docarchive.document_archive.doctype.business_document.business_document import (
-	extension,
 	missing_fields,
 	own_file,
 )
@@ -112,21 +111,21 @@ def eligible() -> list[str]:
 
 def planned_key(name):
 	doc = frappe.get_doc(DOCUMENT, name)
-	return doc.object_key or object_key(doc)
+	return doc.object_key or object_key(doc, content.content_for(doc)[1])
 
 
-def object_key(doc):
+def object_key(doc, ext):
 	type_slug = frappe.db.get_value("Business Document Type", doc.document_type, "slug")
-	return keys.object_key(doc, type_slug, extension(doc.file))
+	return keys.object_key(doc, type_slug, ext)
 
 
 def archive_document(name, targets) -> str:
 	doc = frappe.get_doc(DOCUMENT, name)
 	frappe.db.savepoint(SAVEPOINT)
 	try:
-		data = file_bytes(doc)
+		data, ext = file_bytes(doc)
 		if not doc.archive_started_at:
-			start(doc, data, targets)
+			start(doc, data, ext, targets)
 		add_copies(doc, targets)
 		for target in targets:
 			copy_to(doc, target, data)
@@ -139,23 +138,23 @@ def archive_document(name, targets) -> str:
 
 
 def file_bytes(doc):
-	data = content.read_bytes(doc.file)
+	data, ext = content.content_for(doc)
 	if data is None:
 		raise ArchiveError(_("The file of document {0} cannot be read.").format(doc.name))
 	sha256 = content.sha256(data)
 	if sha256 != doc.content_sha256 or (doc.archive_sha256 and sha256 != doc.archive_sha256):
 		raise ArchiveError(_("The file of document {0} no longer matches its checksum.").format(doc.name))
-	return data
+	return data, ext
 
 
-def start(doc, data, targets):
+def start(doc, data, ext, targets):
 	years = retention.years_for(doc)
 	until = retention.retain_until(doc, years)
 	for target in targets:
 		store.validate_lock(target.lock_mode, until)
 	doc.archive_started_at = now_datetime()
 	doc.retain_until = retention.to_db(until)
-	doc.object_key = object_key(doc)
+	doc.object_key = object_key(doc, ext)
 	doc.meta_key = keys.meta_key(doc.object_key)
 	doc.archive_sha256 = content.sha256(data)
 	doc.archive_size = len(data)
@@ -294,7 +293,7 @@ def counterparty(doc):
 
 
 def meta(doc, years, until) -> dict:
-	file = own_file(doc)
+	file = own_file(doc) if doc.file else None
 	document_type = frappe.get_cached_doc("Business Document Type", doc.document_type)
 	return {
 		"format": "docarchive-meta/1",
@@ -312,7 +311,7 @@ def meta(doc, years, until) -> dict:
 		"counterparty": counterparty(doc),
 		"file": {
 			"key": doc.object_key,
-			"name": file.file_name if file else doc.file.rsplit("/", 1)[-1],
+			"name": file.file_name if file else (doc.file or "").rsplit("/", 1)[-1] or None,
 			"sha256": doc.archive_sha256,
 			"size": doc.archive_size,
 		},
@@ -324,6 +323,8 @@ def meta(doc, years, until) -> dict:
 			"party_name": doc.source_party_name,
 			"party_email": doc.source_party_email,
 			"key": doc.source_key,
+			"doctype": doc.source_doctype,
+			"name": doc.source_name,
 			"replaces": doc.replaces,
 		},
 		"retention": {

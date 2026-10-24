@@ -15,6 +15,8 @@ SOURCE_FIELDS = (
 	"source_party_id",
 	"source_party_name",
 	"source_party_email",
+	"source_doctype",
+	"source_name",
 )
 LOCKED_FIELDS = (
 	"own_company",

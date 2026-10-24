@@ -34,6 +34,8 @@
   "source_party_id",
   "source_party_name",
   "source_party_email",
+  "source_doctype",
+  "source_name",
   "column_break_source",
   "source_key",
   "replaces",
@@ -185,6 +187,20 @@
    "fieldname": "source_party_email",
    "fieldtype": "Data",
    "label": "Source Party Email",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_doctype",
+   "fieldtype": "Link",
+   "label": "Source Record Type",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Source Record",
+   "options": "source_doctype",
    "read_only": 1
   },
   {
