@@ -93,9 +93,14 @@ def put_locked(target, key, body, mode, retain_until, content_type="application/
 	return {"sha256": sha256, "version_id": response.get("VersionId")}
 
 
-def extend_locked(target, key, mode, retain_until) -> bool:
+def extend_locked(target, key, version_id, sha256, mode, retain_until) -> bool:
 	retain_until = validate_lock(mode, retain_until)
-	current = retention(target, key)
+	found = head(target, key, version_id)
+	if not found or (found.get("Metadata") or {}).get("sha256") != sha256:
+		raise VerifyError(_("{0} does not match its checksum.").format(key))
+	if read_sha256(target, key, version_id) != sha256:
+		raise VerifyError(_("{0} does not match its checksum.").format(key))
+	current = retention(target, key, version_id)
 	if current["mode"] != mode:
 		raise LockError(
 			_("{0} is locked in mode {1}, not {2}. Run docarchive-sync-mode first.").format(
@@ -105,7 +110,10 @@ def extend_locked(target, key, mode, retain_until) -> bool:
 	if current["retain_until"] and retain_until <= current["retain_until"]:
 		return False
 	target._client.put_object_retention(
-		Bucket=target.bucket, Key=key, Retention={"Mode": mode, "RetainUntilDate": retain_until}
+		Bucket=target.bucket,
+		Key=key,
+		VersionId=version_id,
+		Retention={"Mode": mode, "RetainUntilDate": retain_until},
 	)
 	return True
 

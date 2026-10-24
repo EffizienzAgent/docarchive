@@ -198,3 +198,9 @@ Max. Days in the Future,Max. Tage in der Zukunft
 Max. Contract Years,Max. Vertragsjahre
 A document date may be at most this many days after today.,Ein Belegdatum darf höchstens so viele Tage nach heute liegen.
 A contract end date may be at most this many years after the document date.,Ein Vertragsende darf höchstens so viele Jahre nach dem Belegdatum liegen.
+Meta SHA-256,Meta SHA-256
+Latest Sidecar Version ID,Version der letzten Verlängerungs-Metadaten
+Retention Extensions,Verlängerungen der Aufbewahrung
+Pending Extension Until (UTC),Ausstehende Verlängerung bis (UTC)
+Retention History,Verlauf der Aufbewahrung
+Pending Extension Metadata,Metadaten der ausstehenden Verlängerung

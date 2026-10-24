@@ -66,18 +66,19 @@ class TestMinio(IntegrationTestCase):
 	def test_retention_only_grows(self):
 		key = f"check/{uuid.uuid4().hex}.txt"
 		until = self.until(2)
-		store.put_locked(self.targets[0], key, b"x", "GOVERNANCE", until)
+		version = store.put_locked(self.targets[0], key, b"x", "GOVERNANCE", until)["version_id"]
+		sha = hashlib.sha256(b"x").hexdigest()
 		later = until + timedelta(days=1)
-		self.assertTrue(store.extend_locked(self.targets[0], key, "GOVERNANCE", later))
-		self.assertEqual(store.retention(self.targets[0], key)["retain_until"], later)
-		self.assertFalse(store.extend_locked(self.targets[0], key, "GOVERNANCE", until))
+		self.assertTrue(store.extend_locked(self.targets[0], key, version, sha, "GOVERNANCE", later))
+		self.assertEqual(store.retention(self.targets[0], key, version)["retain_until"], later)
+		self.assertFalse(store.extend_locked(self.targets[0], key, version, sha, "GOVERNANCE", until))
 		with self.assertRaises(Exception):
 			self.s3.put_object_retention(
 				Bucket=self.targets[0].bucket,
 				Key=key,
 				Retention={"Mode": "GOVERNANCE", "RetainUntilDate": until},
 			)
-		self.assertEqual(store.retention(self.targets[0], key)["retain_until"], later)
+		self.assertEqual(store.retention(self.targets[0], key, version)["retain_until"], later)
 
 	def test_locked_version_cannot_be_deleted(self):
 		key = f"{store.SMOKE_PREFIX}20261025T010203Z-{uuid.uuid4().hex[:8]}.txt"

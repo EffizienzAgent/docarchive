@@ -26,7 +26,7 @@ def run_archive(context, dry_run=False):
 	finally:
 		frappe.destroy()
 	click.echo(json.dumps(result, indent=1, default=str))
-	if result.get("failed"):
+	if result.get("failed") or result.get("extension_failed"):
 		sys.exit(1)
 
 
@@ -60,7 +60,7 @@ def sync_mode(context, target):
 	finally:
 		frappe.destroy()
 	click.echo(json.dumps(result, indent=1, default=str))
-	if result["mismatched"]:
+	if result["mismatched"] or result["errors"]:
 		sys.exit(1)
 
 
