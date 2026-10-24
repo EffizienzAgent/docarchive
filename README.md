@@ -77,14 +77,15 @@ frappe.ui.form.on("Customer", {
 - `docarchive.queries.documents_to_assign()`: documents that are not archived and still lack a file or a field their type requires, or whose archiving failed. Newest first, each with a `missing` list.
 - `docarchive.queries.count_documents_to_assign()` (whitelisted): the number of those documents.
 
-## Install
+## Installation
 
-```
-bench get-app https://github.com/EffizienzAgent/docarchive
+```bash
+bench get-app https://github.com/EffizienzAgent/docarchive --branch version-16
 bench --site <site> install-app docarchive
 ```
 
-Requires Frappe v16.
+**Compatibility:** Frappe v16. The `version-16` branch always points to the latest release; tagged releases
+and the changelog are on the [releases page](https://github.com/EffizienzAgent/docarchive/releases).
 
 ## Tests
 
