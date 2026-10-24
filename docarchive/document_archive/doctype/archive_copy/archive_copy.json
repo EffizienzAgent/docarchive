@@ -1,0 +1,65 @@
+{
+ "docstatus": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Document Archive",
+ "custom": 0,
+ "name": "Archive Copy",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "field_order": [
+  "target_name",
+  "status",
+  "lock_mode",
+  "retain_until",
+  "archived_at",
+  "error"
+ ],
+ "fields": [
+  {
+   "fieldname": "target_name",
+   "fieldtype": "Data",
+   "label": "Target Name",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nArchived\nFailed",
+   "default": "Pending",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "lock_mode",
+   "fieldtype": "Data",
+   "label": "Lock Mode",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "retain_until",
+   "fieldtype": "Datetime",
+   "label": "Retain Until (UTC)",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "archived_at",
+   "fieldtype": "Datetime",
+   "label": "Archived At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error",
+   "read_only": 1
+  }
+ ],
+ "permissions": []
+}

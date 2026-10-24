@@ -151,3 +151,33 @@ The file needs a file name without slashes.,Die Datei braucht einen Dateinamen o
 The file is empty.,Die Datei ist leer.
 The file is larger than {0} MB.,Die Datei ist größer als {0} MB.
 The file is damaged or does not match its file type.,Die Datei ist beschädigt oder passt nicht zu ihrem Dateityp.
+An archive object needs a key and bytes.,Ein Archivobjekt braucht einen Schlüssel und Bytes.
+Archive Copies,Archivkopien
+Archive Copy,Archivkopie
+Archive Metadata,Archiv-Metadaten
+Error,Fehler
+Invalid lock mode {0}.,Ungültiger Sperrmodus {0}.
+Invalid retain-until date {0}.,Ungültiges Aufbewahrungsende {0}.
+Only smoke test objects may be deleted.,Nur Objekte des Smoke-Tests dürfen gelöscht werden.
+Retain Until (UTC),Aufbewahren bis (UTC)
+Status,Status
+Storage error {0},Speicherfehler {0}
+Storage target {0} is missing: {1},Speicherziel {0} fehlt: {1}
+The archived copy does not match the checksum.,Die archivierte Kopie passt nicht zur Prüfsumme.
+The file of document {0} cannot be read.,Die Datei von Dokument {0} kann nicht gelesen werden.
+The file of document {0} no longer matches its checksum.,Die Datei von Dokument {0} passt nicht mehr zu ihrer Prüfsumme.
+The retain-until date must be a date and time with a time zone.,Das Aufbewahrungsende muss ein Datum mit Uhrzeit und Zeitzone sein.
+The retain-until date must be in the future.,Das Aufbewahrungsende muss in der Zukunft liegen.
+There is no retention rule for {0} and {1}.,Es gibt keine Aufbewahrungsregel für {0} und {1}.
+There is no storage target named {0}.,Es gibt kein Speicherziel namens {0}.
+{0} already exists with different content.,{0} existiert bereits mit anderem Inhalt.
+Archive now,Jetzt festschreiben
+Archiving started.,Archivierung gestartet.
+Archive status: {0},Archivstatus: {0}
+"After this, the file and the archived fields of {0} document(s) can no longer be changed or deleted. They are kept unchangeable until {1} (mode {2}).","Danach können die Datei und die archivierten Felder von {0} Dokument(en) nicht mehr geändert oder gelöscht werden. Sie werden bis {1} unveränderbar aufbewahrt (Modus {2})."
+{0} selected document(s) cannot be archived yet and are skipped.,{0} der ausgewählten Dokumente können noch nicht archiviert werden und werden übersprungen.
+Archiving is switched off.,Die Archivierung ist ausgeschaltet.
+Archiving has already started.,Die Archivierung hat bereits begonnen.
+Documents of this type are not archived.,Dokumente dieser Art werden nicht archiviert.
+Missing before archiving: {0},Fehlt vor dem Archivieren: {0}
+No storage target is configured.,Es ist kein Speicherziel eingerichtet.

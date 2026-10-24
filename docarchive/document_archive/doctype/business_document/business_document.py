@@ -39,6 +39,8 @@ PROTECTED_FIELDS = (
 	"meta_key",
 	"retention_mode",
 	"retain_until",
+	"archive_copies",
+	"archive_meta",
 	"source_key",
 	"replaces",
 	*SOURCE_FIELDS,

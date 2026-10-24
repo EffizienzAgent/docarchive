@@ -5,6 +5,8 @@ app_description = "A WORM document archive app for the Frappe Framework"
 app_email = "oss@effizienzagent.de"
 app_license = "mit"
 
+required_apps = ["s3storage"]
+
 app_include_js = "docarchive.bundle.js"
 
 after_install = "docarchive.setup.apply_defaults"
@@ -14,6 +16,7 @@ doc_events = {
 	"File": {"before_validate": "docarchive.guards.protect_file_change"},
 	"*": {"before_rename": "docarchive.guards.protect_party"},
 }
+scheduler_events = {"cron": {"30 2 * * *": ["docarchive.run.schedule"]}}
 has_permission = {"File": "docarchive.guards.file_permission"}
 s3storage_before_file_delete = ["docarchive.guards.protect_file"]
 s3storage_before_object_delete = ["docarchive.guards.protect_object"]

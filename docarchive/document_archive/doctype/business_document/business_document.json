@@ -50,7 +50,10 @@
   "object_key",
   "meta_key",
   "retention_mode",
-  "retain_until"
+  "retain_until",
+  "archive_copies_section",
+  "archive_copies",
+  "archive_meta"
  ],
  "fields": [
   {
@@ -285,7 +288,28 @@
   {
    "fieldname": "retain_until",
    "fieldtype": "Datetime",
-   "label": "Retain Until",
+   "label": "Retain Until (UTC)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_copies_section",
+   "fieldtype": "Section Break",
+   "label": "Archive Copies",
+   "collapsible": 1,
+   "depends_on": "eval:doc.archive_started_at"
+  },
+  {
+   "fieldname": "archive_copies",
+   "fieldtype": "Table",
+   "label": "Archive Copies",
+   "options": "Archive Copy",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_meta",
+   "fieldtype": "Code",
+   "label": "Archive Metadata",
+   "options": "JSON",
    "read_only": 1
   }
  ],
