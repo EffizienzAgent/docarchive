@@ -197,3 +197,5 @@ Max. Days in the Future,Max. Tage in der Zukunft
 Max. Contract Years,Max. Vertragsjahre
 A document date may be at most this many days after today.,Ein Belegdatum darf höchstens so viele Tage nach heute liegen.
 A contract end date may be at most this many years after the document date.,Ein Vertragsende darf höchstens so viele Jahre nach dem Belegdatum liegen.
+Skipped,Übersprungen
+The recorded version of {0} is missing on the storage target.,Die gespeicherte Version von {0} fehlt auf dem Speicherziel.

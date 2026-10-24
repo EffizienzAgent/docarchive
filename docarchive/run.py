@@ -17,7 +17,7 @@ from docarchive.document_archive.doctype.business_document.business_document imp
 DOCUMENT = "Business Document"
 SAVEPOINT = "docarchive_save"
 LOCK_SECONDS = 1800
-PENDING, ARCHIVED, FAILED = "Pending", "Archived", "Failed"
+PENDING, ARCHIVED, FAILED, SKIPPED = "Pending", "Archived", "Failed", "Skipped"
 CANDIDATE_FIELDS = [
 	"name",
 	"document_type",
@@ -54,10 +54,15 @@ def nightly(dry_run=False) -> dict:
 			],
 		}
 	reassign()
-	results = {ARCHIVED: [], FAILED: []}
+	results = {ARCHIVED: [], FAILED: [], SKIPPED: []}
 	for name in eligible({t.name for t in targets}):
 		results[archive_document(name, targets)].append(name)
-	summary = {"status": "done", "archived": len(results[ARCHIVED]), "failed": results[FAILED]}
+	summary = {
+		"status": "done",
+		"archived": len(results[ARCHIVED]),
+		"failed": results[FAILED],
+		"skipped": results[SKIPPED],
+	}
 	frappe.logger("docarchive").info(summary)
 	return summary
 
@@ -147,7 +152,7 @@ def document_lock(name):
 def archive_document(name, targets) -> str:
 	lock = document_lock(name)
 	if not lock.acquire(blocking=False):
-		return frappe.db.get_value(DOCUMENT, name, "archive_status")
+		return SKIPPED
 	try:
 		return archive_locked(name, targets)
 	finally:
@@ -244,15 +249,15 @@ def ensure(target, key, body, until, content_type, copy, version_field):
 	mode, known_version = copy.lock_mode, copy.get(version_field)
 	sha256 = content.sha256(body)
 	store.validate_lock(mode, until)
-	existing = store.head(target, key)
+	existing = store.head(target, key, known_version)
+	if existing is None and known_version:
+		raise ArchiveError(_("The recorded version of {0} is missing on the storage target.").format(key))
 	if existing is None:
 		version_id = store.put_locked(target, key, body, mode, until, content_type)["version_id"]
 	elif (existing.get("Metadata") or {}).get("sha256") != sha256:
 		raise ArchiveError(_("{0} already exists with different content.").format(key))
 	else:
-		version_id = existing.get("VersionId")
-	if known_version and version_id != known_version:
-		raise ArchiveError(_("{0} has a new version on the storage target.").format(key))
+		version_id = known_version or existing.get("VersionId")
 	copy.set(version_field, version_id)
 	store.verify(target, key, version_id, sha256, mode, until)
 
@@ -264,7 +269,7 @@ def finish(doc, targets) -> str:
 		doc.update(
 			{
 				"archive_status": ARCHIVED,
-				"archived_at": now_datetime(),
+				"archived_at": doc.archived_at or now_datetime(),
 				"retention_mode": mode_summary(doc),
 				"archive_error": None,
 			}

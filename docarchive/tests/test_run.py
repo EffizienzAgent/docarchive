@@ -350,24 +350,68 @@ class TestArchiveDocument(ArchiveRunTestCase):
 			reads = [kw for op, kw in fake.calls if op == "get_object"]
 			self.assertEqual({kw["VersionId"] for kw in reads}, set(versions.values()))
 
-	def test_new_version_under_the_key_is_an_error(self):
+	def test_recorded_version_wins_over_a_newer_one(self):
 		doc = self.document()
 		self.fake("primary").fail.add("get_object")
 		self.archive(doc)
 		doc.reload()
 		fake = self.fake("primary")
 		fake.fail.clear()
+		recorded = next(c for c in doc.archive_copies if c.target_name == "primary").object_version_id
 		[version] = fake.versions[("archive-primary", doc.object_key)]
-		fake.versions[("archive-primary", doc.object_key)].append({**version, "VersionId": "other"})
+		fake.versions[("archive-primary", doc.object_key)].append(
+			{**version, "VersionId": "other", "Body": b"x", "Metadata": {}}
+		)
+		self.assertEqual(self.archive(doc), "Archived")
+		doc.reload()
+		copy = next(c for c in doc.archive_copies if c.target_name == "primary")
+		self.assertEqual(copy.object_version_id, recorded)
+		reads = [
+			kw["VersionId"]
+			for op, kw in fake.calls
+			if op in ("get_object", "head_object") and kw["Key"] == doc.object_key
+		]
+		self.assertNotIn("other", reads)
+
+	def test_missing_recorded_version_fails(self):
+		doc = self.document()
+		self.fake("primary").fail.add("get_object")
+		self.archive(doc)
+		doc.reload()
+		fake = self.fake("primary")
+		fake.fail.clear()
+		fake.versions[("archive-primary", doc.object_key)][0]["VersionId"] = "replaced"
 		self.assertEqual(self.archive(doc), "Failed")
-		self.assertIn("has a new version", frappe.db.get_value(DOCUMENT, doc.name, "archive_error"))
+		self.assertIn("recorded version", frappe.db.get_value(DOCUMENT, doc.name, "archive_error"))
+
+	def test_held_lock_is_skipped_by_the_nightly_run(self):
+		locked = self.document()
+		other = self.document()
+		lock = run.document_lock(locked.name)
+		self.assertTrue(lock.acquire(blocking=False))
+		try:
+			result = run.nightly()
+		finally:
+			lock.release()
+		self.assertEqual((result["skipped"], result["failed"]), ([locked.name], []))
+		self.assertIsNone(frappe.db.get_value(DOCUMENT, locked.name, "archive_started_at"))
+		self.assertEqual(frappe.db.get_value(DOCUMENT, other.name, "archive_status"), "Archived")
+
+	def test_archived_at_is_kept_when_a_target_is_added(self):
+		self.configure(["primary"])
+		doc = self.document()
+		self.archive(doc)
+		first = frappe.db.get_value(DOCUMENT, doc.name, "archived_at")
+		self.configure(["primary", "secondary"])
+		run.nightly()
+		self.assertEqual(frappe.db.get_value(DOCUMENT, doc.name, "archived_at"), first)
 
 	def test_concurrent_runs_do_not_double_write(self):
 		doc = self.document()
 		lock = run.document_lock(doc.name)
 		self.assertTrue(lock.acquire(blocking=False))
 		try:
-			self.assertEqual(self.archive(doc), "Pending")
+			self.assertEqual(self.archive(doc), "Skipped")
 		finally:
 			lock.release()
 		self.assertEqual(self.puts(), [])
