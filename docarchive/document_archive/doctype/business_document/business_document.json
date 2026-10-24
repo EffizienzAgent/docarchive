@@ -148,22 +148,26 @@
   {
    "fieldname": "source_system",
    "fieldtype": "Data",
-   "label": "Source System"
+   "label": "Source System",
+   "read_only": 1
   },
   {
    "fieldname": "source_account",
    "fieldtype": "Data",
-   "label": "Source Account"
+   "label": "Source Account",
+   "read_only": 1
   },
   {
    "fieldname": "source_party_type",
    "fieldtype": "Data",
-   "label": "Source Party Type"
+   "label": "Source Party Type",
+   "read_only": 1
   },
   {
    "fieldname": "source_party_id",
    "fieldtype": "Data",
-   "label": "Source Party ID"
+   "label": "Source Party ID",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_source",

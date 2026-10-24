@@ -66,11 +66,11 @@ class TestAssignment(IntegrationTestCase):
 
 	def test_unknown_source_stays_unassigned_on_insert(self):
 		with self.hooks():
-			doc = make_business_document(source_party_id="unknown")
+			doc = make_business_document(archive_write=True, source_party_id="unknown")
 		self.assertFalse(doc.counterparty)
 		self.assertEqual(doc.own_company, self.default)
 
 	def test_assigned_on_insert(self):
 		with self.hooks():
-			doc = make_business_document(source_system="Billing", source_party_id="42")
+			doc = make_business_document(archive_write=True, source_system="Billing", source_party_id="42")
 		self.assertEqual(doc.counterparty, self.party.name)

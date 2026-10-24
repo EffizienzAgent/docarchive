@@ -11,6 +11,7 @@ from werkzeug.wrappers import Request
 from docarchive import content
 from docarchive.document_archive.doctype.business_document.business_document import (
 	LOCKED_FIELDS,
+	SOURCE_FIELDS,
 	missing_fields,
 	title_from_file_name,
 )
@@ -64,6 +65,36 @@ class TestBusinessDocument(BusinessDocumentTestCase):
 	def test_counterparty_must_exist(self):
 		with self.assertRaises(frappe.LinkValidationError):
 			make_business_document(counterparty_type="Contact", counterparty="missing-contact")
+
+	def test_user_needs_read_on_counterparty(self):
+		party = make_party()
+		user = make_manager("archive-party-reader@example.com")
+
+		def insert():
+			return frappe.get_doc(
+				{
+					"doctype": "Business Document",
+					"document_type": self.invoice,
+					"document_date": "2026-03-15",
+					"file": make_file().file_url,
+					**party_fields(party),
+				}
+			).insert()
+
+		with self.set_user(user), self.assertRaises(frappe.PermissionError):
+			insert()
+		frappe.share.add("Contact", party.name, user, read=1)
+		with self.set_user(user):
+			doc = insert()
+		frappe.share.remove("Contact", party.name, user)
+		other = make_party("Other").name
+		with self.set_user(user):
+			doc = frappe.get_doc("Business Document", doc.name)
+			doc.title = "Still editable"
+			doc.save()
+			doc.counterparty = other
+			with self.assertRaises(frappe.PermissionError):
+				doc.save()
 
 	def test_counterparty_doctypes_hook_limits_types(self):
 		party = make_party()
@@ -121,6 +152,7 @@ class TestBusinessDocumentLock(BusinessDocumentTestCase):
 			"counterparty_type": "User",
 			"counterparty": user.name,
 			"file": make_file().file_url,
+			**{field: "changed" for field in SOURCE_FIELDS},
 		}
 		self.assertEqual(set(values), set(LOCKED_FIELDS))
 		for field, value in values.items():
@@ -128,6 +160,7 @@ class TestBusinessDocumentLock(BusinessDocumentTestCase):
 				doc = start_archive(make_business_document(**party_fields(make_party())))
 				if field == "counterparty_type":
 					doc.counterparty = user.name
+				doc.flags.archive_write = field in SOURCE_FIELDS
 				doc.set(field, value)
 				with self.assertRaises(frappe.ValidationError):
 					doc.save()
@@ -176,6 +209,10 @@ FORGED = {
 	"retain_until": "2099-01-01 00:00:00",
 	"source_key": "forged",
 	"content_sha256": "0" * 64,
+	"source_system": "forged",
+	"source_account": "forged",
+	"source_party_type": "forged",
+	"source_party_id": "forged",
 }
 
 
@@ -201,6 +238,14 @@ class TestBusinessDocumentProtectedFields(BusinessDocumentTestCase):
 		self.assertEqual(saved.content_sha256, original)
 		self.assertFalse(saved.replaces)
 		self.assertFalse(saved.retain_until)
+
+	def test_server_flag_sets_source_fields(self):
+		doc = make_business_document(archive_write=True, source_system="Billing", source_party_id="7")
+		self.assertEqual((doc.source_system, doc.source_party_id), ("Billing", "7"))
+		doc.flags.archive_write = False
+		doc.source_party_id = "8"
+		doc.save()
+		self.assertEqual(frappe.db.get_value("Business Document", doc.name, "source_party_id"), "7")
 
 	def test_server_flag_allows_archive_fields(self):
 		doc = make_business_document()

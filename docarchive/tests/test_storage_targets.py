@@ -108,3 +108,20 @@ class TestStorageTargets(IntegrationTestCase):
 		for case, targets in cases.items():
 			with self.subTest(case), self.assertRaises(frappe.ValidationError):
 				make_settings(targets=targets)
+
+	def test_site_config_values_validated_once_set(self):
+		cases = {
+			"plain http": {"archive_primary_endpoint": "http://s3.region-a.example.test"},
+			"bad bucket": {"archive_primary_bucket": "Archive_A"},
+		}
+		for case, values in cases.items():
+			with self.subTest(case), self.config({**SITE_CONFIG, **values}):
+				with self.assertRaises(frappe.ValidationError):
+					make_settings(targets=[site_config_target("primary")])
+
+	def test_same_bucket_across_target_kinds_rejected(self):
+		direct = fields_target("direct", endpoint="https://s3.region-a.example.test/", bucket="archive-a")
+		with self.config(), self.assertRaises(frappe.ValidationError):
+			make_settings(targets=[site_config_target("primary"), direct])
+		with self.config():
+			make_settings(targets=[site_config_target("primary"), fields_target("direct")])

@@ -11,10 +11,7 @@ class ArchiveSettings(Document):
 		storage_targets.validate(self)
 
 	def on_update(self):
-		before = self.get_doc_before_save()
-		permissions.sync_manager_roles(
-			permissions.roles_of(self), removed=permissions.roles_of(before) - permissions.roles_of(self)
-		)
+		permissions.sync_manager_roles(permissions.roles_of(self))
 
 	def validate_retention_rules(self):
 		seen = set()

@@ -28,14 +28,16 @@ def ensure_role():
 		)
 
 
-def sync_manager_roles(roles, removed=()):
+def sync_manager_roles(roles):
 	for doctype, rights in MANAGER_RIGHTS.items():
 		if roles:
 			setup_custom_perms(doctype)
 		for role in roles:
 			grant(doctype, role, rights)
-		for role in removed:
-			frappe.db.delete("Custom DocPerm", {"parent": doctype, "role": role})
+		keep = BUILT_IN_ROLES | set(roles) | set(frappe.get_all("DocPerm", {"parent": doctype}, pluck="role"))
+		stale = set(frappe.get_all("Custom DocPerm", {"parent": doctype}, pluck="role")) - keep
+		if stale:
+			frappe.db.delete("Custom DocPerm", {"parent": doctype, "role": ("in", sorted(stale))})
 		frappe.clear_cache(doctype=doctype)
 
 

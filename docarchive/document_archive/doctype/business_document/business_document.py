@@ -8,6 +8,7 @@ from frappe.utils.data import cast
 
 from docarchive import assignment, content, counterparty, settings
 
+SOURCE_FIELDS = ("source_system", "source_account", "source_party_type", "source_party_id")
 LOCKED_FIELDS = (
 	"own_company",
 	"document_type",
@@ -16,6 +17,7 @@ LOCKED_FIELDS = (
 	"counterparty_type",
 	"counterparty",
 	"file",
+	*SOURCE_FIELDS,
 )
 PROTECTED_FIELDS = (
 	"content_sha256",
@@ -32,6 +34,7 @@ PROTECTED_FIELDS = (
 	"retain_until",
 	"source_key",
 	"replaces",
+	*SOURCE_FIELDS,
 )
 CONTRACT_END = "Contract End Date"
 PRIVATE_PREFIX = "/private/files/"
@@ -84,6 +87,7 @@ class BusinessDocument(Document):
 		if before and before.archive_started_at:
 			self.enforce_lock(before)
 		else:
+			counterparty.check_read(self, before)
 			assignment.assign(self)
 			self.resolve_own_company()
 			self.validate_file(before)

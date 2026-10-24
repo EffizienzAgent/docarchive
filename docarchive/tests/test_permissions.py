@@ -2,6 +2,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from docarchive.permissions import MANAGER_RIGHTS
+from docarchive.setup import apply_defaults
 from docarchive.tests.factories import (
 	make_business_document,
 	make_own_company,
@@ -54,3 +55,22 @@ class TestManagerRoles(IntegrationTestCase):
 				"Business Document", "read", user=make_user("roles-builtin@example.com", ["Document Manager"])
 			)
 		)
+
+	def test_migrate_removes_roles_not_configured(self):
+		make_settings(default_own_company=self.company, manager_roles=[self.role])
+		stray = make_role("Archive Stray Role")
+		frappe.get_doc(
+			{
+				"doctype": "Custom DocPerm",
+				"parent": "Business Document",
+				"parenttype": "DocType",
+				"parentfield": "permissions",
+				"role": stray,
+				"read": 1,
+			}
+		).insert(ignore_permissions=True)
+		apply_defaults()
+		roles = set(frappe.get_all("Custom DocPerm", {"parent": "Business Document"}, pluck="role"))
+		self.assertNotIn(stray, roles)
+		self.assertIn(self.role, roles)
+		self.assertTrue(self.can_list())

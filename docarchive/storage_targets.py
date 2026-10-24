@@ -21,7 +21,7 @@ def validate(settings):
 		if row.target_name in names:
 			frappe.throw(_("There is more than one storage target named {0}.").format(row.target_name))
 		names.add(row.target_name)
-		place = site_config_place(row) if row.config_source == SITE_CONFIG else fields_place(row)
+		place = validate_row(row)
 		if place in places:
 			frappe.throw(
 				_("Storage target {0} points to the same bucket as another target.").format(row.target_name)
@@ -31,7 +31,30 @@ def validate(settings):
 		validate_enabled(settings)
 
 
-def site_config_place(row):
+def validate_row(row):
+	from_fields = row.config_source == FIELDS
+	if from_fields:
+		if not (row.access_key and row.secret_key):
+			frappe.throw(
+				_("Storage target {0} needs an access key and a secret key.").format(row.target_name)
+			)
+	else:
+		validate_key_names(row)
+	place = location(row)
+	if (place.endpoint or from_fields) and not (place.endpoint or "").startswith("https://"):
+		frappe.throw(
+			_("The endpoint of storage target {0} must start with https://.").format(row.target_name)
+		)
+	if (place.bucket or from_fields) and not BUCKET.match(place.bucket or ""):
+		frappe.throw(_("Storage target {0} has no valid bucket name.").format(row.target_name))
+	if from_fields and not place.region:
+		frappe.throw(_("Storage target {0} needs a region.").format(row.target_name))
+	if place.endpoint and place.bucket:
+		return (place.endpoint.rstrip("/"), place.bucket)
+	return (SITE_CONFIG, row.config_prefix)
+
+
+def validate_key_names(row):
 	for label, value in (
 		("Site Config Prefix", row.config_prefix),
 		("Access Key Config Key", row.access_key_config_key),
@@ -43,21 +66,12 @@ def site_config_place(row):
 					_(label), row.target_name
 				)
 			)
-	return (SITE_CONFIG, row.config_prefix)
 
 
-def fields_place(row):
-	if not (row.endpoint or "").startswith("https://"):
-		frappe.throw(
-			_("The endpoint of storage target {0} must start with https://.").format(row.target_name)
-		)
-	if not BUCKET.match(row.bucket or ""):
-		frappe.throw(_("Storage target {0} has no valid bucket name.").format(row.target_name))
-	if not row.region:
-		frappe.throw(_("Storage target {0} needs a region.").format(row.target_name))
-	if not (row.access_key and row.secret_key):
-		frappe.throw(_("Storage target {0} needs an access key and a secret key.").format(row.target_name))
-	return (FIELDS, row.endpoint.rstrip("/"), row.bucket)
+def location(row) -> frappe._dict:
+	if row.config_source == SITE_CONFIG:
+		return frappe._dict({name: frappe.conf.get(f"{row.config_prefix}_{name}") for name in LOCATION})
+	return frappe._dict({name: row.get(name) for name in LOCATION})
 
 
 def validate_enabled(settings):
@@ -95,18 +109,16 @@ def resolve(settings=None) -> list[frappe._dict]:
 
 def target(row) -> frappe._dict:
 	if row.config_source == SITE_CONFIG:
-		location = {name: frappe.conf.get(f"{row.config_prefix}_{name}") for name in LOCATION}
 		credentials = {
 			"access_key": frappe.conf.get(row.access_key_config_key),
 			"secret_key": frappe.conf.get(row.secret_key_config_key),
 		}
 	else:
-		location = {name: row.get(name) for name in LOCATION}
 		credentials = {
 			name: get_decrypted_password(row.doctype, row.name, name, raise_exception=False)
 			for name in CREDENTIALS
 		}
-	return frappe._dict(name=row.target_name, lock_mode=row.lock_mode, **location, **credentials)
+	return frappe._dict(name=row.target_name, lock_mode=row.lock_mode, **location(row), **credentials)
 
 
 def configured() -> list[frappe._dict] | None:

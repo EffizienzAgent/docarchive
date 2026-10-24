@@ -131,19 +131,21 @@ def party_fields(party):
 	return {"counterparty_type": party.doctype, "counterparty": party.name}
 
 
-def make_business_document(**fields):
+def make_business_document(archive_write=False, **fields):
 	if "file" not in fields:
 		fields["file"] = make_file().file_url
 	if "document_type" not in fields:
 		fields["document_type"] = make_document_type().name
-	return frappe.get_doc(
+	doc = frappe.get_doc(
 		{
 			"doctype": "Business Document",
 			"document_date": "2026-03-15",
 			"document_number": "INV-2026-017",
 			**fields,
 		}
-	).insert(ignore_permissions=True)
+	)
+	doc.flags.archive_write = archive_write
+	return doc.insert(ignore_permissions=True)
 
 
 def make_user(email, roles=()):
