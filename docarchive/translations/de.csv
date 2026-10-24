@@ -183,3 +183,4 @@ Missing before archiving: {0},Fehlt vor dem Archivieren: {0}
 No storage target is configured.,Es ist kein Speicherziel eingerichtet.
 Source Record Type,Art des Quelldatensatzes
 Source Record,Quelldatensatz
+"{0} is locked in mode {1}, not {2}. Run docarchive-sync-mode first.","{0} ist im Modus {1} gesperrt, nicht {2}. Bitte zuerst docarchive-sync-mode ausführen."

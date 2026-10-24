@@ -29,6 +29,8 @@ class ArchiveRunTestCase(IntegrationTestCase):
 		self.type = make_document_type(default_retention_years=8)
 		self.party = make_party()
 		self.fakes = {}
+		frappe.db.delete(DOCUMENT)
+		frappe.db.delete("Archive Copy")
 		self.enterContext(patch("docarchive.store.client", side_effect=self.fake_for))
 		self.configure(["primary", "secondary"])
 

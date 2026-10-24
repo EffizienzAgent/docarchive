@@ -48,12 +48,23 @@ def nightly(dry_run=False) -> dict:
 			"status": "dry run",
 			"targets": [t.name for t in targets],
 			"documents": [{"name": name, "object_key": planned_key(name)} for name in eligible()],
+			"extensions": [
+				{"name": doc.name, "retain_until": until.isoformat()}
+				for doc, until in extensions({t.name for t in targets})
+			],
 		}
 	reassign()
 	results = {ARCHIVED: [], FAILED: []}
 	for name in eligible():
 		results[archive_document(name, targets)].append(name)
-	summary = {"status": "done", "archived": len(results[ARCHIVED]), "failed": results[FAILED]}
+	extended = extend_retention(targets)
+	summary = {
+		"status": "done",
+		"archived": len(results[ARCHIVED]),
+		"failed": results[FAILED],
+		"extended": len(extended[ARCHIVED]),
+		"extension_failed": extended[FAILED],
+	}
 	frappe.logger("docarchive").info(summary)
 	return summary
 
@@ -334,6 +345,87 @@ def meta(doc, years, until) -> dict:
 			"retain_until": utc_iso(until),
 		},
 	}
+
+
+def extensions(target_names):
+	types = frappe.get_all(
+		"Business Document Type", filters={"retention_from": retention.CONTRACT_END}, pluck="name"
+	)
+	if not types:
+		return []
+	names = frappe.get_all(
+		DOCUMENT,
+		filters={
+			"document_type": ("in", types),
+			"archive_status": ARCHIVED,
+			"contract_end_date": ("is", "set"),
+		},
+		pluck="name",
+		order_by="creation",
+	)
+	result = []
+	for name in names:
+		doc = frappe.get_doc(DOCUMENT, name)
+		years = json.loads(doc.archive_meta)["retention"]["years"]
+		until = retention.retain_until(doc, years)
+		copies = [copy for copy in doc.archive_copies if copy.target_name in target_names]
+		if any(retention.from_db(copy.retain_until) < until for copy in copies):
+			result.append((doc, until))
+	return result
+
+
+def extend_retention(targets) -> dict:
+	by_name = {target.name: target for target in targets}
+	results = {ARCHIVED: [], FAILED: []}
+	for doc, until in extensions(set(by_name)):
+		frappe.db.savepoint(SAVEPOINT)
+		copies = [copy for copy in doc.archive_copies if copy.target_name in by_name]
+		for copy in copies:
+			target = by_name[copy.target_name]
+			if retention.from_db(copy.retain_until) >= until:
+				continue
+			try:
+				for key in (doc.object_key, doc.meta_key):
+					store.extend_locked(target, key, copy.lock_mode, until)
+				copy.update({"retain_until": retention.to_db(until), "error": None})
+			except Exception as e:
+				copy.error = safe_error(e)
+				log(doc, target, copy.error)
+		done = all(retention.from_db(copy.retain_until) >= until for copy in copies)
+		if done:
+			doc.retain_until = retention.to_db(until)
+		try:
+			save(doc)
+		except Exception:
+			frappe.db.rollback(save_point=SAVEPOINT)
+			done = False
+		results[ARCHIVED if done else FAILED].append(doc.name)
+	return results
+
+
+def sync_mode(target_name) -> dict:
+	target = smoke_target(target_name)
+	checked, updated, mismatched = 0, [], []
+	for name in frappe.get_all(
+		"Archive Copy",
+		filters={"parenttype": DOCUMENT, "target_name": target.name, "status": ARCHIVED},
+		pluck="parent",
+		order_by="creation",
+	):
+		doc = frappe.get_doc(DOCUMENT, name)
+		copy = next(c for c in doc.archive_copies if c.target_name == target.name)
+		checked += 1
+		modes = {store.retention(target, key)["mode"] for key in (doc.object_key, doc.meta_key)}
+		if len(modes) != 1 or not modes <= set(store.MODES):
+			mismatched.append(name)
+			continue
+		mode = modes.pop()
+		if mode != copy.lock_mode:
+			copy.lock_mode = mode
+			doc.retention_mode = mode_summary(doc)
+			save(doc)
+			updated.append(name)
+	return {"target": target.name, "checked": checked, "updated": updated, "mismatched": mismatched}
 
 
 def smoke(target_name) -> dict:

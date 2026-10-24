@@ -15,7 +15,7 @@ GUARDED = {
 	"put_object": "put_locked",
 	"delete_object": "smoke_delete",
 	"delete_objects": None,
-	"put_object_retention": None,
+	"put_object_retention": "extend_locked",
 }
 
 

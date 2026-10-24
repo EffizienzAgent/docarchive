@@ -179,11 +179,17 @@ The `.meta.json` holds the document data (ID, title, type, date, number, contrac
 
 `retain_until` is January 1, 00:00 UTC, of the year after (start year + retention years). The start is the document date, or the contract end date for types whose retention counts from it. Years come from the Archive Settings rule for own company and type, else the type's default. Without either, the document fails with an error and nothing is written.
 
+### Contract end and retention extension
+
+After archiving starts, the contract end date can be set for the first time or moved later, never earlier. Each night, after archiving, the run recomputes `retain_until` for archived documents whose type counts from the contract end, using the retention years stored at archive start. When the new date is later than a copy's date, it extends the retention of the file and its `.meta.json` on that target with `PutObjectRetention`, in the same mode. Each copy records its own date. The document's `retain_until` moves only when every enabled target has the new date, and a failed target is retried the next night. A shorter date never leads to a request.
+
+The `.meta.json` is not rewritten. Object Lock versions are immutable, and a second version under the same key would hide the first one. The object's own retention (`GetObjectRetention`) is the authority, so the meta file records the retention at archive start, and the document's version history records each extension.
+
 ### Object Lock writes
 
-`docarchive.store.put_locked(target, key, body, mode, retain_until)` is the only code that calls `PutObject`. Before any request it checks that the mode is `GOVERNANCE` or `COMPLIANCE` and that `retain_until` is a timezone-aware datetime in the future. It always sends `ObjectLockMode`, `ObjectLockRetainUntilDate`, `ContentMD5` and the SHA-256 as object metadata. A test parses the app's source and fails if any other function reaches the raw S3 client.
+`docarchive.store.put_locked(target, key, body, mode, retain_until)` is the only code that calls `PutObject`. Before any request it checks that the mode is `GOVERNANCE` or `COMPLIANCE` and that `retain_until` is a timezone-aware datetime in the future. It always sends `ObjectLockMode`, `ObjectLockRetainUntilDate`, `ContentMD5` and the SHA-256 as object metadata. `docarchive.store.extend_locked(target, key, mode, retain_until)` is the only code that calls `PutObjectRetention`. It runs the same checks, refuses a mode that differs from the object's current mode, and makes no request unless the new date is later than the current one. A test parses the app's source and fails if any other function reaches the raw S3 client or one of these calls.
 
-The lock mode comes from the storage target and is recorded per copy. Switch a target to COMPLIANCE once your trial is done. New documents then use COMPLIANCE; see [docs/hetzner-example.md](docs/hetzner-example.md) for switching existing objects.
+The lock mode comes from the storage target and is recorded per copy. Switch a target to COMPLIANCE once your trial is done. New documents then use COMPLIANCE. Existing objects are switched outside the app with an admin key (see [docs/hetzner-example.md](docs/hetzner-example.md)). Then run `bench --site <site> docarchive-sync-mode --target <name>`: it reads the retention of both objects of every archived copy on that target and records the mode when both agree. Documents whose two objects report different modes are listed and the command exits with status 1.
 
 ### Archive now
 
@@ -195,6 +201,7 @@ Users who may write a document see **Archive now** on its form when archiving is
 bench --site <site> docarchive-run --dry-run   # list what would be archived, write nothing
 bench --site <site> docarchive-run             # archive now (needs Enabled)
 bench --site <site> docarchive-smoke --target primary
+bench --site <site> docarchive-sync-mode --target primary   # after switching objects to COMPLIANCE
 ```
 
 `docarchive-smoke` works without Enabled. It uploads a tiny `_smoke/` object with a 1-day GOVERNANCE lock, reads it back, checks its retention and checks that deleting that version with the target's credentials is refused. It exits with status 1 if any check fails. Each run leaves one small object that expires after a day.

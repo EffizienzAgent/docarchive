@@ -47,4 +47,21 @@ def smoke(context, target):
 		sys.exit(1)
 
 
-commands = [run_archive, smoke]
+@click.command("docarchive-sync-mode")
+@click.option("--target", required=True, help="Name of the storage target")
+@pass_context
+def sync_mode(context, target):
+	"""Record the lock mode that the target reports for each archived document."""
+	frappe = connect(context)
+	from docarchive import run
+
+	try:
+		result = run.sync_mode(target)
+	finally:
+		frappe.destroy()
+	click.echo(json.dumps(result, indent=1, default=str))
+	if result["mismatched"]:
+		sys.exit(1)
+
+
+commands = [run_archive, smoke, sync_mode]
