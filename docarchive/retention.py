@@ -27,7 +27,7 @@ def years_for(doc) -> int:
 
 def retain_until(doc, years=None) -> datetime:
 	years = years or years_for(doc)
-	return datetime(start_date(doc).year + years + 1, 1, 1, tzinfo=UTC)
+	return datetime(start_date(doc).year + years + 1, 1, 2, tzinfo=UTC)
 
 
 def to_db(value):

@@ -11,12 +11,36 @@ from docarchive import store
 from docarchive.tests.fake_s3 import LockedFakeS3
 
 APP_DIR = Path(store.__file__).resolve().parent
-GUARDED = {
+CLIENT_CALLS = {
 	"put_object": "put_locked",
+	"head_object": "head",
+	"get_object": "read_sha256",
+	"get_object_retention": "retention",
 	"delete_object": "smoke_delete",
-	"delete_objects": None,
 	"put_object_retention": "extend_locked",
+	"BypassGovernanceRetention": "smoke_delete",
 }
+BANNED = {
+	"delete_objects",
+	"copy_object",
+	"upload_file",
+	"upload_fileobj",
+	"download_file",
+	"download_fileobj",
+	"create_multipart_upload",
+	"upload_part",
+	"upload_part_copy",
+	"complete_multipart_upload",
+	"generate_presigned_url",
+	"generate_presigned_post",
+	"put_object_legal_hold",
+	"put_object_lock_configuration",
+	"put_bucket_policy",
+	"put_bucket_versioning",
+	"put_bucket_lifecycle_configuration",
+	"delete_bucket",
+}
+CLIENT_MODULES = ("boto3", "botocore", "s3storage.client")
 
 
 def future(days=1):
@@ -34,29 +58,38 @@ def app_modules():
 			yield relative.as_posix(), ast.parse(path.read_text(encoding="utf-8"))
 
 
-def uses_in(path, tree):
-	functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
-	for node in ast.walk(tree):
-		if isinstance(node, ast.Attribute):
-			name = node.attr
-		elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-			name = node.value
-		else:
-			continue
-		if name in GUARDED or name == "_client":
-			owner = next(
-				(f.name for f in functions if f.lineno <= node.lineno <= (f.end_lineno or f.lineno)), None
-			)
-			yield path, owner, name
+def names_in(node):
+	if isinstance(node, ast.Attribute):
+		yield node.attr
+	elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+		yield node.value
+	elif isinstance(node, ast.keyword) and node.arg:
+		yield node.arg
+	elif isinstance(node, ast.Import):
+		yield from (f"import:{alias.name}" for alias in node.names)
+	elif isinstance(node, ast.ImportFrom) and node.module:
+		yield f"import:{node.module}"
+		yield from (f"import:{node.module}.{alias.name}" for alias in node.names)
 
 
 def violations(modules):
-	return [
-		(path, owner, name)
-		for path, tree in modules
-		for path, owner, name in uses_in(path, tree)
-		if path != "store.py" or (name != "_client" and owner != GUARDED[name])
-	]
+	found = []
+	for path, tree in modules:
+		functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+		for node in ast.walk(tree):
+			line = getattr(node, "lineno", 0)
+			owner = next((f.name for f in functions if f.lineno <= line <= (f.end_lineno or f.lineno)), None)
+			for name in names_in(node):
+				module = name.removeprefix("import:")
+				if name in BANNED:
+					found.append((path, owner, name))
+				elif name in CLIENT_CALLS and (path, owner) != ("store.py", CLIENT_CALLS[name]):
+					found.append((path, owner, name))
+				elif name == "_client" and path != "store.py":
+					found.append((path, owner, name))
+				elif name.startswith("import:") and module.startswith(CLIENT_MODULES) and path != "store.py":
+					found.append((path, owner, name))
+	return found
 
 
 class TestStore(IntegrationTestCase):
@@ -128,14 +161,48 @@ class TestStore(IntegrationTestCase):
 	def test_read_sha256_hashes_the_stored_bytes(self):
 		target = fake_target()
 		store.put_locked(target, "k", b"stored bytes", "GOVERNANCE", future())
-		self.assertEqual(store.read_sha256(target, "k"), hashlib.sha256(b"stored bytes").hexdigest())
+		version = store.head(target, "k")["VersionId"]
+		self.assertEqual(store.read_sha256(target, "k", version), hashlib.sha256(b"stored bytes").hexdigest())
+		with self.assertRaises(store.LockError):
+			store.read_sha256(target, "k", None)
 
 	def test_smoke_delete_only_for_smoke_objects(self):
 		target = fake_target()
-		store.put_locked(target, "doc.pdf", b"x", "GOVERNANCE", future())
-		with self.assertRaises(store.LockError):
-			store.smoke_delete(target, "doc.pdf", "v1")
+		smoke_key = "_smoke/20261025T010203Z-0123abcd.txt"
+		for key, version in (
+			("doc.pdf", "v1"),
+			("_smoke/../doc.pdf", "v1"),
+			("_smoke/anything.txt", "v1"),
+			(smoke_key + ".pdf", "v1"),
+			(smoke_key, None),
+			(smoke_key, ""),
+		):
+			with self.subTest(key=key, version=version), self.assertRaises(store.LockError):
+				store.smoke_delete(target, key, version)
 		self.assertNotIn("delete_object", [call[0] for call in target._client.calls])
+
+	def test_only_lock_errors_count_as_refused(self):
+		from docarchive.tests.fake_s3 import error
+
+		self.assertTrue(store.refused(error("AccessDenied", "DeleteObject")))
+		self.assertFalse(store.refused(error("NoSuchKey", "DeleteObject")))
+		self.assertFalse(store.refused(error("InvalidRequest", "DeleteObject")))
+		self.assertFalse(store.refused(RuntimeError("network")))
+
+	def test_verify_checks_mode_date_and_sha(self):
+		target = fake_target()
+		until = future(30)
+		version = store.put_locked(target, "k", b"x", "GOVERNANCE", until)["version_id"]
+		sha = hashlib.sha256(b"x").hexdigest()
+		store.verify(target, "k", version, sha, "GOVERNANCE", until)
+		cases = {
+			"mode": ("COMPLIANCE", until, sha),
+			"later date": ("GOVERNANCE", until + timedelta(days=1), sha),
+			"sha": ("GOVERNANCE", until, "0" * 64),
+		}
+		for case, (mode, date, digest) in cases.items():
+			with self.subTest(case), self.assertRaises(store.VerifyError):
+				store.verify(target, "k", version, digest, mode, date)
 
 	def test_store_has_no_general_delete(self):
 		self.assertEqual([name for name in dir(store) if "delete" in name.lower()], ["smoke_delete"])
@@ -147,10 +214,36 @@ class TestStore(IntegrationTestCase):
 
 	def test_guard_detects_other_callers(self):
 		samples = {
-			"run.py": "def sneaky(t):\n    t._client.put_object(Bucket='b', Key='k', Body=b'')\n",
-			"api.py": "def sneaky(c):\n    getattr(c, 'put_object')()\n",
-			"store.py": "def head(t):\n    t._client.put_object(Bucket='b', Key='k', Body=b'')\n",
+			"put elsewhere": (
+				"run.py",
+				"def sneaky(t):\n    t._client.put_object(Bucket='b', Key='k', Body=b'')\n",
+			),
+			"getattr": ("api.py", "def sneaky(c):\n    getattr(c, 'put_object')()\n"),
+			"wrong function": (
+				"store.py",
+				"def head(t):\n    t._client.put_object(Bucket='b', Key='k', Body=b'')\n",
+			),
+			"head elsewhere": (
+				"store.py",
+				"def put_locked(t):\n    t._client.head_object(Bucket='b', Key='k')\n",
+			),
+			"copy": ("store.py", "def put_locked(t):\n    t._client.copy_object(Bucket='b')\n"),
+			"multipart": (
+				"store.py",
+				"def put_locked(t):\n    t._client.create_multipart_upload(Bucket='b')\n",
+			),
+			"presign": ("store.py", "def head(t):\n    t._client.generate_presigned_url('get_object')\n"),
+			"legal hold": ("store.py", "def head(t):\n    t._client.put_object_legal_hold(Bucket='b')\n"),
+			"bypass": (
+				"store.py",
+				"def put_locked(t):\n    t._client.put_object(BypassGovernanceRetention=True)\n",
+			),
+			"retention write": ("store.py", "def retention(t):\n    t._client.put_object_retention()\n"),
+			"client import": ("run.py", "from s3storage.client import get_client\n"),
+			"client module": ("run.py", "from s3storage import client\n"),
+			"boto3": ("api.py", "import boto3\n"),
+			"raw client": ("run.py", "def f(t):\n    return t._client\n"),
 		}
-		for path, source in samples.items():
-			with self.subTest(path):
+		for case, (path, source) in samples.items():
+			with self.subTest(case):
 				self.assertTrue(violations([(path, ast.parse(source))]))

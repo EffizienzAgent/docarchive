@@ -16,6 +16,7 @@ from docarchive.document_archive.doctype.business_document.business_document imp
 
 DOCUMENT = "Business Document"
 SAVEPOINT = "docarchive_save"
+LOCK_SECONDS = 1800
 PENDING, ARCHIVED, FAILED = "Pending", "Archived", "Failed"
 CANDIDATE_FIELDS = [
 	"name",
@@ -47,7 +48,10 @@ def nightly(dry_run=False) -> dict:
 		return {
 			"status": "dry run",
 			"targets": [t.name for t in targets],
-			"documents": [{"name": name, "object_key": planned_key(name)} for name in eligible()],
+			"documents": [
+				{"name": name, "object_key": planned_key(name)}
+				for name in eligible({t.name for t in targets})
+			],
 			"extensions": [
 				{"name": doc.name, "retain_until": until.isoformat()}
 				for doc, until in extensions({t.name for t in targets})
@@ -55,7 +59,7 @@ def nightly(dry_run=False) -> dict:
 		}
 	reassign()
 	results = {ARCHIVED: [], FAILED: []}
-	for name in eligible():
+	for name in eligible({t.name for t in targets}):
 		results[archive_document(name, targets)].append(name)
 	extended = extend_retention(targets)
 	summary = {
@@ -95,13 +99,30 @@ def reassign():
 				frappe.db.rollback(save_point=SAVEPOINT)
 
 
-def eligible() -> list[str]:
+def missing_copies(target_names) -> list[str]:
+	archived = frappe.get_all(
+		DOCUMENT, filters={"archive_status": ARCHIVED}, pluck="name", order_by="creation"
+	)
+	if not archived or not target_names:
+		return []
+	copies = frappe.get_all(
+		"Archive Copy",
+		filters={"parenttype": DOCUMENT, "target_name": ("in", list(target_names))},
+		fields=["parent", "target_name"],
+	)
+	have = {}
+	for row in copies:
+		have.setdefault(row.parent, set()).add(row.target_name)
+	return [name for name in archived if not set(target_names) <= have.get(name, set())]
+
+
+def eligible(target_names=()) -> list[str]:
 	started = frappe.get_all(
 		DOCUMENT,
 		filters={"archive_status": ("!=", ARCHIVED), "archive_started_at": ("is", "set")},
 		pluck="name",
 		order_by="creation",
-	)
+	) + missing_copies(target_names)
 	types = archive_types()
 	if not types:
 		return started
@@ -130,7 +151,28 @@ def object_key(doc, ext):
 	return keys.object_key(doc, type_slug, ext)
 
 
+def document_lock(name):
+	return frappe.cache.lock(frappe.cache.make_key(f"docarchive:document:{name}"), timeout=LOCK_SECONDS)
+
+
 def archive_document(name, targets) -> str:
+	lock = document_lock(name)
+	if not lock.acquire(blocking=False):
+		return frappe.db.get_value(DOCUMENT, name, "archive_status")
+	try:
+		return archive_locked(name, targets)
+	finally:
+		release(lock)
+
+
+def release(lock):
+	try:
+		lock.release()
+	except Exception:
+		pass
+
+
+def archive_locked(name, targets) -> str:
 	doc = frappe.get_doc(DOCUMENT, name)
 	frappe.db.savepoint(SAVEPOINT)
 	try:
@@ -200,27 +242,30 @@ def copy_to(doc, target, data):
 	try:
 		until = retention.from_db(copy.retain_until)
 		mime = mimetypes.guess_type(doc.object_key)[0] or "application/octet-stream"
-		objects = (
-			(doc.object_key, data, mime),
-			(doc.meta_key, keys.meta_bytes(doc.archive_meta, copy.lock_mode), "application/json"),
-		)
-		for key, body, content_type in objects:
-			ensure(target, key, body, copy.lock_mode, until, content_type)
-		if store.read_sha256(target, doc.object_key) != doc.archive_sha256:
-			raise ArchiveError(_("The archived copy does not match the checksum."))
+		meta_body = keys.meta_bytes(doc.archive_meta, copy.lock_mode)
+		ensure(target, doc.object_key, data, until, mime, copy, "object_version_id")
+		ensure(target, doc.meta_key, meta_body, until, "application/json", copy, "meta_version_id")
 		copy.update({"status": ARCHIVED, "archived_at": now_datetime(), "error": None})
 	except Exception as e:
 		copy.update({"status": FAILED, "error": safe_error(e)})
 		log(doc, target, copy.error)
 
 
-def ensure(target, key, body, mode, until, content_type):
+def ensure(target, key, body, until, content_type, copy, version_field):
+	mode, known_version = copy.lock_mode, copy.get(version_field)
+	sha256 = content.sha256(body)
+	store.validate_lock(mode, until)
 	existing = store.head(target, key)
 	if existing is None:
-		store.put_locked(target, key, body, mode, until, content_type)
-		return
-	if (existing.get("Metadata") or {}).get("sha256") != content.sha256(body):
+		version_id = store.put_locked(target, key, body, mode, until, content_type)["version_id"]
+	elif (existing.get("Metadata") or {}).get("sha256") != sha256:
 		raise ArchiveError(_("{0} already exists with different content.").format(key))
+	else:
+		version_id = existing.get("VersionId")
+	if known_version and version_id != known_version:
+		raise ArchiveError(_("{0} has a new version on the storage target.").format(key))
+	copy.set(version_field, version_id)
+	store.verify(target, key, version_id, sha256, mode, until)
 
 
 def finish(doc, targets) -> str:
@@ -433,19 +478,25 @@ def smoke(target_name) -> dict:
 	until = datetime.now(UTC).replace(microsecond=0) + timedelta(days=1)
 	key = f"{store.SMOKE_PREFIX}{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}.txt"
 	body = f"docarchive smoke test {until.isoformat()}\n".encode()
-	checks = {}
 	put = store.put_locked(target, key, body, "GOVERNANCE", until, "text/plain")
-	checks["put"] = True
-	checks["sha256"] = store.read_sha256(target, key) == put["sha256"]
-	lock = store.retention(target, key, put["version_id"])
-	checks["retention"] = lock["mode"] == "GOVERNANCE" and same_second(lock["retain_until"], until)
-	checks["versioned"] = bool(put["version_id"])
-	try:
-		store.smoke_delete(target, key, put["version_id"])
-		checks["delete_refused"] = False
-	except Exception as e:
-		checks["delete_refused"] = store.error_code(e) is not None
+	version = put["version_id"]
+	checks = {"put": True, "versioned": bool(version)}
+	if version:
+		checks["sha256"] = store.read_sha256(target, key, version) == put["sha256"]
+		lock = store.retention(target, key, version)
+		checks["retention"] = lock["mode"] == "GOVERNANCE" and same_second(lock["retain_until"], until)
+		checks["delete_refused"] = delete_refused(target, key, version)
+		checks["bypass_delete_refused"] = delete_refused(target, key, version, bypass=True)
+		checks["still_there"] = store.head(target, key, version) is not None
 	return {"target": target.name, "key": key, "checks": checks, "ok": all(checks.values())}
+
+
+def delete_refused(target, key, version, bypass=False) -> bool:
+	try:
+		store.smoke_delete(target, key, version, bypass=bypass)
+	except Exception as e:
+		return store.refused(e)
+	return False
 
 
 def same_second(value, expected) -> bool:

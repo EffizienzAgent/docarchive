@@ -3,7 +3,7 @@ import hashlib
 import frappe
 import frappe.utils.response as response
 from frappe.tests import IntegrationTestCase
-from frappe.utils import now_datetime
+from frappe.utils import add_days, now_datetime, today
 from werkzeug.exceptions import Forbidden
 from werkzeug.test import EnvironBuilder
 from werkzeug.wrappers import Request
@@ -520,3 +520,30 @@ class TestBusinessDocumentFiles(BusinessDocumentTestCase):
 			self.assertEqual(
 				content.read_bytes("/private/files/anything.pdf"), b"stored:/private/files/anything.pdf"
 			)
+
+
+class TestBusinessDocumentHardening(IntegrationTestCase):
+	def setUp(self):
+		make_settings(default_own_company=make_own_company().name)
+
+	def test_protected_fields_restored_before_link_check(self):
+		doc = make_business_document()
+		doc.source_doctype = "User"
+		doc.source_name = "no-such-user@example.com"
+		doc.save(ignore_permissions=True)
+		doc.reload()
+		self.assertEqual((doc.source_doctype, doc.source_name), (None, None))
+
+	def test_document_date_plausibility(self):
+		with self.assertRaisesRegex(frappe.ValidationError, "days in the future"):
+			make_business_document(document_date=add_days(today(), 40))
+		make_business_document(document_date=add_days(today(), 20))
+		make_settings(default_own_company=make_own_company().name, max_future_days=0)
+		with self.assertRaises(frappe.ValidationError):
+			make_business_document(document_date=add_days(today(), 1))
+
+	def test_contract_end_plausibility(self):
+		contract = make_document_type(retention_from="Contract End Date").name
+		with self.assertRaisesRegex(frappe.ValidationError, "years after"):
+			make_business_document(document_type=contract, contract_end_date="2077-01-01")
+		make_business_document(document_type=contract, contract_end_date="2076-03-15")

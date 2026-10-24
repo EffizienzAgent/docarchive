@@ -113,7 +113,15 @@ def changed(doc, before, fields) -> bool:
 
 
 def file_permission(doc, ptype=None, user=None, debug=False) -> bool:
-	return not (ptype == "delete" and archived_file(doc))
+	if ptype == "delete" and archived_file(doc):
+		return False
+	if (
+		ptype in ("write", "delete", "create")
+		and doc.attached_to_doctype == DOCUMENT
+		and doc.attached_to_name
+	):
+		return bool(frappe.has_permission(DOCUMENT, "write", doc.attached_to_name, user=user))
+	return True
 
 
 def protect_party(doc, method=None, old=None, new=None, merge=False):

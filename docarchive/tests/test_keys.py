@@ -52,7 +52,7 @@ class TestKeys(IntegrationTestCase):
 		self.assertEqual(keys.meta_key("a/b.pdf"), "a/b.pdf.meta.json")
 
 	def test_meta_bytes_are_deterministic_and_carry_the_mode(self):
-		meta = {"b": 1, "a": "ä", "retention": {"retain_until": "2035-01-01T00:00:00Z"}}
+		meta = {"b": 1, "a": "ä", "retention": {"retain_until": "2035-01-02T00:00:00Z"}}
 		first = keys.meta_bytes(json.dumps(meta), "GOVERNANCE")
 		self.assertEqual(first, keys.meta_bytes(meta, "GOVERNANCE"))
 		self.assertEqual(json.loads(first)["retention"]["mode"], "GOVERNANCE")
@@ -71,22 +71,22 @@ class TestRetention(IntegrationTestCase):
 
 	def test_counts_from_end_of_document_year(self):
 		until = retention.retain_until(doc(own_company=self.company, document_type=self.invoice))
-		self.assertEqual(until, datetime(2033, 1, 1, tzinfo=UTC))
+		self.assertEqual(until, datetime(2033, 1, 2, tzinfo=UTC))
 
 	def test_type_default_without_rule(self):
 		other = make_own_company().name
 		until = retention.retain_until(doc(own_company=other, document_type=self.invoice))
-		self.assertEqual(until, datetime(2035, 1, 1, tzinfo=UTC))
+		self.assertEqual(until, datetime(2035, 1, 2, tzinfo=UTC))
 
 	def test_contract_counts_from_contract_end(self):
 		contract = doc(own_company=self.company, document_type=self.contract, contract_end_date="2030-06-30")
-		self.assertEqual(retention.retain_until(contract), datetime(2041, 1, 1, tzinfo=UTC))
+		self.assertEqual(retention.retain_until(contract), datetime(2041, 1, 2, tzinfo=UTC))
 		contract.contract_end_date = None
-		self.assertEqual(retention.retain_until(contract), datetime(2037, 1, 1, tzinfo=UTC))
+		self.assertEqual(retention.retain_until(contract), datetime(2037, 1, 2, tzinfo=UTC))
 
 	def test_contract_end_ignored_for_other_types(self):
 		invoice = doc(own_company=self.company, document_type=self.invoice, contract_end_date="2030-06-30")
-		self.assertEqual(retention.retain_until(invoice), datetime(2033, 1, 1, tzinfo=UTC))
+		self.assertEqual(retention.retain_until(invoice), datetime(2033, 1, 2, tzinfo=UTC))
 
 	def test_missing_rule_raises(self):
 		no_years = make_document_type(default_retention_years=0).name
@@ -94,6 +94,6 @@ class TestRetention(IntegrationTestCase):
 			retention.retain_until(doc(own_company=self.company, document_type=no_years))
 
 	def test_db_round_trip_is_utc(self):
-		value = datetime(2035, 1, 1, tzinfo=UTC)
-		self.assertEqual(str(retention.to_db(value)), "2035-01-01 00:00:00")
-		self.assertEqual(retention.from_db("2035-01-01 00:00:00"), value)
+		value = datetime(2035, 1, 2, tzinfo=UTC)
+		self.assertEqual(str(retention.to_db(value)), "2035-01-02 00:00:00")
+		self.assertEqual(retention.from_db("2035-01-02 00:00:00"), value)

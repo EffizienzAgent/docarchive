@@ -39,3 +39,11 @@ def retention_years(own_company, document_type) -> int | None:
 		if rule.own_company == own_company and rule.document_type == document_type:
 			return rule.years
 	return frappe.db.get_value("Business Document Type", document_type, "default_retention_years") or None
+
+
+def date_limits() -> frappe._dict:
+	config = get()
+	return frappe._dict(
+		future_days=config.max_future_days if config.max_future_days is not None else 31,
+		contract_years=config.max_contract_years or 50,
+	)

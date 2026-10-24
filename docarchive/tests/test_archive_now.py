@@ -30,7 +30,7 @@ class TestArchiveNow(ArchiveRunTestCase):
 		[row] = archive_now.preview([doc.name])
 		self.assertEqual(
 			(row["eligible"], row["retain_until"], row["modes"]),
-			(True, datetime(2035, 1, 1, tzinfo=UTC).isoformat(), ["GOVERNANCE"]),
+			(True, datetime(2035, 1, 2, tzinfo=UTC).isoformat(), ["GOVERNANCE"]),
 		)
 
 	def test_archives_immediately_to_every_target(self):
@@ -44,7 +44,7 @@ class TestArchiveNow(ArchiveRunTestCase):
 		self.assertEqual(len(puts), 4)
 		for put in puts:
 			self.assertEqual(put["ObjectLockMode"], "GOVERNANCE")
-			self.assertEqual(put["ObjectLockRetainUntilDate"], datetime(2035, 1, 1, tzinfo=UTC))
+			self.assertEqual(put["ObjectLockRetainUntilDate"], datetime(2035, 1, 2, tzinfo=UTC))
 		self.assertEqual(self.enqueue.call_args.kwargs["queue"], "long")
 		self.assertTrue(self.enqueue.call_args.kwargs["deduplicate"])
 

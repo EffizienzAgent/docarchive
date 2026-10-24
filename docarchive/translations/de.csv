@@ -184,3 +184,17 @@ No storage target is configured.,Es ist kein Speicherziel eingerichtet.
 Source Record Type,Art des Quelldatensatzes
 Source Record,Quelldatensatz
 "{0} is locked in mode {1}, not {2}. Run docarchive-sync-mode first.","{0} ist im Modus {1} gesperrt, nicht {2}. Bitte zuerst docarchive-sync-mode ausführen."
+This source_key is already used by another source.,Dieser source_key wird bereits von einer anderen Quelle verwendet.
+Object Version ID,Objektversion
+Meta Version ID,Meta-Version
+An archive object version is missing. The bucket needs Object Lock.,Eine Version des Archivobjekts fehlt. Der Bucket braucht Object Lock.
+{0} is missing on the storage target.,{0} fehlt auf dem Speicherziel.
+{0} is not locked as expected.,{0} ist nicht wie erwartet gesperrt.
+{0} does not match its checksum.,{0} passt nicht zu seiner Prüfsumme.
+{0} has a new version on the storage target.,{0} hat eine neue Version auf dem Speicherziel.
+The document date cannot be more than {0} days in the future.,Das Belegdatum darf höchstens {0} Tage in der Zukunft liegen.
+The contract end date cannot be more than {0} years after the document date.,Das Vertragsende darf höchstens {0} Jahre nach dem Belegdatum liegen.
+Max. Days in the Future,Max. Tage in der Zukunft
+Max. Contract Years,Max. Vertragsjahre
+A document date may be at most this many days after today.,Ein Belegdatum darf höchstens so viele Tage nach heute liegen.
+A contract end date may be at most this many years after the document date.,Ein Vertragsende darf höchstens so viele Jahre nach dem Belegdatum liegen.

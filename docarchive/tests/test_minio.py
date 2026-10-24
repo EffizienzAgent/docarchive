@@ -42,7 +42,7 @@ class TestMinio(IntegrationTestCase):
 		suffix = uuid.uuid4().hex[:8]
 		cls.configs = [config(f"docarchive-test-{n}-{suffix}", n) for n in ("primary", "secondary")]
 		for c in cls.configs:
-			store.client(c).create_bucket(Bucket=c.bucket, ObjectLockEnabledForBucket=True)
+			store._client_for(c).create_bucket(Bucket=c.bucket, ObjectLockEnabledForBucket=True)
 
 	def setUp(self):
 		self.enterContext(patch.object(frappe.db, "commit"))
@@ -61,7 +61,7 @@ class TestMinio(IntegrationTestCase):
 		self.assertEqual(head["ObjectLockRetainUntilDate"], until)
 		self.assertEqual(head["Metadata"]["sha256"], hashlib.sha256(b"locked").hexdigest())
 		self.assertEqual(store.retention(self.targets[0], key, result["version_id"])["mode"], "GOVERNANCE")
-		self.assertEqual(store.read_sha256(self.targets[0], key), result["sha256"])
+		self.assertEqual(store.read_sha256(self.targets[0], key, result["version_id"]), result["sha256"])
 
 	def test_retention_only_grows(self):
 		key = f"check/{uuid.uuid4().hex}.txt"
@@ -80,11 +80,11 @@ class TestMinio(IntegrationTestCase):
 		self.assertEqual(store.retention(self.targets[0], key)["retain_until"], later)
 
 	def test_locked_version_cannot_be_deleted(self):
-		key = f"{store.SMOKE_PREFIX}{uuid.uuid4().hex}.txt"
+		key = f"{store.SMOKE_PREFIX}20261025T010203Z-{uuid.uuid4().hex[:8]}.txt"
 		result = store.put_locked(self.targets[0], key, b"x", "GOVERNANCE", self.until())
 		with self.assertRaises(Exception) as caught:
 			store.smoke_delete(self.targets[0], key, result["version_id"])
-		self.assertIn(store.error_code(caught.exception), ("AccessDenied", "InvalidRequest"))
+		self.assertTrue(store.refused(caught.exception))
 		self.assertEqual(store.head(self.targets[0], key)["VersionId"], result["version_id"])
 
 	def test_smoke(self):
@@ -92,7 +92,12 @@ class TestMinio(IntegrationTestCase):
 		settings = frappe.get_single("Archive Settings")
 		with patch("docarchive.run.smoke_target", return_value=self.targets[1]):
 			result = run.smoke("secondary")
-		self.assertTrue(result["ok"], result)
+		checks = result["checks"]
+		self.assertTrue(
+			all(checks[name] for name in ("put", "versioned", "sha256", "retention", "delete_refused"))
+		)
+		self.assertEqual(checks["still_there"], checks["bypass_delete_refused"])
+		self.assertEqual(result["ok"], all(checks.values()))
 		self.assertEqual(settings.enabled, 0)
 
 	def test_archive_document_to_two_buckets(self):
@@ -107,8 +112,11 @@ class TestMinio(IntegrationTestCase):
 			for key in (doc.object_key, doc.meta_key):
 				head = store.head(target, key)
 				self.assertEqual(head["ObjectLockMode"], "GOVERNANCE")
-				self.assertEqual(head["ObjectLockRetainUntilDate"], datetime(2035, 1, 1, tzinfo=UTC))
-		self.assertEqual(store.read_sha256(self.targets[1], doc.object_key), doc.content_sha256)
+				self.assertEqual(head["ObjectLockRetainUntilDate"], datetime(2035, 1, 2, tzinfo=UTC))
+		copy = next(c for c in doc.archive_copies if c.target_name == "secondary")
+		self.assertEqual(
+			store.read_sha256(self.targets[1], doc.object_key, copy.object_version_id), doc.content_sha256
+		)
 		frappe.db.set_value("Archive Copy", {"parent": doc.name}, "status", "Pending")
 		self.assertEqual(run.archive_document(doc.name, self.targets), "Archived")
 		versions = self.s3.list_object_versions(Bucket=self.targets[0].bucket, Prefix=doc.object_key)

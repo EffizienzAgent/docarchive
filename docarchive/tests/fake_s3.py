@@ -14,10 +14,11 @@ def error(code, operation):
 class LockedFakeS3:
 	"""An Object Lock bucket in memory. Versions are kept, locked versions cannot be deleted."""
 
-	def __init__(self, fail=()):
+	def __init__(self, fail=(), bypass_allowed=False):
 		self.versions = {}
 		self.calls = []
 		self.fail = set(fail)
+		self.bypass_allowed = bypass_allowed
 
 	def record(self, operation, **kwargs):
 		self.calls.append((operation, kwargs))
@@ -56,7 +57,7 @@ class LockedFakeS3:
 		return {"VersionId": version["VersionId"]}
 
 	def head_object(self, Bucket, Key, VersionId=None):
-		self.record("head_object", Bucket=Bucket, Key=Key)
+		self.record("head_object", Bucket=Bucket, Key=Key, VersionId=VersionId)
 		version = self.latest(Bucket, Key, VersionId)
 		return {
 			"ContentLength": len(version["Body"]),
@@ -67,12 +68,12 @@ class LockedFakeS3:
 		}
 
 	def get_object(self, Bucket, Key, VersionId=None):
-		self.record("get_object", Bucket=Bucket, Key=Key)
+		self.record("get_object", Bucket=Bucket, Key=Key, VersionId=VersionId)
 		version = self.latest(Bucket, Key, VersionId, "GetObject")
 		return {"Body": io.BytesIO(version["Body"]), "VersionId": version["VersionId"]}
 
 	def get_object_retention(self, Bucket, Key, VersionId=None):
-		self.record("get_object_retention", Bucket=Bucket, Key=Key)
+		self.record("get_object_retention", Bucket=Bucket, Key=Key, VersionId=VersionId)
 		version = self.latest(Bucket, Key, VersionId, "GetObjectRetention")
 		return {
 			"Retention": {
@@ -94,13 +95,20 @@ class LockedFakeS3:
 		version["ObjectLockRetainUntilDate"] = Retention["RetainUntilDate"]
 		return {}
 
-	def delete_object(self, Bucket, Key, VersionId=None):
-		self.record("delete_object", Bucket=Bucket, Key=Key, VersionId=VersionId)
+	def delete_object(self, Bucket, Key, VersionId=None, BypassGovernanceRetention=False):
+		self.record(
+			"delete_object", Bucket=Bucket, Key=Key, VersionId=VersionId, Bypass=BypassGovernanceRetention
+		)
 		if VersionId is None:
 			self.versions.setdefault((Bucket, Key), [])
 			return {"DeleteMarker": True}
 		version = self.latest(Bucket, Key, VersionId, "DeleteObject")
-		if version["ObjectLockRetainUntilDate"] and version["ObjectLockRetainUntilDate"] > datetime.now(UTC):
+		if BypassGovernanceRetention and not self.bypass_allowed:
+			raise error("AccessDenied", "DeleteObject")
+		locked = version["ObjectLockRetainUntilDate"] and version["ObjectLockRetainUntilDate"] > datetime.now(
+			UTC
+		)
+		if locked and not (BypassGovernanceRetention and version["ObjectLockMode"] == "GOVERNANCE"):
 			raise error("AccessDenied", "DeleteObject")
 		self.versions[(Bucket, Key)].remove(version)
 		return {}

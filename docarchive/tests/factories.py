@@ -50,6 +50,8 @@ def make_settings(rules=(), targets=None, manager_roles=None, **fields):
 			"default_own_company": None,
 			"successor_own_company": None,
 			"successor_from_date": None,
+			"max_future_days": 31,
+			"max_contract_years": 50,
 			**fields,
 		}
 	)

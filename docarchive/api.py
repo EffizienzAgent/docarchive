@@ -6,6 +6,7 @@ import frappe
 from frappe import _
 from frappe.core.api.file import get_max_file_size
 from frappe.rate_limiter import rate_limit
+from pypdf.errors import PyPdfError
 
 from docarchive import content, settings
 from docarchive.document_archive.doctype.business_document.business_document import (
@@ -17,6 +18,7 @@ from docarchive.permissions import INTEGRATION_ROLE
 DOCUMENT = "Business Document"
 ALLOWED_ROLES = (INTEGRATION_ROLE, "System Manager")
 PARTY_HINTS = ("source_party_id", "source_party_name", "source_party_email")
+SAVEPOINT = "docarchive_upload"
 
 
 class UploadError(frappe.ValidationError):
@@ -67,20 +69,37 @@ def upload_document(
 	sha = content.sha256(data)
 	source_key = clean(source_key)
 
-	versions = source_versions(source_key)
+	scope = {"source_system": fields["source_system"], "source_account": fields["source_account"]}
+	for _attempt in range(2):
+		frappe.db.savepoint(SAVEPOINT)
+		existing = find_existing(source_key, scope, sha, doc_type.name)
+		if existing:
+			return existing
+		current = (source_versions(source_key, scope) or [None])[-1]
+		try:
+			doc = create(fields, name, data, None if current else source_key, current and current.name)
+		except frappe.UniqueValidationError:
+			frappe.db.rollback(save_point=SAVEPOINT)
+			frappe.message_log.clear()
+			continue
+		return response(doc.name, "replaced" if current else "created")
+	fail(_("This source_key is already used by another source."))
+
+
+def find_existing(source_key, scope, sha, document_type):
+	versions = source_versions(source_key, scope)
 	for version in versions:
 		if version.content_sha256 == sha:
-			return response(version.name, "exists")
-	current = versions[-1] if versions else None
-	if not current:
+			return exists(version.name)
+	if source_key and not versions and frappe.db.exists(DOCUMENT, {"source_key": source_key}):
+		fail(_("This source_key is already used by another source."))
+	if not versions:
 		same = frappe.db.get_value(
-			DOCUMENT, {"content_sha256": sha, "document_type": doc_type.name}, "name", order_by="creation"
+			DOCUMENT, {"content_sha256": sha, "document_type": document_type}, "name", order_by="creation"
 		)
 		if same:
-			return response(same, "exists")
-
-	doc = create(fields, name, data, None if current else source_key, current.name if current else None)
-	return response(doc.name, "replaced" if current else "created")
+			return exists(same)
+	return None
 
 
 def clean(value):
@@ -155,9 +174,10 @@ def read_upload(file_name, content_base64):
 	return name, data
 
 
-def source_versions(source_key):
+def source_versions(source_key, scope):
 	fields = ["name", "content_sha256"]
-	doc = source_key and frappe.db.get_value(DOCUMENT, {"source_key": source_key}, fields, as_dict=True)
+	filters = {"source_key": source_key, **{k: v or ("is", "not set") for k, v in scope.items()}}
+	doc = source_key and frappe.db.get_value(DOCUMENT, filters, fields, as_dict=True)
 	versions = []
 	while doc:
 		versions.append(doc)
@@ -172,9 +192,7 @@ def create(fields, file_name, data, source_key, replaces):
 		file = frappe.get_doc(
 			{"doctype": "File", "file_name": file_name, "content": data, "is_private": 1}
 		).insert(ignore_permissions=True)
-	except frappe.ValidationError:
-		raise
-	except Exception:
+	except PyPdfError:
 		fail(_("The file is damaged or does not match its file type."))
 	doc = frappe.get_doc(
 		{
@@ -187,6 +205,10 @@ def create(fields, file_name, data, source_key, replaces):
 	)
 	doc.flags.archive_write = True
 	return doc.insert(ignore_permissions=True)
+
+
+def exists(name):
+	return {"name": name, "status": "exists"}
 
 
 def response(name, status):

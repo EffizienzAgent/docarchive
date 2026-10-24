@@ -15,7 +15,9 @@
   "lock_mode",
   "retain_until",
   "archived_at",
-  "error"
+  "error",
+  "object_version_id",
+  "meta_version_id"
  ],
  "fields": [
   {
@@ -58,6 +60,18 @@
    "fieldname": "error",
    "fieldtype": "Small Text",
    "label": "Error",
+   "read_only": 1
+  },
+  {
+   "fieldname": "object_version_id",
+   "fieldtype": "Data",
+   "label": "Object Version ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "meta_version_id",
+   "fieldtype": "Data",
+   "label": "Meta Version ID",
    "read_only": 1
   }
  ],
