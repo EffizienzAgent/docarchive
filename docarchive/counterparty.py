@@ -24,4 +24,9 @@ def check_read(doc, before=None):
 		return
 	if before and (before.counterparty_type, before.counterparty) == party:
 		return
-	frappe.has_permission(doc.counterparty_type, "read", doc.counterparty, throw=True)
+	try:
+		allowed = frappe.has_permission(doc.counterparty_type, "read", doc.counterparty)
+	except frappe.DoesNotExistError:
+		allowed = False
+	if not allowed:
+		frappe.throw(_("You have no access to this counterparty."), frappe.PermissionError)

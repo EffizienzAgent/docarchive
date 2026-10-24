@@ -20,10 +20,12 @@
   "documents_section",
   "default_upload_type",
   "manager_roles",
+  "allowed_extensions",
   "retention_section",
   "retention_rules",
   "storage_section",
-  "storage_targets"
+  "storage_targets",
+  "granted_permissions"
  ],
  "fields": [
   {
@@ -83,6 +85,13 @@
    "description": "Roles that may file and read documents, in addition to Document Manager."
   },
   {
+   "fieldname": "allowed_extensions",
+   "fieldtype": "Small Text",
+   "label": "Allowed File Types",
+   "default": "pdf\npng\njpg\njpeg\ntif\ntiff\nxml",
+   "description": "One file extension per line. Only these file types can be filed."
+  },
+  {
    "fieldname": "retention_section",
    "fieldtype": "Section Break",
    "label": "Retention"
@@ -104,6 +113,13 @@
    "label": "Storage Targets",
    "options": "Archive Storage Target",
    "description": "Every enabled target gets a locked copy of each archived document."
+  },
+  {
+   "fieldname": "granted_permissions",
+   "fieldtype": "Long Text",
+   "label": "Granted Permissions",
+   "hidden": 1,
+   "read_only": 1
   }
  ],
  "permissions": [
@@ -112,10 +128,6 @@
    "read": 1,
    "write": 1,
    "create": 1
-  },
-  {
-   "role": "Document Manager",
-   "read": 1
   }
  ]
 }

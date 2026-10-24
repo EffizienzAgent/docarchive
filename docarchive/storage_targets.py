@@ -1,4 +1,6 @@
+import ipaddress
 import re
+from urllib.parse import urlsplit
 
 import frappe
 from frappe import _
@@ -11,6 +13,7 @@ FIELDS = "Fields"
 LOCATION = ("endpoint", "region", "bucket")
 CREDENTIALS = ("access_key", "secret_key")
 CONFIG_KEY = re.compile(r"^[a-z][a-z0-9_]*$")
+LOCAL_NAMES = (".localhost", ".local", ".internal", ".lan", ".home.arpa")
 BUCKET = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
 
 
@@ -45,6 +48,8 @@ def validate_row(row):
 		frappe.throw(
 			_("The endpoint of storage target {0} must start with https://.").format(row.target_name)
 		)
+	if place.endpoint and is_internal_host(place.endpoint):
+		frappe.throw(_("The endpoint of storage target {0} must be a public host.").format(row.target_name))
 	if (place.bucket or from_fields) and not BUCKET.match(place.bucket or ""):
 		frappe.throw(_("Storage target {0} has no valid bucket name.").format(row.target_name))
 	if from_fields and not place.region:
@@ -52,6 +57,17 @@ def validate_row(row):
 	if place.endpoint and place.bucket:
 		return (place.endpoint.rstrip("/"), place.bucket)
 	return (SITE_CONFIG, row.config_prefix)
+
+
+def is_internal_host(endpoint) -> bool:
+	host = (urlsplit(endpoint).hostname or "").lower().rstrip(".")
+	if not host or host == "localhost" or host.endswith(LOCAL_NAMES):
+		return True
+	try:
+		address = ipaddress.ip_address(host)
+	except ValueError:
+		return "." not in host
+	return not address.is_global
 
 
 def validate_key_names(row):

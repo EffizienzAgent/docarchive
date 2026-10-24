@@ -17,6 +17,7 @@ LOCKED_FIELDS = (
 	"counterparty_type",
 	"counterparty",
 	"file",
+	"contract_end_date",
 	*SOURCE_FIELDS,
 )
 PROTECTED_FIELDS = (
@@ -50,16 +51,22 @@ def own_file(doc):
 	rows = frappe.get_all(
 		"File",
 		filters={"file_url": doc.file},
-		fields=["file_name", "owner", "is_private", "attached_to_doctype", "attached_to_name"],
+		fields=["file_name", "file_url", "owner", "is_private", "attached_to_doctype", "attached_to_name"],
 		order_by="creation desc",
 	)
+	rows = [row for row in rows if row.file_url == doc.file]
 	for row in rows:
 		if row.attached_to_doctype == doc.doctype and row.attached_to_name == doc.name:
 			return row
 	for row in rows:
-		if row.owner == frappe.session.user and row.attached_to_doctype in (None, "", doc.doctype):
+		if row.owner == frappe.session.user and not row.attached_to_doctype:
 			return row
 	return None
+
+
+def extension(name):
+	stem, dot, ext = (name or "").rpartition(".")
+	return ext.lower() if dot and stem else ""
 
 
 def default_title(doc):
@@ -81,13 +88,18 @@ def missing_fields(doc) -> list[str]:
 
 
 class BusinessDocument(Document):
+	def _validate_links(self):
+		before = self.get_doc_before_save()
+		if not (before and before.archive_started_at):
+			counterparty.check_read(self, before)
+		return super()._validate_links()
+
 	def validate(self):
 		before = self.get_doc_before_save()
 		self.restore_protected(before)
 		if before and before.archive_started_at:
 			self.enforce_lock(before)
 		else:
-			counterparty.check_read(self, before)
 			assignment.assign(self)
 			self.resolve_own_company()
 			self.validate_file(before)
@@ -150,6 +162,9 @@ class BusinessDocument(Document):
 			frappe.throw(_("Please upload the file directly to this document."))
 		if not row.is_private:
 			frappe.throw(_("Documents must be uploaded as private files."))
+		allowed = settings.allowed_extensions()
+		if not {extension(row.file_name), extension(self.file)} <= allowed:
+			frappe.throw(_("Only these file types can be filed: {0}").format(", ".join(sorted(allowed))))
 		data = content.read_bytes(self.file)
 		if data is None:
 			frappe.throw(_("File {0} does not exist.").format(self.file))

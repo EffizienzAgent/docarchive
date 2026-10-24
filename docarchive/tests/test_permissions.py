@@ -56,21 +56,51 @@ class TestManagerRoles(IntegrationTestCase):
 			)
 		)
 
-	def test_migrate_removes_roles_not_configured(self):
-		make_settings(default_own_company=self.company, manager_roles=[self.role])
-		stray = make_role("Archive Stray Role")
-		frappe.get_doc(
+	def admin_row(self, role):
+		return frappe.get_doc(
 			{
 				"doctype": "Custom DocPerm",
 				"parent": "Business Document",
 				"parenttype": "DocType",
 				"parentfield": "permissions",
-				"role": stray,
+				"role": role,
 				"read": 1,
 			}
 		).insert(ignore_permissions=True)
+
+	def test_sync_keeps_rows_it_did_not_create(self):
+		make_settings(default_own_company=self.company, manager_roles=[self.role])
+		admin = make_role("Archive Admin Set Role")
+		self.admin_row(admin)
+		apply_defaults()
+		make_settings(default_own_company=self.company, manager_roles=[])
 		apply_defaults()
 		roles = set(frappe.get_all("Custom DocPerm", {"parent": "Business Document"}, pluck="role"))
-		self.assertNotIn(stray, roles)
+		self.assertIn(admin, roles)
+		self.assertNotIn(self.role, roles)
+
+	def test_existing_admin_row_survives_role_removal(self):
+		self.admin_row(self.role)
+		make_settings(default_own_company=self.company, manager_roles=[self.role])
+		make_settings(default_own_company=self.company, manager_roles=[])
+		roles = set(frappe.get_all("Custom DocPerm", {"parent": "Business Document"}, pluck="role"))
 		self.assertIn(self.role, roles)
-		self.assertTrue(self.can_list())
+		frappe.db.delete("Custom DocPerm", {"parent": "Business Document", "role": self.role})
+
+	def test_broad_roles_cannot_be_manager_roles(self):
+		for role in ("Guest", "All", "Desk User"):
+			with self.subTest(role=role), self.assertRaises(frappe.ValidationError):
+				make_settings(default_own_company=self.company, manager_roles=[role])
+
+	def test_document_manager_cannot_read_settings(self):
+		manager = make_user("roles-settings-reader@example.com", ["Document Manager"])
+		self.assertFalse(frappe.has_permission("Archive Settings", "read", user=manager))
+		self.assertTrue(frappe.has_permission("Business Document", "create", user=manager))
+
+	def test_granted_list_cannot_be_forged(self):
+		settings = frappe.get_single("Archive Settings")
+		settings.granted_permissions = '[["Business Document", "System Manager"]]'
+		settings.save(ignore_permissions=True)
+		self.assertNotIn(
+			"System Manager", frappe.db.get_single_value("Archive Settings", "granted_permissions") or ""
+		)

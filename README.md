@@ -18,13 +18,14 @@ docarchive is a technical tool. It does not make you compliant with GoBD, the GD
 - **Checksums**: when a file is attached, the app computes `content_sha256` from the raw file bytes. The archive run compares this value with the bytes it reads back from storage.
 - **Object Lock**: each archived object gets its own retention mode (GOVERNANCE or COMPLIANCE) and retain-until date. The app has no code path that deletes from an archive bucket. Object Lock only lets retention grow, never shrink.
 - **Retention**: the retention period ends on January 1 after the document year plus the retention years. For contracts it can count from the contract end date instead. Years come from a rule per own company and document type in Archive Settings, or from the type's default. The seeded types (Outgoing Invoice, Incoming Invoice, Contract, Bank Statement) ship with editable defaults. Check them for your jurisdiction.
-- **Locking**: once archiving starts (`archive_started_at`), the fields that make up the object key and the source fields can no longer change: own company, type, date, number, counterparty, file and `source_*`. Deleting the document is refused. Its file cannot be deleted, moved, made public or detached. A counterparty linked from an archived document cannot be renamed or merged.
+- **Locking**: once archiving starts (`archive_started_at`), the fields that make up the object key and the source fields can no longer change: own company, type, date, number, counterparty, file, contract end date and `source_*`. Deleting the document is refused. Its file cannot be deleted, moved, made public or detached. Other File rows that share the archived object (the same `file_url` through deduplication, the same `content_hash`, or a `thumbnail_url` pointing at it) cannot change their URL, hash, thumbnail or privacy either. A counterparty linked from an archived document cannot be renamed or merged.
 - **Server-only fields**: the checksum, the archive status, keys and retention fields, and the `source_*` fields are restored on every save, unless server code sets `doc.flags.archive_write`.
-- **Access**: files are always private and attached to their Business Document, so Frappe's File permission follows the document permission. A user who sets or changes a counterparty needs read permission on it. Queries go through `frappe.get_list`.
+- **File types**: only the extensions listed in Archive Settings → Allowed File Types can be filed (default: pdf, png, jpg, jpeg, tif, tiff, xml). Both the file name and the file URL must match.
+- **Access**: files are always private and attached to their Business Document, so Frappe's File permission follows the document permission. A user who sets or changes a counterparty needs read permission on it; an unknown counterparty gets the same answer as one without access. Queries go through `frappe.get_list`.
 
 ## Roles
 
-The app creates the role **Document Manager** (read, write and create documents; no delete). System Manager configures everything. To let a host role in, add it to **Archive Settings → Manager Roles**. The app then grants that role the same rights through Custom DocPerm. On every save of the settings and on every migrate, it removes custom permission rows on these doctypes for roles that are not in the list.
+The app creates the role **Document Manager** (read, write and create documents; no delete). Only System Manager can read or change Archive Settings, so storage endpoints, buckets and key names stay hidden from document managers. To let a host role in, add it to **Archive Settings → Manager Roles** (Guest, All and Desk User are refused). The app then grants that role the same rights through Custom DocPerm and remembers which rows it created. On every save of the settings and on every migrate, it removes only those rows for roles that are no longer listed; permission rows set by an admin stay.
 
 Custom DocPerm replaces the standard permissions of a doctype. If you edit permissions on these doctypes by hand, keep the manager rows.
 
@@ -35,7 +36,7 @@ Archive Settings has a **Storage Targets** table with one row per bucket (usuall
 - from the site config (`<prefix>_endpoint`, `<prefix>_region`, `<prefix>_bucket`), with the credentials in two named site config keys, or
 - from fields on the row, with the credentials in Password fields, which Frappe stores encrypted.
 
-Credentials are never stored in plain text. Endpoints must use https and bucket names must be valid, for site config values once they are set too. Two targets cannot point to the same endpoint and bucket. The archive can only be enabled with at least one enabled target, and only when all its site config keys are set.
+Credentials are never stored in plain text. Endpoints must use https, must not be private, loopback or link-local addresses or local host names, and bucket names must be valid, for site config values once they are set too. Two targets cannot point to the same endpoint and bucket. The archive can only be enabled with at least one enabled target, and only when all its site config keys are set.
 
 Any S3-compatible provider with Object Lock works. [docs/hetzner-example.md](docs/hetzner-example.md) shows one setup.
 
@@ -53,7 +54,7 @@ Own company resolution: an explicit value, then the `docarchive_assign` hooks, t
 
 File deletion runs inside the File controller, before any `doc_events` hook. So the delete guard also has to run there:
 
-- With the `s3storage` app, docarchive registers `docarchive.guards.protect_file` under `s3storage_before_file_delete`.
+- With the `s3storage` app, docarchive registers `docarchive.guards.protect_file` under `s3storage_before_file_delete`, and `docarchive.guards.protect_object(file_url=None, key=None)` under `s3storage_before_object_delete` and `s3storage_before_object_write`, so object deletes and overwrites (for example through `optimize_file`) of an archived object are refused.
 - If your app overrides the File class itself, call `docarchive.guards.protect_file(self)` at the start of `on_trash`, before `super().on_trash()`.
 - Without either, deletes by users are still refused through `has_permission`. But a server-side delete with `ignore_permissions` would remove the bytes before the guard runs.
 

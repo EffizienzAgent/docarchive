@@ -125,3 +125,23 @@ class TestStorageTargets(IntegrationTestCase):
 			make_settings(targets=[site_config_target("primary"), direct])
 		with self.config():
 			make_settings(targets=[site_config_target("primary"), fields_target("direct")])
+
+	def test_internal_endpoints_rejected(self):
+		for endpoint in (
+			"https://10.0.0.5",
+			"https://192.168.1.10:9000",
+			"https://127.0.0.1",
+			"https://169.254.169.254",
+			"https://[::1]",
+			"https://[fd00::1]",
+			"https://localhost:9000",
+			"https://minio.internal",
+			"https://nas.local",
+			"https://minio",
+		):
+			with self.subTest(endpoint=endpoint), self.assertRaises(frappe.ValidationError):
+				make_settings(targets=[fields_target(endpoint=endpoint)])
+		with self.config({**SITE_CONFIG, "archive_primary_endpoint": "https://10.1.2.3"}):
+			with self.assertRaises(frappe.ValidationError):
+				make_settings(targets=[site_config_target("primary")])
+		make_settings(targets=[fields_target(endpoint="https://s3.eu-central-1.example.test")])

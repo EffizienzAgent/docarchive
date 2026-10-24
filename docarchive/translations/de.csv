@@ -127,3 +127,10 @@ Outgoing Invoice,Ausgangsrechnung
 Incoming Invoice,Eingangsrechnung
 Contract,Vertrag
 Bank Statement,Kontoauszug
+Allowed File Types,Erlaubte Dateitypen
+Granted Permissions,Vergebene Berechtigungen
+One file extension per line. Only these file types can be filed.,Eine Dateiendung pro Zeile. Nur diese Dateitypen können abgelegt werden.
+Only these file types can be filed: {0},Nur diese Dateitypen können abgelegt werden: {0}
+The endpoint of storage target {0} must be a public host.,Der Endpunkt von Speicherziel {0} muss ein öffentlicher Host sein.
+You have no access to this counterparty.,Sie haben keinen Zugriff auf diese Gegenpartei.
+{0} cannot be a manager role.,{0} kann keine Verwaltungsrolle sein.

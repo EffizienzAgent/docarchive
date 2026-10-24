@@ -96,6 +96,22 @@ class TestBusinessDocument(BusinessDocumentTestCase):
 			with self.assertRaises(frappe.PermissionError):
 				doc.save()
 
+	def test_unknown_counterparty_looks_like_no_access(self):
+		user = make_manager("archive-oracle@example.com")
+		existing = make_party().name
+		with self.set_user(user):
+			for name in ("missing-contact", existing):
+				with self.subTest(name=name), self.assertRaises(frappe.PermissionError):
+					frappe.get_doc(
+						{
+							"doctype": "Business Document",
+							"document_type": self.invoice,
+							"document_date": "2026-03-15",
+							"counterparty_type": "Contact",
+							"counterparty": name,
+						}
+					).insert()
+
 	def test_counterparty_doctypes_hook_limits_types(self):
 		party = make_party()
 		with self.patch_hooks({"docarchive_counterparty_doctypes": ["User"]}):
@@ -152,12 +168,15 @@ class TestBusinessDocumentLock(BusinessDocumentTestCase):
 			"counterparty_type": "User",
 			"counterparty": user.name,
 			"file": make_file().file_url,
+			"contract_end_date": "2031-06-30",
 			**{field: "changed" for field in SOURCE_FIELDS},
 		}
 		self.assertEqual(set(values), set(LOCKED_FIELDS))
 		for field, value in values.items():
 			with self.subTest(field=field):
-				doc = start_archive(make_business_document(**party_fields(make_party())))
+				doc = start_archive(
+					make_business_document(document_type=self.contract, **party_fields(make_party()))
+				)
 				if field == "counterparty_type":
 					doc.counterparty = user.name
 				doc.flags.archive_write = field in SOURCE_FIELDS
@@ -255,12 +274,11 @@ class TestBusinessDocumentProtectedFields(BusinessDocumentTestCase):
 		doc.save()
 		self.assertEqual(frappe.db.get_value("Business Document", doc.name, "archive_status"), "Failed")
 
-	def test_contract_end_date_and_title_editable_after_archive_start(self):
+	def test_title_editable_after_archive_start(self):
 		doc = start_archive(make_business_document(document_type=self.contract, **party_fields(make_party())))
-		doc.contract_end_date = "2031-06-30"
 		doc.title = "Framework contract"
 		doc.save()
-		self.assertEqual(str(doc.contract_end_date), "2031-06-30")
+		self.assertEqual(frappe.db.get_value("Business Document", doc.name, "title"), "Framework contract")
 
 	def test_unchanged_save_after_archive_start_passes(self):
 		doc = start_archive(make_business_document(**party_fields(make_party())))
@@ -336,6 +354,31 @@ class TestBusinessDocumentFiles(BusinessDocumentTestCase):
 		self.assertFalse(
 			frappe.db.exists("File", {"attached_to_doctype": "Contact", "attached_to_name": party.name})
 		)
+
+	def test_file_url_must_match_exactly(self):
+		upload = make_file(file_name=f"{unique('CaseTest')}.pdf")
+		with self.assertRaises(frappe.ValidationError):
+			make_business_document(file=upload.file_url.lower())
+
+	def test_file_of_another_document_rejected(self):
+		first = make_business_document()
+		with self.assertRaises(frappe.ValidationError):
+			make_business_document(file=first.file)
+
+	def test_only_allowed_file_types(self):
+		for name in ("page.html", "tool.exe", "noextension", "archive.pdf.html"):
+			with self.subTest(name=name), self.assertRaises(frappe.ValidationError):
+				make_business_document(file=make_file(file_name=name).file_url)
+		for name in ("scan.TIFF", "invoice.xml"):
+			with self.subTest(name=name):
+				make_business_document(file=make_file(file_name=name).file_url)
+
+	def test_allowed_file_types_are_configurable(self):
+		make_settings(default_own_company=self.company, allowed_extensions="pdf")
+		self.addCleanup(make_settings, default_own_company=self.company, allowed_extensions=None)
+		with self.assertRaises(frappe.ValidationError):
+			make_business_document(file=make_file(file_name="photo.png").file_url)
+		make_business_document(file=make_file(file_name="scan.pdf").file_url)
 
 	def test_public_file_rejected(self):
 		with self.assertRaises(frappe.ValidationError):

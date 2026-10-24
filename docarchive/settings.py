@@ -2,6 +2,13 @@ import frappe
 from frappe import _
 from frappe.utils import getdate
 
+DEFAULT_EXTENSIONS = "pdf\npng\njpg\njpeg\ntif\ntiff\nxml"
+
+
+def allowed_extensions() -> set[str]:
+	value = frappe.db.get_single_value("Archive Settings", "allowed_extensions") or DEFAULT_EXTENSIONS
+	return {ext.strip().lstrip(".").lower() for ext in value.replace(",", "\n").split("\n") if ext.strip()}
+
 
 def get():
 	return frappe.get_cached_doc("Archive Settings")

@@ -7,7 +7,9 @@ from docarchive import permissions, storage_targets
 
 class ArchiveSettings(Document):
 	def validate(self):
+		self.granted_permissions = frappe.db.get_single_value("Archive Settings", "granted_permissions")
 		self.validate_retention_rules()
+		permissions.validate_roles(self)
 		storage_targets.validate(self)
 
 	def on_update(self):
