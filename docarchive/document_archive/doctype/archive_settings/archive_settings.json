@@ -30,6 +30,7 @@
   "storage_targets",
   "mail_section",
   "mail_accounts",
+  "mail_write_timeout",
   "export_section",
   "export_part_size_mb",
   "export_expiry_days",
@@ -166,6 +167,14 @@
    "label": "E-Mail Accounts",
    "options": "Archive Mail Account",
    "description": "Capture and archive business e-mails of these accounts."
+  },
+  {
+   "fieldname": "mail_write_timeout",
+   "fieldtype": "Int",
+   "label": "Mail Write Budget (Seconds)",
+   "default": "30",
+   "non_negative": 1,
+   "description": "If writing a received mail to the file storage takes longer than this, the next mails are kept in the database for 5 minutes instead. 1 to 30."
   },
   {
    "fieldname": "export_section",

@@ -54,6 +54,7 @@ def make_settings(rules=(), targets=None, manager_roles=None, **fields):
 			"max_future_days": 31,
 			"max_contract_years": 50,
 			"overdue_hours": 48,
+			"mail_write_timeout": 30,
 			**fields,
 		}
 	)

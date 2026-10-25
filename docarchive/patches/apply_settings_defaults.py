@@ -1,7 +1,7 @@
 import frappe
 
 SETTINGS = "Archive Settings"
-DEFAULTS = {"export_show_credit": 1, "overdue_hours": 48, "export_expiry_days": 7}
+DEFAULTS = {"export_show_credit": 1, "overdue_hours": 48, "export_expiry_days": 7, "mail_write_timeout": 30}
 
 
 def execute():

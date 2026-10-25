@@ -1,6 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import cint
 
 from docarchive import audit, content, export_package, permissions, storage_targets
 
@@ -43,6 +44,7 @@ class ArchiveSettings(Document):
 		self.granted_permissions = frappe.db.get_single_value("Archive Settings", "granted_permissions")
 		self.validate_retention_rules()
 		self.validate_mail_accounts()
+		self.validate_mail_write_timeout()
 		permissions.validate_roles(self)
 		storage_targets.validate(self)
 		self.validate_export_brand()
@@ -71,6 +73,12 @@ class ArchiveSettings(Document):
 			if key in seen:
 				frappe.throw(_("There is more than one retention rule for {0} and {1}.").format(*key))
 			seen.add(key)
+
+	def validate_mail_write_timeout(self):
+		if self.mail_write_timeout in (None, ""):
+			self.mail_write_timeout = 30
+		if not 1 <= cint(self.mail_write_timeout) <= 30:
+			frappe.throw(_("The mail write budget must be between 1 and 30 seconds."))
 
 	def validate_mail_accounts(self):
 		seen = set()

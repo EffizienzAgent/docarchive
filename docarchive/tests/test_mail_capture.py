@@ -404,7 +404,8 @@ class TestMailStoreJob(IntegrationTestCase):
 		return patch("docarchive.mail.originals.new_file", side_effect=slow)
 
 	def test_slow_write_succeeds_and_pauses_the_file_storage(self):
-		with patch.object(originals, "WRITE_BUDGET_SECONDS", 0.01), self.slow_write(0.05):
+		make_settings(mail_write_timeout=1)
+		with self.slow_write(1.05):
 			name = self.pending()
 		self.assertTrue(self.row(name, "file"))
 		self.assertTrue(frappe.cache.get_value(originals.PAUSE_KEY))
@@ -414,10 +415,20 @@ class TestMailStoreJob(IntegrationTestCase):
 		self.assertEqual(base64.b64decode(self.row(following, "raw_fallback")), EML)
 
 	def test_fast_write_does_not_pause(self):
-		self.assertEqual(originals.WRITE_BUDGET_SECONDS, 10)
-		with patch.object(originals, "WRITE_BUDGET_SECONDS", 1), self.slow_write(0):
+		make_settings(mail_write_timeout=1)
+		with self.slow_write(0):
 			self.pending()
 		self.assertFalse(frappe.cache.get_value(originals.PAUSE_KEY))
+
+	def test_write_budget_defaults_to_30_seconds_and_is_capped(self):
+		self.assertEqual(frappe.get_meta("Archive Settings").get_field("mail_write_timeout").default, "30")
+		for value, budget in ((None, 30), ("", 30), (5, 5), (300, 30)):
+			with patch.object(originals.settings, "get", return_value=frappe._dict(mail_write_timeout=value)):
+				self.assertEqual(originals.write_budget(), budget)
+		for value in (0, -1, 31):
+			with self.assertRaises(frappe.ValidationError):
+				make_settings(mail_write_timeout=value)
+		self.assertEqual(make_settings(mail_write_timeout=30).mail_write_timeout, 30)
 
 	def test_paused_writes_skip_the_file_storage(self):
 		frappe.cache.set_value(originals.PAUSE_KEY, 1, expires_in_sec=300)

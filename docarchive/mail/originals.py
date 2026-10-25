@@ -6,9 +6,9 @@ from email.utils import parsedate_to_datetime
 import frappe
 from frappe.core.doctype.file.exceptions import MaxFileSizeReachedError
 from frappe.email.doctype.email_queue.email_queue import SendMailContext
-from frappe.utils import convert_utc_to_system_timezone, get_datetime, now_datetime, strip_html
+from frappe.utils import cint, convert_utc_to_system_timezone, get_datetime, now_datetime, strip_html
 
-from docarchive import content
+from docarchive import content, settings
 from docarchive.keys import slug
 from docarchive.mail import accounts, archiving, headers
 
@@ -32,7 +32,7 @@ REBUILD_WINDOW = timedelta(hours=1)
 FALLBACK_LIMIT = 10 * 1024 * 1024
 PAUSE_KEY = "docarchive:mail-file-writes-paused"
 PAUSE_SECONDS = 300
-WRITE_BUDGET_SECONDS = 10
+DEFAULT_WRITE_BUDGET = MAX_WRITE_BUDGET = 30
 
 
 class Unavailable(Exception):
@@ -343,7 +343,7 @@ def _write(original, raw) -> str | None:
 			except Exception:
 				_discard(file_doc)
 				raise
-			if time.monotonic() - started > WRITE_BUDGET_SECONDS:
+			if time.monotonic() - started > write_budget():
 				_pause()
 			return "file"
 		except MaxFileSizeReachedError as error:
@@ -391,6 +391,11 @@ def _failed(original, message):
 	except Exception:
 		fail()
 	return None
+
+
+def write_budget() -> int:
+	value = settings.get().get("mail_write_timeout")
+	return min(cint(value) or DEFAULT_WRITE_BUDGET, MAX_WRITE_BUDGET)
 
 
 def _paused():
