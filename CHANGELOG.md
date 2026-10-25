@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.7.0](https://github.com/EffizienzAgent/docarchive/compare/v0.6.0...v0.7.0) (2026-10-25)
+
+
+### Features
+
+* **correspondence:** archive e-mails as Business Documents of type Correspondence or Internal Correspondence (6 years), from the original `.eml` captured when Frappe receives or sends a mail, or from the IMAP Sent folder through mailsync's `mailsync_mail_read` hook ([#31](https://github.com/EffizienzAgent/docarchive/pull/31)) ([7075810](https://github.com/EffizienzAgent/docarchive/commit/70758105be705a167865bbcfbad1a29a317cbf9c))
+* **correspondence:** per e-mail account mode (off, manual, automatic), internal mails, contacts as counterparty, keep period for unarchived originals and source of outgoing originals in Archive Settings ([#31](https://github.com/EffizienzAgent/docarchive/pull/31))
+* **correspondence:** "Archive" on Communications, automatic counterparty from timeline links, discard before archiving, cleanup after the keep period ([#31](https://github.com/EffizienzAgent/docarchive/pull/31))
+* **correspondence:** viewer for archived mails (sanitised, remote images blocked, attachments, checksum), thread view with gaps, closing gaps by uploading an `.eml` ([#31](https://github.com/EffizienzAgent/docarchive/pull/31))
+* channel, direction and thread fields on Business Documents, so letters and faxes can be filed as correspondence too ([#31](https://github.com/EffizienzAgent/docarchive/pull/31))
+
+
+### Changes
+
+* `Business Document.source_name` is now a Data field instead of a Dynamic Link, so archived documents no longer block deleting their source record ([#31](https://github.com/EffizienzAgent/docarchive/pull/31))
+
 ## [0.6.0](https://github.com/EffizienzAgent/docarchive/compare/v0.5.0...v0.6.0) (2026-10-25)
 
 
