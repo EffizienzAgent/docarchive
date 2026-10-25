@@ -8,6 +8,7 @@ app_license = "mit"
 required_apps = ["s3storage"]
 
 app_include_js = "docarchive.bundle.js"
+app_include_css = "docarchive.bundle.css"
 
 after_install = "docarchive.setup.apply_defaults"
 after_migrate = "docarchive.setup.apply_defaults"

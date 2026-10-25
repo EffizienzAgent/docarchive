@@ -61,7 +61,7 @@ File deletion runs inside the File controller, before any `doc_events` hook. So 
 
 ### Counterparty panel
 
-The app's JS bundle offers a panel for any form: a list of the record's documents, an upload button (several files, drag and drop) and a dialog for type and date.
+The app's JS bundle offers a panel for any form: the record's documents with search, filters (type, year, status) and sorting, row actions (open, open file, copy link, archive now, also for several at once) and an upload with drag and drop. The upload dialog has one row per file with title, type and date. A date in the file name (`2026-08-05`, `2026_08_05`, `20260805` or `05.08.2026`) becomes the document date and is left out of the title. Uploads without a date take it from the file name on the server too.
 
 ```js
 frappe.ui.form.on("Customer", {
@@ -71,7 +71,7 @@ frappe.ui.form.on("Customer", {
 });
 ```
 
-`docarchive.render_documents($wrapper, { counterparty_type, counterparty })` and `docarchive.upload_documents({ counterparty_type, counterparty, on_saved })` are available for custom layouts.
+`docarchive.render_documents($wrapper, { counterparty_type, counterparty })` and `docarchive.upload_documents({ counterparty_type, counterparty, files, on_saved })` are available for custom layouts. Set `docarchive.file_url = (file_url) => url` to open files in your own viewer.
 
 ### Dashboard helpers
 

@@ -206,3 +206,23 @@ Retention History,Verlauf der Aufbewahrung
 Pending Extension Metadata,Metadaten der ausstehenden Verlängerung
 Skipped,Übersprungen
 The recorded version of {0} is missing on the storage target.,Die gespeicherte Version von {0} fehlt auf dem Speicherziel.
+Open,Offen
+Complete,Vollständig
+Unchangeable until {0},Unveränderbar bis {0}
+Oldest first,Älteste zuerst
+Newest first,Neueste zuerst
+Search title or number,Titel oder Nummer suchen
+All types,Alle Dokumentarten
+All years,Alle Jahre
+All statuses,Alle Status
+No documents match the filters.,Keine Dokumente passen zu den Filtern.
+No documents yet. Drop files here.,Noch keine Dokumente – Dateien hierher ziehen
+Select all,Alle auswählen
+Select,Auswählen
+{0} missing,{0} fehlt
+Open file,Datei öffnen
+Copy link,Link kopieren
+{0} of {1} documents,{0} von {1} Dokumenten
+Only the newest {0} are shown.,Nur die neuesten {0} werden angezeigt.
+Deleted,Gelöscht
+Show deleted,Gelöschte anzeigen
