@@ -16,6 +16,8 @@ FIELDS = [
 	"file",
 	"archive_status",
 	"archive_error",
+	"correspondence_channel",
+	"correspondence_direction",
 ]
 REQUIREMENTS = (
 	("counterparty_required", [["counterparty", "is", "not set"]]),

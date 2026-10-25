@@ -27,6 +27,8 @@ PANEL_FIELDS = [
 	"own_company",
 	"einvoice_needs_review",
 	"thread_key",
+	"correspondence_channel",
+	"correspondence_direction",
 ]
 PANEL_ROW_FIELDS = (*DOCUMENT_FIELDS, "file", "retain_until", "counterparty", "thread_key")
 

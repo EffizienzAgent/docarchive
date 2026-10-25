@@ -34,6 +34,8 @@ CANDIDATE_FIELDS = [
 	"document_number",
 	"contract_end_date",
 	"archive_started_at",
+	"correspondence_channel",
+	"correspondence_direction",
 ]
 
 

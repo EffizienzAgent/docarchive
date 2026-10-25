@@ -14,7 +14,9 @@ from docarchive.tests.factories import (
 	eml,
 	fields_target,
 	make_business_document,
+	make_communication,
 	make_document_type,
+	make_email_account,
 	make_own_company,
 	make_party,
 	make_settings,
@@ -85,6 +87,26 @@ class TestEligibility(ArchiveRunTestCase):
 		self.assertIn(ready.name, eligible)
 		for doc in (young, incomplete, other):
 			self.assertNotIn(doc.name, eligible)
+
+	def test_correspondence_is_archived(self):
+		mail_type = make_document_type(is_correspondence=1)
+		account = make_email_account().name
+		ready = self.document(
+			document_type=mail_type.name,
+			correspondence_channel="E-mail",
+			correspondence_direction="Incoming",
+			correspondence_at="2026-03-10 09:30:00",
+			source_system="email",
+			source_account=account,
+			source_doctype="Communication",
+			source_name=make_communication(account).name,
+		)
+		without_direction = self.document(document_type=mail_type.name, correspondence_channel="E-mail")
+		eligible = run.eligible()
+		self.assertIn(ready.name, eligible)
+		self.assertNotIn(without_direction.name, eligible)
+		run.nightly()
+		self.assertEqual(frappe.db.get_value(DOCUMENT, ready.name, "archive_status"), "Archived")
 
 	def test_min_age_is_configurable(self):
 		young = self.document(age_hours=1)
