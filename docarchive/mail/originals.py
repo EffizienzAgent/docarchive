@@ -1,4 +1,5 @@
 import frappe
+from frappe.email.doctype.email_queue.email_queue import SendMailContext
 
 from docarchive import content
 from docarchive.keys import slug
@@ -6,6 +7,7 @@ from docarchive.mail import accounts, archiving, headers
 
 SAVEPOINT = "docarchive_mail_capture"
 AUTO_SAVEPOINT = "docarchive_mail_auto_archive"
+SEND_SAVEPOINT = "docarchive_mail_capture_sent"
 MAX_LENGTH = 500
 
 
@@ -22,6 +24,47 @@ def capture(communication, raw: bytes | str, origin: str) -> str | None:
 	if name:
 		_auto_archive(name)
 	return name
+
+
+def capture_sent(queue) -> str | None:
+	try:
+		if not _capturable(queue):
+			return None
+		frappe.db.savepoint(SEND_SAVEPOINT)
+		communication = frappe.get_doc("Communication", queue.communication)
+		raw = _sent_bytes(queue, communication)
+	except Exception:
+		_fail(SEND_SAVEPOINT)
+		return None
+	return capture(communication, raw, "frappe-send") if raw else None
+
+
+def _capturable(queue):
+	return (
+		queue.get("communication")
+		and queue.get("reference_doctype") != "Newsletter"
+		and not queue.get("redact_message_after_send")
+	)
+
+
+def _sent_bytes(queue, communication):
+	if _existing(communication) or not accounts.account_settings(communication.email_account):
+		return None
+	queue.reload()
+	recipient = next((row.recipient for row in queue.recipients if row.is_mail_sent()), None)
+	if not recipient:
+		return None
+	ctx = SendMailContext(queue)
+	ctx.email_account_doc = queue.get_email_account(raise_error=True)
+	return ctx.build_message(recipient)
+
+
+def on_communication_trash(communication, method=None):
+	original = frappe.db.get_value(
+		"Mail Original", {"communication": communication.name}, ["name", "business_document"], as_dict=True
+	)
+	if original and not original.business_document:
+		frappe.delete_doc("Mail Original", original.name, ignore_permissions=True)
 
 
 def _as_bytes(raw):

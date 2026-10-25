@@ -14,7 +14,12 @@ after_migrate = "docarchive.setup.apply_defaults"
 
 doc_events = {
 	"File": {"before_validate": "docarchive.guards.protect_file_change"},
+	"Communication": {"on_trash": "docarchive.mail.originals.on_communication_trash"},
 	"*": {"before_rename": "docarchive.guards.protect_party"},
+}
+extend_doctype_class = {
+	"Email Account": ["docarchive.mail.extensions.EmailAccountArchive"],
+	"Email Queue": ["docarchive.mail.extensions.EmailQueueArchive"],
 }
 scheduler_events = {"cron": {"30 2 * * *": ["docarchive.run.schedule"]}}
 has_permission = {"File": "docarchive.guards.file_permission"}
