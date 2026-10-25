@@ -2,6 +2,7 @@ import uuid
 from email.message import EmailMessage
 
 import frappe
+from frappe.utils.response import build_response
 
 from docarchive.mail import archiving, thread, viewer
 from docarchive.tests.factories import make_manager, make_outsider, make_own_company
@@ -107,6 +108,36 @@ class TestViewer(MailArchivingTestCase):
 		self.assertIn("color:red", r["html"].replace(" ", ""))
 		self.assertTrue(r["remote_images"])
 
+	def test_css_url_fragment_bypass_blocked(self):
+		html = (
+			'<p style="background-image:url(&quot;#a), url(https://evil.example/x&quot;)">d</p>'
+			"<p style=\"background-image:url('#a), url(https://evil.example/y')\">s</p>"
+			'<svg><rect fill="url(&quot;#a), url(https://evil.example/z&quot;)"></rect>'
+			'</svg><p style="background-image: url(#grad)">g</p>'
+		)
+		r = viewer.render(self.doc_with_html(html))
+		self.assertNotIn("evil.example", r["html"])
+		self.assertIn("url(#grad)", r["html"])
+		self.assertTrue(r["remote_images"])
+
+	def test_ping_and_xml_base_dropped(self):
+		html = '<a href="https://ok.example/" ping="https://t.example/p">ok</a><p xml:base="https://t.example/">b</p>'
+		out = viewer.render(self.doc_with_html(html))["html"]
+		self.assertNotIn("t.example", out)
+		self.assertIn('href="https://ok.example/"', out)
+
+	def test_only_absolute_safe_links_kept(self):
+		html = (
+			'<a href="/api/method/logout">rel</a><a href="logout">rel2</a><a href="ftp://x.example/">ftp</a>'
+			'<a href="https://ok.example/">h</a><a href="mailto:a@example.test">m</a>'
+			'<a href="tel:+49301234">t</a><a href="#top">f</a>'
+		)
+		out = viewer.render(self.doc_with_html(html))["html"]
+		for fragment in ("/api/method/logout", 'href="logout"', "ftp:"):
+			self.assertNotIn(fragment, out)
+		for fragment in ("https://ok.example/", "mailto:a@example.test", "tel:+49301234", 'href="#top"'):
+			self.assertIn(fragment, out)
+
 	def test_cid_image_inlined(self):
 		msg = mime(
 			text="plain", html='<p>Logo</p><img src="cid:logo@x"><p style="background:url(cid:logo@x)">b</p>'
@@ -140,6 +171,51 @@ class TestViewer(MailArchivingTestCase):
 			with self.subTest(index=index), self.assertRaises(frappe.ValidationError):
 				viewer.attachment(name, index)
 		self.assertRaises(frappe.FrappeTypeError, viewer.attachment, name, "x")
+
+	def test_attachment_download_name_and_type(self):
+		msg = mime(text="x")
+		msg.add_attachment(b"pdf", maintype="application", subtype="pdf", filename="../dir\\Grüße\r\n.pdf")
+		name = self.archived(msg)
+		self.assertEqual(viewer.render(name)["attachments"][0]["file_name"], "Grüße.pdf")
+		viewer.attachment(name, 0)
+		response = build_response("download")
+		self.assertEqual(response.mimetype, "application/pdf")
+		self.assertIn("filename*=UTF-8''Gr%C3%BC%C3%9Fe.pdf", response.headers["Content-Disposition"])
+		disposition = response.headers["Content-Disposition"]
+		self.assertIn("filename=Grue.pdf", disposition)
+		self.assertTrue(disposition.isascii())
+		self.assertNotIn("\n", disposition)
+
+	def test_attachment_without_declared_type_is_octet_stream(self):
+		raw = (
+			b"From: a@example.test\r\nSubject: x\r\nMIME-Version: 1.0\r\n"
+			b'Content-Type: multipart/mixed; boundary="b"\r\n\r\n'
+			b"--b\r\nContent-Type: text/plain\r\n\r\nbody\r\n"
+			b'--b\r\nContent-Disposition: attachment; filename="blob.txt"\r\n\r\ndata\r\n--b--\r\n'
+		)
+		name = archiving.archive(self.capture(raw))
+		viewer.attachment(name, 0)
+		self.assertEqual(build_response("download").mimetype, "application/octet-stream")
+
+	def test_empty_attached_message_renders(self):
+		raw = (
+			b"From: a@example.test\r\nSubject: x\r\nMIME-Version: 1.0\r\n"
+			b'Content-Type: multipart/mixed; boundary="b"\r\n\r\n'
+			b"--b\r\nContent-Type: text/plain\r\n\r\nbody\r\n"
+			b"--b\r\nContent-Type: message/rfc822\r\n\r\n--b--\r\n"
+		)
+		name = archiving.archive(self.capture(raw))
+		r = viewer.render(name)
+		self.assertEqual(r["text"].strip(), "body")
+		self.assertEqual(r["attachments"][0]["content_type"], "message/rfc822")
+		viewer.attachment(name, 0)
+		self.assertIsInstance(frappe.response.filecontent, bytes)
+
+	def test_message_part_without_payload(self):
+		part = EmailMessage()
+		part["Content-Type"] = "message/rfc822"
+		part.set_payload([])
+		self.assertEqual(viewer._bytes(part), b"")
 
 	def test_sha_mismatch_reported(self):
 		name = self.archived(mime(text="x"))

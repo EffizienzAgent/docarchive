@@ -1,7 +1,8 @@
 import base64
 import mimetypes
 import re
-from urllib.parse import unquote
+import unicodedata
+from urllib.parse import quote, unquote
 
 import frappe
 from bs4 import BeautifulSoup
@@ -35,10 +36,27 @@ BLOCKED_TAGS = {
 	"textarea",
 	"video",
 }
-DROPPED_ATTRIBUTES = {"action", "data", "dynsrc", "formaction", "lowsrc", "poster", "srcset", "xlink:href"}
+DROPPED_ATTRIBUTES = {
+	"action",
+	"data",
+	"dynsrc",
+	"formaction",
+	"lowsrc",
+	"ping",
+	"poster",
+	"srcset",
+	"xlink:href",
+	"xml:base",
+}
 LINK_TAGS = {"a", "area"}
 CSS_URL = re.compile(r"""url\(\s*(['"]?)(.*?)\1\s*\)""", re.IGNORECASE | re.DOTALL)
-UNSAFE_CSS = re.compile(r"https?:|//|\\|image-set|expression|@import", re.IGNORECASE)
+UNSAFE_CSS = re.compile(
+	r"https?:|//|\\|url\(|image-set|image\(|cross-fade|element\(|src\(|expression|@import", re.IGNORECASE
+)
+UNSAFE_URL = re.compile(r"""[()'"\s\\]""")
+FRAGMENT = re.compile(r"#[\w-]+")
+LINK = re.compile(r"(https?://|mailto:|tel:)", re.IGNORECASE)
+CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 REMOTE_CSS = re.compile(r"https?:|//", re.IGNORECASE)
 
 
@@ -72,8 +90,14 @@ def attachment(name: str, index: int) -> None:
 	index = int(index)
 	if not 0 <= index < len(parts):
 		frappe.throw(_("This attachment does not exist."))
-	frappe.response.filename = _file_name(parts[index], index)
-	frappe.response.filecontent = _bytes(parts[index])
+	part = parts[index]
+	file_name = _file_name(part, index)
+	frappe.response.filename = _ascii(file_name) or f"attachment-{index + 1}"
+	frappe.response.display_content_as = f"attachment; filename*=UTF-8''{quote(file_name, safe='')}"
+	frappe.response.filecontent = _bytes(part)
+	frappe.response.content_type = (
+		part.get_content_type() if part["Content-Type"] else "application/octet-stream"
+	)
 	frappe.response.type = "download"
 
 
@@ -105,15 +129,22 @@ def _text(part):
 
 def _bytes(part):
 	if part.get_content_maintype() == "message":
-		return part.get_payload(0).as_bytes()
+		return b"".join(inner.as_bytes() for inner in part.get_payload())
+	if part.is_multipart():
+		return part.as_bytes()
 	return part.get_payload(decode=True) or b""
 
 
 def _file_name(part, index):
-	if part.get_filename():
-		return part.get_filename()
+	name = CONTROL.sub("", re.split(r"[/\\]", part.get_filename() or "")[-1]).strip()
+	if name not in ("", ".", ".."):
+		return name
 	extension = ".eml" if part.get_content_type() == "message/rfc822" else ""
 	return f"attachment-{index + 1}{extension or mimetypes.guess_extension(part.get_content_type()) or ''}"
+
+
+def _ascii(value):
+	return unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode().replace("\\", "")
 
 
 def _html(message):
@@ -150,7 +181,7 @@ class _Rewriter:
 			if attribute.startswith("data-") or attribute in DROPPED_ATTRIBUTES:
 				del tag[attribute]
 		for attribute, value in list(tag.attrs.items()):
-			if attribute == "href" and tag.name not in LINK_TAGS:
+			if attribute == "href" and not self._link(tag, str(value).strip()):
 				del tag[attribute]
 			elif attribute in ("src", "background"):
 				self._source(tag, attribute, value)
@@ -168,16 +199,20 @@ class _Rewriter:
 			if tag.name == "img" and attribute == "src":
 				tag["data-remote-src"] = value
 
+	def _link(self, tag, href):
+		return tag.name in LINK_TAGS and bool(LINK.match(href) or FRAGMENT.fullmatch(href))
+
 	def _css(self, tag, attribute, value):
 		outside = CSS_URL.sub("none", value)
-		if UNSAFE_CSS.search(outside):
-			self.remote = self.remote or bool(REMOTE_CSS.search(outside))
+		urls = [m.group(2).strip() for m in CSS_URL.finditer(value)]
+		if UNSAFE_CSS.search(outside) or any(UNSAFE_URL.search(url) for url in urls):
+			self.remote = self.remote or bool(REMOTE_CSS.search(value))
 			del tag[attribute]
 		else:
 			tag[attribute] = CSS_URL.sub(lambda m: self._css_url(m.group(2).strip()), value)
 
 	def _css_url(self, url):
-		resolved = url if url.startswith("#") else self._resolve(url)
+		resolved = url if FRAGMENT.fullmatch(url) else self._resolve(url)
 		if resolved:
 			return f"url({resolved})"
 		self.remote = self.remote or self._is_remote(url)
