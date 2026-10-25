@@ -151,9 +151,11 @@ class BusinessDocument(Document):
 	def restore_protected(self, before):
 		if self.flags.archive_write:
 			return
-		fields = PROTECTED_FIELDS
+		self.reset_fields(PROTECTED_FIELDS, before)
 		if self.source_doctype == "Communication":
-			fields = (*fields, *CORRESPONDENCE_FIELDS)
+			self.reset_fields(CORRESPONDENCE_FIELDS, before)
+
+	def reset_fields(self, fields, before):
 		for field in fields:
 			self.set(field, before.get(field) if before else self.meta.get_field(field).default)
 

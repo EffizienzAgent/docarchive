@@ -612,3 +612,22 @@ class TestBusinessDocumentCorrespondence(BusinessDocumentTestCase):
 		file = make_file(content=EML, file_name="m.eml")
 		with self.assertRaises(frappe.ValidationError):
 			make_business_document(file=file.file_url)
+
+	def test_blanking_source_doctype_does_not_unlock_direction(self):
+		doc = make_business_document(
+			archive_write=True,
+			source_doctype="Communication",
+			source_name=self.communication(),
+			correspondence_direction="Incoming",
+		)
+		doc.flags.archive_write = False
+		doc.source_doctype = None
+		doc.correspondence_direction = "Outgoing"
+		doc.save()
+		doc.reload()
+		self.assertEqual((doc.source_doctype, doc.correspondence_direction), ("Communication", "Incoming"))
+
+	def test_eml_refused_when_user_claims_communication_source(self):
+		file = make_file(content=EML, file_name="m.eml")
+		with self.assertRaises(frappe.ValidationError):
+			make_business_document(file=file.file_url, source_doctype="Communication")
