@@ -12,6 +12,7 @@ from docarchive.mail import accounts, archiving, headers
 SAVEPOINT = "docarchive_mail_capture"
 AUTO_SAVEPOINT = "docarchive_mail_auto_archive"
 SEND_SAVEPOINT = "docarchive_mail_capture_sent"
+TRASH_SAVEPOINT = "docarchive_mail_release"
 MAX_LENGTH = 500
 SENT_FOLDER = "Sent Folder"
 UPLOAD_ORIGIN = "manual-upload"
@@ -96,8 +97,27 @@ def _sent_bytes(queue, communication):
 
 
 def on_communication_trash(communication, method=None):
+	try:
+		frappe.db.savepoint(TRASH_SAVEPOINT)
+		_release(communication.name)
+	except Exception:
+		fail(TRASH_SAVEPOINT)
+		_unlink(communication.name)
+
+
+def _unlink(communication):
+	try:
+		frappe.db.savepoint(TRASH_SAVEPOINT)
+		frappe.db.set_value(
+			"Mail Original", {"communication": communication}, "communication", None, update_modified=False
+		)
+	except Exception:
+		fail(TRASH_SAVEPOINT)
+
+
+def _release(communication):
 	original = frappe.db.get_value(
-		"Mail Original", {"communication": communication.name}, ["name", "business_document"], as_dict=True
+		"Mail Original", {"communication": communication}, ["name", "business_document"], as_dict=True
 	)
 	if not original:
 		return

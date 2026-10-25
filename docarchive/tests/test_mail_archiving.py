@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import now_datetime
@@ -446,6 +448,25 @@ class TestCommunicationDelete(MailArchivingTestCase):
 				self.assertEqual(content.read_bytes(doc.file), raw)
 				self.assertTrue(frappe.db.exists("File", {"attached_to_name": name}))
 				self.assertEqual(frappe.db.get_value("Mail Original", original, "communication"), None)
+
+	def test_failing_original_cleanup_does_not_block_delete(self):
+		comm = self.communication()
+		original = self.capture(comm=comm)
+
+		def partial(*args, **kwargs):
+			frappe.db.set_value("Mail Original", original, "origin", "partial")
+			raise Exception("boom")
+
+		with (
+			patch("docarchive.mail.originals._release", side_effect=partial),
+			patch("frappe.log_error") as log_error,
+		):
+			frappe.delete_doc("Communication", comm.name)
+		self.assertFalse(frappe.db.exists("Communication", comm.name))
+		self.assertEqual(
+			frappe.db.get_value("Mail Original", original, ["origin", "communication"]), ("t", None)
+		)
+		log_error.assert_called_with(title="docarchive mail capture")
 
 	def test_counterparty_still_protected(self):
 		party = make_note()
