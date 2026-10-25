@@ -694,3 +694,4 @@ Audit Pending,Protokollierung ausstehend
 Mail Write Budget (Seconds),Zeitbudget für E-Mail-Speicherung (Sekunden)
 "If writing a received mail to the file storage takes longer than this, the next mails are kept in the database for 5 minutes instead. 1 to 30.","Dauert das Speichern einer empfangenen E-Mail im Dateispeicher länger, werden die folgenden E-Mails 5 Minuten lang stattdessen in der Datenbank gehalten. 1 bis 30."
 The mail write budget must be between 1 and 30 seconds.,Das Zeitbudget für die E-Mail-Speicherung muss zwischen 1 und 30 Sekunden liegen.
+Only documents and mail originals can be shown.,Nur Dokumente und E-Mail-Originale können angezeigt werden.

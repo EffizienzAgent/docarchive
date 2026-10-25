@@ -10,9 +10,10 @@ from frappe import _
 from frappe.utils.html_utils import sanitize_html
 
 from docarchive import content
-from docarchive.mail import archiving, headers
+from docarchive.mail import access, archiving, headers
 
 DOCUMENT = "Business Document"
+ORIGINAL = "Mail Original"
 HEADERS = {"from": "From", "to": "To", "cc": "Cc", "date": "Date", "subject": "Subject"}
 BLOCKED_TAGS = {
 	"audio",
@@ -70,8 +71,8 @@ IMAGE_PLACEHOLDER = "data:image/svg+xml;base64," + base64.b64encode(PLACEHOLDER_
 
 
 @frappe.whitelist()
-def render(name: str) -> dict:
-	doc, raw = _load(name)
+def render(name: str, doctype: str = DOCUMENT) -> dict:
+	raw, sha256, origin = _load(name, doctype)
 	message = headers.message_from(raw)
 	html, remote = _html(message)
 	return {
@@ -88,14 +89,14 @@ def render(name: str) -> dict:
 			}
 			for index, part in enumerate(message.iter_attachments())
 		],
-		"sha256_ok": content.sha256(raw) == doc.content_sha256,
-		"origin": (archiving.mail_meta(doc) or {}).get("origin"),
+		"sha256_ok": content.sha256(raw) == sha256,
+		"origin": origin,
 	}
 
 
 @frappe.whitelist()
-def attachment(name: str, index: int) -> None:
-	_doc, raw = _load(name)
+def attachment(name: str, index: int, doctype: str = DOCUMENT) -> None:
+	raw = _load(name, doctype)[0]
 	parts = list(headers.message_from(raw).iter_attachments())
 	index = int(index)
 	if not 0 <= index < len(parts):
@@ -111,7 +112,11 @@ def attachment(name: str, index: int) -> None:
 	frappe.response.type = "download"
 
 
-def _load(name):
+def _load(name, doctype=DOCUMENT):
+	if doctype == ORIGINAL:
+		return _load_original(name)
+	if doctype != DOCUMENT:
+		frappe.throw(_("Only documents and mail originals can be shown."))
 	frappe.has_permission(DOCUMENT, "read", name, throw=True)
 	doc = frappe.get_doc(DOCUMENT, name)
 	if not (doc.file or "").lower().endswith(".eml"):
@@ -119,7 +124,23 @@ def _load(name):
 	raw = content.read_bytes(doc.file)
 	if raw is None:
 		frappe.throw(_("The e-mail file of this document is missing."))
-	return doc, raw
+	return raw, doc.content_sha256, (archiving.mail_meta(doc) or {}).get("origin")
+
+
+def _load_original(name):
+	frappe.has_permission(ORIGINAL, "read", name, throw=True)
+	original = frappe.db.get_value(
+		ORIGINAL, name, ["communication", "file", "sha256", "origin"], as_dict=True
+	)
+	if not original.communication or original.communication not in access.readable([original.communication]):
+		frappe.throw(_("You cannot read this e-mail."), frappe.PermissionError)
+	reason = archiving.refusal(name)
+	if reason:
+		frappe.throw(reason)
+	raw = content.read_bytes(original.file) if original.file else None
+	if raw is None:
+		frappe.throw(_("The captured original of this e-mail is missing."))
+	return raw, original.sha256, original.origin
 
 
 def _headers(message):

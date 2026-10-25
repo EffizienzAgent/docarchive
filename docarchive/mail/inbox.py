@@ -56,6 +56,47 @@ def count_candidates(expiring_within_days: float | None = None) -> int:
 	)
 
 
+@frappe.whitelist()
+def original_status(name: str) -> dict:
+	frappe.has_permission(ORIGINAL, "read", name, throw=True)
+	original = frappe.db.get_value(
+		ORIGINAL,
+		name,
+		["communication", "business_document", "ignored", "automated", "internal"],
+		as_dict=True,
+	)
+	document = original.business_document
+	in_scope = bool(original.communication) and original.communication in readable([original.communication])
+	reason = archiving.refusal(name) if in_scope else _("You cannot read this e-mail.")
+	return {
+		"archived": bool(document),
+		"business_document": document
+		if document and frappe.has_permission(DOCUMENT, "read", document)
+		else None,
+		"ignored": bool(original.ignored),
+		"automated": bool(original.automated),
+		"internal": bool(original.internal),
+		"viewable": not reason,
+		"reason": reason,
+	}
+
+
+@frappe.whitelist()
+def warnings(names) -> dict:
+	communications, _refused = _checked(names)
+	rows = frappe.get_all(
+		ORIGINAL,
+		filters={"name": ("in", list(communications) or [""]), "business_document": None},
+		fields=["name", "automated", "internal"],
+	)
+	flags = {row.name: row for row in rows}
+	found = [flags[name] for name in communications if name in flags]
+	return {
+		"automated": [row.name for row in found if row.automated],
+		"internal": [row.name for row in found if row.internal and not row.automated],
+	}
+
+
 @frappe.whitelist(methods=["POST"])
 def ignore(names) -> dict:
 	return _toggle(names, 1, "ignored", audit.MAIL_IGNORED)
