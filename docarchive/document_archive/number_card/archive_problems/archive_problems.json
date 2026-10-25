@@ -1,0 +1,15 @@
+{
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "document_type": "Business Document",
+ "filters_json": "[]",
+ "dynamic_filters_json": "[]",
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Archive Problems",
+ "method": "docarchive.monitoring.problem_count_card",
+ "module": "Document Archive",
+ "name": "Archive Problems",
+ "show_percentage_stats": 0,
+ "type": "Custom"
+}

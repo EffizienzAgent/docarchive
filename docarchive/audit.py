@@ -40,7 +40,6 @@ PREFIX = "_audit/"
 SAVEPOINT = "docarchive_audit"
 DEFAULT_YEARS = 10
 UNWRITTEN_HOURS = 24
-ALERT_LINES = 50
 PENDING, WRITTEN = "Pending", "Written"
 CHANGED_IN_DB = "changed in database"
 
@@ -371,11 +370,11 @@ def changed_in_db(entry) -> bool:
 
 
 def alert(mismatches):
-	lines = [f"{m['target'] or _('Database')}: {m['key']} ({m['problem']})" for m in mismatches[:ALERT_LINES]]
-	if len(mismatches) > ALERT_LINES:
-		lines.append(_("{0} more").format(len(mismatches) - ALERT_LINES))
+	lines = [f"{m['target'] or _('Database')}: {m['key']} ({m['problem']})" for m in mismatches]
 	notify.admins(
-		_("The audit log does not match the storage"), "<br>".join(escape_html(line) for line in lines), LOG
+		_("The audit log does not match the storage"),
+		notify.lines(lines),
+		notify.link_to("archive-audit-log", "reconcile"),
 	)
 
 
