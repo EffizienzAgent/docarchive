@@ -163,6 +163,8 @@ def status(communication: str) -> dict:
 			"business_document": None,
 			"automated": False,
 			"internal": False,
+			"archive_status": None,
+			"retain_until": None,
 			"reason": _("You cannot read this e-mail."),
 		}
 	original = (
@@ -178,13 +180,18 @@ def status(communication: str) -> dict:
 	return {
 		"original": bool(original.name),
 		"archived": bool(document),
-		"business_document": document
-		if document and frappe.has_permission(DOCUMENT, "read", document)
-		else None,
+		**document_state(document),
 		"automated": bool(original.automated),
 		"internal": bool(original.internal),
 		"reason": refusal(original.name),
 	}
+
+
+def document_state(document) -> dict:
+	if not (document and frappe.has_permission(DOCUMENT, "read", document)):
+		return {"business_document": None, "archive_status": None, "retain_until": None}
+	archive_status, retain_until = frappe.db.get_value(DOCUMENT, document, ["archive_status", "retain_until"])
+	return {"business_document": document, "archive_status": archive_status, "retain_until": retain_until}
 
 
 @frappe.whitelist()

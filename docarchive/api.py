@@ -16,6 +16,7 @@ from docarchive.document_archive.doctype.business_document.business_document imp
 from docarchive.permissions import INTEGRATION_ROLE
 
 DOCUMENT = "Business Document"
+MAX_REPLACEMENTS = 50
 ATTACHMENT = "Business Document Attachment"
 DEFAULT_ROLE = "Attachment"
 ALLOWED_ROLES = (INTEGRATION_ROLE, "System Manager")
@@ -360,4 +361,33 @@ def response(name, status):
 		"archive_status": doc.archive_status,
 		"legal_hold": doc.hold_on_archive,
 		"missing": missing_fields(doc),
+	}
+
+
+@frappe.whitelist()
+def source_status(doctype: str, name: str) -> dict | None:
+	if not frappe.has_permission(DOCUMENT, "read"):
+		return None
+	fields = ["name", "archive_status", "retain_until"]
+	rows = frappe.get_list(
+		DOCUMENT,
+		filters={"source_doctype": doctype, "source_name": name},
+		fields=fields,
+		order_by="creation desc",
+		limit=1,
+	)
+	if not rows:
+		return None
+	doc = rows[0]
+	for _step in range(MAX_REPLACEMENTS):
+		newer = frappe.get_list(
+			DOCUMENT, filters={"replaces": doc.name}, fields=fields, order_by="creation desc", limit=1
+		)
+		if not newer:
+			break
+		doc = newer[0]
+	return {
+		"business_document": doc.name,
+		"archive_status": doc.archive_status,
+		"retain_until": doc.retain_until,
 	}

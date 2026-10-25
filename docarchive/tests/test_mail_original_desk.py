@@ -62,6 +62,8 @@ class TestMailOriginalStatus(MailArchivingTestCase):
 			{
 				"archived": False,
 				"business_document": None,
+				"archive_status": None,
+				"retain_until": None,
 				"ignored": False,
 				"automated": False,
 				"internal": False,

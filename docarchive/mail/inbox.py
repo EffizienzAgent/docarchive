@@ -70,9 +70,7 @@ def original_status(name: str) -> dict:
 	reason = archiving.refusal(name) if in_scope else _("You cannot read this e-mail.")
 	return {
 		"archived": bool(document),
-		"business_document": document
-		if document and frappe.has_permission(DOCUMENT, "read", document)
-		else None,
+		**archiving.document_state(document),
 		"ignored": bool(original.ignored),
 		"automated": bool(original.automated),
 		"internal": bool(original.internal),
