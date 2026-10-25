@@ -77,6 +77,7 @@ A table in Archive Settings with one row per e-mail account (only System Manager
 | Archive internal mails | off | whether mails where every address is internal qualify; only then are they archived at all |
 | Contacts count as counterparty | off | whether a Contact without a linked party (e.g. a private contact) may be set as counterparty automatically. Off: such mails stay without counterparty and are archived only if a person assigns one |
 | Keep unarchived originals (days) | 90 | after this, captured originals that were not archived are deleted |
+| Outgoing originals from | Frappe | Frappe: rebuilt from the Email Queue after sending. Sent folder (mailsync): nothing is captured on send; mailsync reads the IMAP Sent folder and calls its own hook `mailsync_sent_mail_read(communication, raw)` for every mail, also for Communications that already exist; docarchive registers a handler for it that calls `capture(communication, raw, "mailsync")`. Neither app imports the other, so each runs on its own. Only allowed for IMAP accounts. Worth it when the mail server stores sent SMTP mails itself (e.g. Microsoft 365, Gmail); if Frappe appends to the Sent folder itself, the copy is the same Frappe-built message. (Decided with the user.) |
 | Own company | empty | own company for this account's mails; empty: the normal resolution |
 | Internal domains | domain of the account's address | comma-separated |
 
