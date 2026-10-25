@@ -20,12 +20,14 @@ REQUIREMENTS = (
 	("counterparty_required", [["counterparty", "is", "not set"]]),
 	("number_required", [["document_number", "is", "not set"]]),
 	("contract_end_required", [["contract_end_date", "is", "not set"]]),
+	("is_correspondence", [["correspondence_channel", "is", "not set"]]),
+	("is_correspondence", [["correspondence_direction", "is", "not set"]]),
 )
 
 
 def incomplete_filters():
 	types = frappe.get_list(
-		"Business Document Type", fields=["name", *(flag for flag, _conditions in REQUIREMENTS)]
+		"Business Document Type", fields=["name", *dict.fromkeys(flag for flag, _conditions in REQUIREMENTS)]
 	)
 	queries = [[["file", "is", "not set"]], [["archive_status", "=", "Failed"]]]
 	for flag, conditions in REQUIREMENTS:

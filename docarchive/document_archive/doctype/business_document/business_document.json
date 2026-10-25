@@ -27,6 +27,15 @@
   "counterparty_type",
   "counterparty",
   "own_company",
+  "correspondence_section",
+  "correspondence_channel",
+  "correspondence_direction",
+  "correspondence_at",
+  "column_break_correspondence",
+  "thread_key",
+  "mail_message_id",
+  "mail_in_reply_to",
+  "mail_references",
   "source_section",
   "source_system",
   "source_account",
@@ -150,6 +159,63 @@
    "in_standard_filter": 1,
    "read_only_depends_on": "eval:doc.archive_started_at",
    "description": "Empty: set by the host app or taken from the Archive Settings."
+  },
+  {
+   "fieldname": "correspondence_section",
+   "fieldtype": "Section Break",
+   "label": "Correspondence",
+   "collapsible": 1,
+   "depends_on": "eval:doc.correspondence_channel || doc.mail_message_id"
+  },
+  {
+   "fieldname": "correspondence_channel",
+   "fieldtype": "Select",
+   "label": "Channel",
+   "options": "\nE-mail\nLetter\nFax\nOther",
+   "read_only_depends_on": "eval:doc.archive_started_at"
+  },
+  {
+   "fieldname": "correspondence_direction",
+   "fieldtype": "Select",
+   "label": "Direction",
+   "options": "\nIncoming\nOutgoing",
+   "read_only_depends_on": "eval:doc.archive_started_at"
+  },
+  {
+   "fieldname": "correspondence_at",
+   "fieldtype": "Datetime",
+   "label": "Correspondence Time",
+   "read_only_depends_on": "eval:doc.archive_started_at"
+  },
+  {
+   "fieldname": "column_break_correspondence",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "thread_key",
+   "fieldtype": "Data",
+   "label": "Thread Key",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "mail_message_id",
+   "fieldtype": "Data",
+   "label": "Message-ID",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "mail_in_reply_to",
+   "fieldtype": "Data",
+   "label": "In-Reply-To",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mail_references",
+   "fieldtype": "Long Text",
+   "label": "References",
+   "read_only": 1
   },
   {
    "fieldname": "source_section",

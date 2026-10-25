@@ -217,3 +217,19 @@ def make_communication(email_account, sent_or_received="Received", **fields):
 			**fields,
 		}
 	).insert(ignore_permissions=True)
+
+
+def eml(**headers):
+	headers = {
+		"From": "Client <client@example.test>",
+		"To": "info@acme.test",
+		"Subject": "Offer",
+		"Date": "Tue, 10 Mar 2026 09:30:00 +0000",
+		"Message-ID": f"<{uuid.uuid4().hex}@example.test>",
+		**headers,
+	}
+	lines = [f"{name}: {value}" for name, value in headers.items()]
+	return ("\r\n".join(lines) + "\r\n\r\nHello\r\n").encode()
+
+
+EML = eml()

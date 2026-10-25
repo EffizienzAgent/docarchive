@@ -18,6 +18,8 @@ SOURCE_FIELDS = (
 	"source_doctype",
 	"source_name",
 )
+CORRESPONDENCE_FIELDS = ("correspondence_channel", "correspondence_direction", "correspondence_at")
+MAIL_FIELDS = ("thread_key", "mail_message_id", "mail_in_reply_to", "mail_references")
 LOCKED_FIELDS = (
 	"own_company",
 	"document_type",
@@ -26,6 +28,8 @@ LOCKED_FIELDS = (
 	"counterparty_type",
 	"counterparty",
 	"file",
+	*CORRESPONDENCE_FIELDS,
+	*MAIL_FIELDS,
 	*SOURCE_FIELDS,
 )
 PROTECTED_FIELDS = (
@@ -49,6 +53,7 @@ PROTECTED_FIELDS = (
 	"extension_meta",
 	"source_key",
 	"replaces",
+	*MAIL_FIELDS,
 	*SOURCE_FIELDS,
 )
 CONTRACT_END = "Contract End Date"
@@ -101,6 +106,8 @@ def missing_fields(doc) -> list[str]:
 		("Counterparty", rules.counterparty_required and not doc.counterparty),
 		("Document Number", rules.number_required and not doc.document_number),
 		("Contract End Date", rules.contract_end_required and not doc.contract_end_date),
+		("Channel", rules.is_correspondence and not doc.correspondence_channel),
+		("Direction", rules.is_correspondence and not doc.correspondence_direction),
 	]
 	return [label for label, missing in checks if missing]
 
@@ -144,7 +151,10 @@ class BusinessDocument(Document):
 	def restore_protected(self, before):
 		if self.flags.archive_write:
 			return
-		for field in PROTECTED_FIELDS:
+		fields = PROTECTED_FIELDS
+		if self.source_doctype == "Communication":
+			fields = (*fields, *CORRESPONDENCE_FIELDS)
+		for field in fields:
 			self.set(field, before.get(field) if before else self.meta.get_field(field).default)
 
 	def changed(self, before, field):
@@ -187,6 +197,8 @@ class BusinessDocument(Document):
 		if not row.is_private:
 			frappe.throw(_("Documents must be uploaded as private files."))
 		allowed = settings.allowed_extensions()
+		if self.source_doctype == "Communication":
+			allowed = {*allowed, "eml"}
 		if not {extension(row.file_name), extension(self.file)} <= allowed:
 			frappe.throw(_("Only these file types can be filed: {0}").format(", ".join(sorted(allowed))))
 		data = content.read_bytes(self.file)

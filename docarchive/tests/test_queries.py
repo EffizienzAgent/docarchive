@@ -71,3 +71,10 @@ class TestDocumentsToAssign(IntegrationTestCase):
 		with self.set_user(make_outsider("queries-outsider@example.com")):
 			self.assertEqual(queries.documents_to_assign(), [])
 			self.assertEqual(queries.count_documents_to_assign(), 0)
+
+	def test_lists_correspondence_without_channel_and_direction(self):
+		kind = make_document_type(is_correspondence=1, counterparty_required=0).name
+		doc = make_business_document(document_type=kind)
+		self.assertEqual(self.found()[doc.name].missing, ["Channel", "Direction"])
+		doc.db_set({"correspondence_channel": "Fax", "correspondence_direction": "Incoming"})
+		self.assertNotIn(doc.name, self.found())
