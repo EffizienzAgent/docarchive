@@ -155,7 +155,15 @@ def assign(doc):
 
 @frappe.whitelist()
 def status(communication: str) -> dict:
-	frappe.has_permission(COMMUNICATION, "read", communication, throw=True)
+	if communication not in access.readable([communication]):
+		return {
+			"original": False,
+			"archived": False,
+			"business_document": None,
+			"automated": False,
+			"internal": False,
+			"reason": _("You cannot read this e-mail."),
+		}
 	original = (
 		frappe.db.get_value(
 			ORIGINAL,
