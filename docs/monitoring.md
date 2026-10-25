@@ -5,7 +5,7 @@ Archive Admins (System Managers if there are none) get a bell notification when:
 - an archive attempt fails, in the nightly run or through "Archive now": one notification per run listing the documents, each document at most once a day,
 - the nightly run fails, or leaves eligible documents behind that it neither archived nor recorded as failed (e.g. because another job held the document),
 - the nightly run has not finished for 26 hours (checked daily at 07:30, e.g. when the scheduler or worker is down),
-- documents are ready but not archived for longer than **Overdue After (Hours)** (Archive Settings, default 48),
+- documents are ready but not archived for longer than **Overdue After (Hours)** (Archive Settings, default 48; 0 turns this check off, also in the report below),
 - archived documents have fewer copies than there are enabled storage targets,
 - the audit log does not match the storage (see [Audit log](audit-log.md#audit-log)).
 

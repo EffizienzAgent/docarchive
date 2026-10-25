@@ -12,7 +12,7 @@ from pathlib import Path, PurePosixPath
 
 import frappe
 from frappe import _
-from frappe.utils import get_datetime, now_datetime
+from frappe.utils import cint, get_datetime, now_datetime
 from frappe.utils.html_utils import sanitize_html
 
 from docarchive import content, retention, run, settings
@@ -429,7 +429,8 @@ def brand() -> dict:
 		"name": (config.get("export_brand_name") or "").strip() or None,
 		"logo": logo_uri(config.get("export_brand_logo")),
 		"color": color if valid_color(color) else None,
-		"credit": bool(config.get("export_show_credit")),
+		"credit": config.get("export_show_credit") in (None, "")
+		or bool(cint(config.get("export_show_credit"))),
 	}
 
 

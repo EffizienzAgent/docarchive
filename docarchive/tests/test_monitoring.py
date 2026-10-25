@@ -97,6 +97,19 @@ class TestAlerts(MonitoringTestCase):
 		self.assertIn(busy.name, alert.email_content)
 		self.assertNotIn(done.name, alert.email_content)
 
+	def test_overdue_hours_unset_means_48_and_zero_turns_the_check_off(self):
+		late = self.document(age_hours=72)
+		with patch.object(monitoring.settings, "get", return_value=frappe._dict(overdue_hours=None)):
+			self.assertEqual(monitoring.overdue_hours(), 48)
+			self.assertIn(
+				late.name, [row["name"] for row in monitoring.State(monitoring.target_names()).overdue()]
+			)
+		with patch.object(monitoring.settings, "get", return_value=frappe._dict(overdue_hours=0)):
+			self.assertEqual(monitoring.State(monitoring.target_names()).overdue(), [])
+		make_settings(overdue_hours=0)
+		monitoring.daily()
+		self.assertEqual(self.alerts("overdue"), [])
+
 	def test_overdue_documents_and_a_missed_run(self):
 		late = self.document(age_hours=72)
 		self.document(age_hours=30)

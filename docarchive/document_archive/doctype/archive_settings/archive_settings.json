@@ -242,7 +242,7 @@
    "label": "Overdue After (Hours)",
    "default": "48",
    "non_negative": 1,
-   "description": "Archive Admins are notified about documents that are ready but not archived after this many hours. Empty or 0: 48 hours."
+   "description": "Archive Admins are notified about documents that are ready but not archived after this many hours. 0 turns the check off."
   },
   {
    "fieldname": "last_run_finished_at",

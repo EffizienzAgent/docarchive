@@ -1,5 +1,6 @@
 import base64
 import json
+from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -35,6 +36,13 @@ class TestExportBranding(IntegrationTestCase):
 		self.assertEqual(export_package.brand(), {"name": None, "logo": None, "color": None, "credit": True})
 		make_settings(**{**NEUTRAL, "export_show_credit": 0})
 		self.assertFalse(export_package.brand()["credit"])
+
+	def test_unset_credit_reads_as_on(self):
+		for value in (None, ""):
+			with patch.object(
+				export_package.settings, "get", return_value=frappe._dict(export_show_credit=value)
+			):
+				self.assertTrue(export_package.brand()["credit"])
 
 	def test_color_must_be_hex(self):
 		for color in ("#1a7f37", "#FFF", " #abcdef "):
