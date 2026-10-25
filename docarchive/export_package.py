@@ -15,7 +15,7 @@ from frappe import _
 from frappe.utils import cint, get_datetime, now_datetime
 from frappe.utils.html_utils import sanitize_html
 
-from docarchive import content, retention, run, settings
+from docarchive import content, counterparty, retention, run, settings
 
 VIEWER = Path(__file__).with_name("export_viewer.html")
 VIEWER_CORE = Path(__file__).with_name("export_viewer_core.js")
@@ -53,6 +53,7 @@ CSV_FIELDS = (
 	"counterparty_type",
 	"counterparty",
 	"counterparty_name",
+	"counterparty_label",
 	"lock_mode",
 	"retain_until",
 	"legal_hold",
@@ -264,7 +265,7 @@ def document_row(doc, copy, entry) -> dict:
 		"number": document.get("number"),
 		"contract_end_date": document.get("contract_end_date"),
 		"own_company": document.get("own_company") or doc.own_company,
-		"counterparty": meta.get("counterparty"),
+		"counterparty": counterparty_of(doc, meta),
 		"source": meta.get("source"),
 		"retention": meta.get("retention"),
 		"history": history,
@@ -275,6 +276,22 @@ def document_row(doc, copy, entry) -> dict:
 		"files": files,
 		"metadata": metadata,
 		"verified": all(value["verified"] for value in objects.values()) and len(objects) > 0,
+	}
+
+
+def counterparty_of(doc, meta) -> dict | None:
+	party = meta.get("counterparty") or {}
+	doctype = party.get("doctype") or doc.get("counterparty_type")
+	party_id = party.get("id") or doc.get("counterparty")
+	if not party_id:
+		return None
+	name = party.get("name") or doc.get("counterparty_name") or counterparty.title_of(doctype, party_id)
+	return {
+		"doctype": doctype,
+		"id": party_id,
+		"name": name,
+		"type_label": _(doctype) if doctype else None,
+		"label": f"{name} ({party_id})" if name and name != party_id else party_id,
 	}
 
 
@@ -304,6 +321,7 @@ def manifest_csv(documents) -> str:
 					"counterparty_type": party.get("doctype"),
 					"counterparty": party.get("id"),
 					"counterparty_name": party.get("name"),
+					"counterparty_label": party.get("label"),
 					"file_role": file.get("role"),
 					"file_name": file.get("name"),
 					"key": file.get("key"),

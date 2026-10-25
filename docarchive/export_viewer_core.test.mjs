@@ -81,14 +81,25 @@ test("attachments wrap around", () => {
 });
 
 test("metadata always lists the same fields", () => {
-	const L = { type: "T", date: "D", number: "N", counterparty: "C", status: "S", retain_until: "R", legal_hold: "L", own_company: "O", lock_mode: "M", verified: "ok", problem: "bad", yes: "yes" };
+	const L = { type: "T", date: "D", number: "N", counterparty: "C", counterparty_type: "CT", status: "S", retain_until: "R", legal_hold: "L", own_company: "O", lock_mode: "M", verified: "ok", problem: "bad", yes: "yes" };
 	const empty = meta({ id: "x", verified: false }, L);
-	const full = meta({ id: "y", type: "Rechnung", date: "2026-01-01", number: "1", counterparty: { id: "ACME" }, verified: true, retain_until: "2036", legal_hold: true, own_company: "Own", lock_mode: "COMPLIANCE" }, L);
+	const full = meta({ id: "y", type: "Rechnung", date: "2026-01-01", number: "1", counterparty: { id: "ACME", doctype: "Customer", type_label: "Kunde" }, verified: true, retain_until: "2036", legal_hold: true, own_company: "Own", lock_mode: "COMPLIANCE" }, L);
 	assert.deepEqual(empty.map(([k]) => k), full.map(([k]) => k));
-	assert.equal(empty.length, 9);
+	assert.equal(empty.length, 10);
 	assert.deepEqual(empty.filter(([, , v]) => v).map(([k]) => k), ["status"]);
 	assert.deepEqual(full.find(([k]) => k === "legal_hold")[2], "yes");
 	assert.deepEqual(full.find(([k]) => k === "counterparty")[2], "ACME");
+	assert.deepEqual(full.find(([k]) => k === "counterparty_type")[2], "Kunde");
+});
+
+test("counterparty shows as name (id)", () => {
+	const { party, partyType } = ViewerCore;
+	assert.equal(party({ counterparty: { id: "C-1", name: "Acme", label: "Acme (C-1)" } }), "Acme (C-1)");
+	assert.equal(party({ counterparty: { id: "C-1", name: "Acme" } }), "Acme (C-1)");
+	assert.equal(party({ counterparty: { id: "C-1", name: "C-1" } }), "C-1");
+	assert.equal(party({ counterparty: { id: "C-1" } }), "C-1");
+	assert.equal(party({}), "");
+	assert.equal(partyType({ counterparty: { doctype: "Customer" } }), "Customer");
 });
 
 const entries = [

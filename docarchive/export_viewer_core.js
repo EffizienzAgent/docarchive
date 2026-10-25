@@ -56,7 +56,14 @@ const ViewerCore = (() => {
 	}
 
 	const typeOf = (doc) => doc.type_label || doc.type || "";
-	const party = (doc) => (doc.counterparty && (doc.counterparty.name || doc.counterparty.id)) || "";
+	function party(doc) {
+		const value = doc.counterparty;
+		if (!value) return "";
+		if (value.label) return value.label;
+		return value.name && value.name !== value.id ? `${value.name} (${value.id})` : value.id || "";
+	}
+
+	const partyType = (doc) => (doc.counterparty && (doc.counterparty.type_label || doc.counterparty.doctype)) || "";
 
 	function meta(doc, L) {
 		return [
@@ -64,6 +71,7 @@ const ViewerCore = (() => {
 			["date", L.date, doc.date || ""],
 			["number", L.number, doc.number || ""],
 			["counterparty", L.counterparty, party(doc)],
+			["counterparty_type", L.counterparty_type, partyType(doc)],
 			["status", L.status, doc.verified ? L.verified : L.problem],
 			["retain_until", L.retain_until, doc.retain_until || ""],
 			["legal_hold", L.legal_hold, doc.legal_hold ? L.yes : ""],
@@ -103,7 +111,7 @@ const ViewerCore = (() => {
 			.sort((a, b) => sentAt(b).localeCompare(sentAt(a)) || b.id.localeCompare(a.id));
 	}
 
-	return { action, escape, move, cycle, typing, control, meta, typeOf, party, outcomeOf, auditRows, entriesOf, threadOf };
+	return { action, escape, move, cycle, typing, control, meta, typeOf, party, partyType, outcomeOf, auditRows, entriesOf, threadOf };
 })();
 
 if (typeof module !== "undefined") module.exports = ViewerCore;
