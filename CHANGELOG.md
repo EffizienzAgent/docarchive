@@ -5,24 +5,16 @@
 
 ### Features
 
-* archive business correspondence ([7075810](https://github.com/EffizienzAgent/docarchive/commit/70758105be705a167865bbcfbad1a29a317cbf9c))
+* **correspondence:** archive e-mails as Business Documents of type Correspondence or Internal Correspondence (6 years), from the original `.eml` captured when Frappe receives or sends a mail, or from the IMAP Sent folder through mailsync's `mailsync_mail_read` hook ([#31](https://github.com/EffizienzAgent/docarchive/pull/31)) ([7075810](https://github.com/EffizienzAgent/docarchive/commit/70758105be705a167865bbcfbad1a29a317cbf9c))
+* **correspondence:** per e-mail account mode (off, manual, automatic), internal mails, contacts as counterparty, keep period for unarchived originals and source of outgoing originals in Archive Settings ([#31](https://github.com/EffizienzAgent/docarchive/pull/31))
+* **correspondence:** "Archive" on Communications, automatic counterparty from timeline links, discard before archiving, cleanup after the keep period ([#31](https://github.com/EffizienzAgent/docarchive/pull/31))
+* **correspondence:** viewer for archived mails (sanitised, remote images blocked, attachments, checksum), thread view with gaps, closing gaps by uploading an `.eml` ([#31](https://github.com/EffizienzAgent/docarchive/pull/31))
+* channel, direction and thread fields on Business Documents, so letters and faxes can be filed as correspondence too ([#31](https://github.com/EffizienzAgent/docarchive/pull/31))
 
 
-### Bug Fixes
+### Changes
 
-* check create permission on the final mail document before inserting ([20dfb63](https://github.com/EffizienzAgent/docarchive/commit/20dfb6344f1e913549b1ee00761fbfa74c6eedd8))
-* expire unarchived mail originals of every account, keep days at least 1 ([840794f](https://github.com/EffizienzAgent/docarchive/commit/840794f381e4f0bb9508f979ca623017717f899b))
-* keep mail originals as plain account names so email accounts can be deleted ([2536225](https://github.com/EffizienzAgent/docarchive/commit/25362251ee5109f0ffc2efe443fe9ddb60314db0))
-* mail cleanup only removes documents whose type needs a counterparty ([33ed592](https://github.com/EffizienzAgent/docarchive/commit/33ed592a7d4b8b6b4ab3e3ae4c9726d944376a9c))
-* seed mail document types once through a patch, never fail migrate ([840ad72](https://github.com/EffizienzAgent/docarchive/commit/840ad729bbde815199a9099297f747722127b29d))
-* show thread gaps archived under another thread as archived ([9cd262f](https://github.com/EffizienzAgent/docarchive/commit/9cd262f905146a59a2e6d582c3211ae51cfba83d))
-* take mail meta from the original whose bytes were archived ([7753fef](https://github.com/EffizienzAgent/docarchive/commit/7753fef09f0db2888b84186a473967fdf1bd375f))
-* viewer shows the origin of the archived original ([9b558be](https://github.com/EffizienzAgent/docarchive/commit/9b558be27852447ef00172928b04e27c3f7876f5))
-
-
-### Documentation
-
-* describe original fill-in, keep days rules and mail type seeding ([a1eff4c](https://github.com/EffizienzAgent/docarchive/commit/a1eff4c7582932415c706b6dcd772642dc0789ec))
+* `Business Document.source_name` is now a Data field instead of a Dynamic Link, so archived documents no longer block deleting their source record ([#31](https://github.com/EffizienzAgent/docarchive/pull/31))
 
 ## [0.6.0](https://github.com/EffizienzAgent/docarchive/compare/v0.5.0...v0.6.0) (2026-10-25)
 
