@@ -53,8 +53,7 @@ function ask_type_and_date(party, file_urls, on_saved) {
 					fieldname: "document_date",
 					fieldtype: "Date",
 					label: __("Document Date"),
-					reqd: 1,
-					default: defaults.document_date,
+					description: __("Empty: taken from an e-invoice or the file name when possible."),
 				},
 				{
 					fieldname: "combine",

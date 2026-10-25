@@ -343,3 +343,51 @@ class TestEInvoiceUpload(EInvoiceTestCase):
 		for fields in ({"document_date": "2026-03-01"}, {"document_type": "outgoing-invoice"}):
 			with self.subTest(fields), self.assertRaises(api.UploadError):
 				self.upload(b"%PDF-1.7 plain", name="scan.pdf", **fields)
+
+
+class TestBackfill(EInvoiceTestCase):
+	def setUp(self):
+		super().setUp()
+		self.enterContext(patch.object(frappe.db, "commit"))
+
+	def old_document(self, data, **fields):
+		doc = self.document(data, **fields)
+		frappe.db.set_value(DOCUMENT, doc.name, {"einvoice_data": None, "document_number": None})
+		return doc.name
+
+	def test_dry_run_lists_and_writes_nothing(self):
+		name = self.old_document(cii(number="BF-1"), document_date="2026-03-12")
+		result = einvoice.backfill(dry_run=True)
+		[found] = [row for row in result["found"] if row["name"] == name]
+		self.assertEqual(found["fills"], {"document_number": "BF-1"})
+		self.assertIsNone(frappe.db.get_value(DOCUMENT, name, "einvoice_data"))
+
+	def test_fills_only_empty_fields(self):
+		name = self.old_document(cii(number="BF-2"), document_date="2026-03-12")
+		started = self.old_document(cii(number="BF-3"))
+		frappe.db.set_value(DOCUMENT, started, "archive_started_at", frappe.utils.now_datetime())
+		result = einvoice.backfill()
+		self.assertEqual(result["errors"], [])
+		doc = frappe.get_doc(DOCUMENT, name)
+		self.assertEqual((doc.document_number, str(doc.document_date)), ("BF-2", "2026-03-12"))
+		self.assertIn("document_date", {c["field"] for c in json.loads(doc.einvoice_data)["conflicts"]})
+		self.assertNotIn(started, [row["name"] for row in result["found"]])
+		self.assertIsNone(frappe.db.get_value(DOCUMENT, started, "einvoice_data"))
+
+	def test_command_is_registered(self):
+		from docarchive.commands import commands
+
+		self.assertIn("docarchive-extract", [command.name for command in commands])
+
+
+class TestDialogDate(EInvoiceTestCase):
+	def test_date_comes_from_the_einvoice(self):
+		from docarchive import documents
+
+		party = frappe.get_doc({"doctype": "Contact", "first_name": unique("party")}).insert(
+			ignore_permissions=True
+		)
+		[name] = documents.create_documents(
+			"Contact", party.name, json.dumps([xml_upload(cii()).file_url]), self.other_type
+		)
+		self.assertEqual(str(frappe.db.get_value(DOCUMENT, name, "document_date")), "2026-03-10")

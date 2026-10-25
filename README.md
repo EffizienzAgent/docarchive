@@ -63,7 +63,7 @@ File deletion runs inside the File controller, before any `doc_events` hook. So 
 
 ### Counterparty panel
 
-The app's JS bundle offers a panel for any form: a list of the record's documents, an upload button (several files, drag and drop) and a dialog for type and date. With several files, the dialog can file them as one document: the first file becomes the main file, the others its attachments.
+The app's JS bundle offers a panel for any form: a list of the record's documents, an upload button (several files, drag and drop) and a dialog for type and date. The date is optional: when it is left empty, it comes from an e-invoice or from a date in the file name (`2026-03-15`, `20260315`, `15.3.2026`), else the document stays without a date and is listed as missing it. With several files, the dialog can file them as one document: the first file becomes the main file, the others its attachments.
 
 ```js
 frappe.ui.form.on("Customer", {
@@ -77,7 +77,7 @@ frappe.ui.form.on("Customer", {
 
 ### Dashboard helpers
 
-- `docarchive.queries.documents_to_assign()`: documents that are not archived and still lack a file or a field their type requires, or whose archiving failed. Newest first, each with a `missing` list.
+- `docarchive.queries.documents_to_assign()`: documents that are not archived and still lack a file, a date or a field their type requires, or whose archiving failed. Newest first, each with a `missing` list.
 - `docarchive.queries.count_documents_to_assign()` (whitelisted): the number of those documents.
 
 ## E-invoices
@@ -96,6 +96,8 @@ docarchive recognizes e-invoices among a document's files (main file first, then
 - Empty fields are prefilled: document date, number, title, own company and type. Add your VAT IDs (or tax numbers) to **Own Company → VAT IDs**: if the seller's ID matches, the document is an **Outgoing Invoice** of that company, if the buyer's matches, an **Incoming Invoice** (by the seeded type slugs `outgoing-invoice` and `incoming-invoice`).
 - Values a user or the API set are never overwritten. When they differ from the XML, the form shows it, e.g. "Document Date in the XML differs: 10.03.2026". The upload API only needs `document_type` and `document_date` when the e-invoice does not provide them.
 - The counterparty hint goes to your `docarchive_assign` hook: call `docarchive.einvoice.counterparty_hint(doc)`. It returns the other party (the buyer of an outgoing, the seller of an incoming invoice) as `{"vat_id", "tax_number", "name", "address"}`. Match by VAT ID first, then by tax number, then by name. Documents with e-invoice data but no counterparty are run through the hooks again before each nightly run.
+
+**Existing documents**: `bench --site <site> docarchive-extract [--dry-run]` reads the e-invoice data of documents whose archiving has not started and that have none yet. It fills only empty fields (and the title while it is still the automatic one) and records conflicts. `--dry-run` lists what it would fill and writes nothing. It exits with status 1 if a document fails.
 
 **Your own parser**: register callables under `docarchive_einvoice_extractors` in `hooks.py`. Each gets `(data: bytes, file_name: str)` and returns a dict in the format above (see `docarchive/einvoice_parser.py`) or `None`. The last hook is tried first, the built-in parser last. An ERPNext site can plug in a dedicated e-invoice app this way. To store the XML of a PDF as an attachment, return it as `xml` together with `embedded_file`.
 
@@ -166,7 +168,7 @@ Response (HTTP 200):
 }}
 ```
 
-`status` is `created`, `exists`, `updated` or `replaced`. `missing` lists what the document still needs before it can be archived (`File`, `Counterparty`, `Document Number`, `Contract End Date`).
+`status` is `created`, `exists`, `updated` or `replaced`. `missing` lists what the document still needs before it can be archived (`File`, `Document Date`, `Counterparty`, `Document Number`, `Contract End Date`).
 
 Errors come back as JSON with an HTTP status: 400 for an invalid request (unknown type, missing or invalid date, missing required field, file type, size, empty or damaged file), 403 without the role, 417 for other validation errors, 429 when rate limited, and 5xx for storage or internal errors (retry those):
 
@@ -182,7 +184,7 @@ In n8n, use an HTTP Request node with method POST, a "Header Auth" credential (`
 
 Every night at 02:30 (server time) the scheduler queues `docarchive.run.nightly` on the `long` queue. It does nothing unless **Archive Settings → Enabled** is set and every enabled storage target is fully configured.
 
-A document is archived when its type has **Archive** set, nothing is missing (file, and the counterparty, number or contract end date its type requires), it has not changed for **Minimum Age (Hours)** (default 24), and it is not archived yet. Documents whose archiving already started are retried every night, whatever their age. Before archiving, documents with source fields but no counterparty run through the `docarchive_assign` hooks again.
+A document is archived when its type has **Archive** set, nothing is missing (file, document date, and the counterparty, number or contract end date its type requires), it has not changed for **Minimum Age (Hours)** (default 24), and it is not archived yet. Documents whose archiving already started are retried every night, whatever their age. Before archiving, documents with source fields but no counterparty run through the `docarchive_assign` hooks again.
 
 For each document the run:
 
@@ -235,6 +237,7 @@ bench --site <site> docarchive-run --dry-run   # list what would be archived, wr
 bench --site <site> docarchive-run             # archive now (needs Enabled), exit 1 on failures
 bench --site <site> docarchive-smoke --target primary
 bench --site <site> docarchive-sync-mode --target primary   # after switching objects to COMPLIANCE
+bench --site <site> docarchive-extract --dry-run            # e-invoice data for existing documents
 ```
 
 `docarchive-smoke` works without Enabled. It uploads a tiny `_smoke/` object with a 1-day GOVERNANCE lock, reads it back and checks its retention. Then it tries to delete that version with the target's credentials, once normally and once with `BypassGovernanceRetention`. Both must be refused with AccessDenied (or the provider's object-lock error), and a versioned HEAD must still find the object. It exits with status 1 if any check fails. Each run leaves one small object that expires after a day.

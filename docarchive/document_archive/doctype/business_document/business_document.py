@@ -122,6 +122,7 @@ def missing_fields(doc) -> list[str]:
 	rules = frappe.get_cached_doc("Business Document Type", doc.document_type)
 	checks = [
 		("File", not doc.file),
+		("Document Date", not doc.document_date),
 		("Counterparty", rules.counterparty_required and not doc.counterparty),
 		("Document Number", rules.number_required and not doc.document_number),
 		("Contract End Date", rules.contract_end_required and not doc.contract_end_date),
@@ -270,6 +271,8 @@ class BusinessDocument(Document):
 				)
 
 	def validate_dates(self):
+		if not self.document_date:
+			return
 		limits = settings.date_limits()
 		if getdate(self.document_date) > getdate(add_days(today(), limits.future_days)):
 			frappe.throw(
@@ -292,7 +295,7 @@ class BusinessDocument(Document):
 			!= CONTRACT_END
 		):
 			frappe.throw(_("Only contracts have a contract end date."))
-		if getdate(self.contract_end_date) < getdate(self.document_date):
+		if self.document_date and getdate(self.contract_end_date) < getdate(self.document_date):
 			frappe.throw(_("The contract end date cannot be before the document date."))
 
 	def set_title(self, before):

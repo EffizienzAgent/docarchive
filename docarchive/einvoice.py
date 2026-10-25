@@ -134,7 +134,7 @@ def dump(doc, info):
 
 
 def update(doc, before, files):
-	if before is None or signature(doc) != signature(before):
+	if doc.flags.einvoice_extract or before is None or signature(doc) != signature(before):
 		info = extract(files)
 		xml = info.pop("xml", None) if info else None
 		dump(doc, info)
@@ -194,3 +194,40 @@ def store_xml(doc, info, xml):
 			"content_sha256": sha256,
 		},
 	)
+
+
+def backfill(dry_run=False) -> dict:
+	result = {"checked": 0, "found": [], "errors": []}
+	for name in frappe.get_all(
+		"Business Document",
+		filters={"archive_started_at": ("is", "not set"), "einvoice_data": ("is", "not set")},
+		pluck="name",
+		order_by="creation",
+	):
+		result["checked"] += 1
+		try:
+			found = backfill_document(name, dry_run)
+		except Exception as e:
+			frappe.db.rollback()
+			result["errors"].append(
+				f"{name}: {e if isinstance(e, frappe.ValidationError) else type(e).__name__}"
+			)
+			continue
+		if found:
+			result["found"].append(found)
+	return result
+
+
+def backfill_document(name, dry_run) -> dict | None:
+	doc = frappe.get_doc("Business Document", name)
+	if dry_run:
+		info = extract(doc.einvoice_files())
+		if not info:
+			return None
+		fills = {field: value for field, value in expected(info).items() if not doc.get(field)}
+		return {"name": name, "number": info.get("number"), "fills": fills}
+	doc.flags.einvoice_extract = True
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	info = data_of(doc)
+	return {"name": name, "number": info.get("number")} if info else None

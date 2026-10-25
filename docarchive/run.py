@@ -24,6 +24,7 @@ MAIN_ROLE = "Main"
 CANDIDATE_FIELDS = [
 	"name",
 	"document_type",
+	"document_date",
 	"file",
 	"counterparty",
 	"document_number",

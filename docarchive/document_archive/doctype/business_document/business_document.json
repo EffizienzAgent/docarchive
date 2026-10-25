@@ -106,9 +106,9 @@
    "fieldname": "document_date",
    "fieldtype": "Date",
    "label": "Document Date",
-   "reqd": 1,
    "in_list_view": 1,
-   "read_only_depends_on": "eval:doc.archive_started_at"
+   "read_only_depends_on": "eval:doc.archive_started_at",
+   "description": "Empty: taken from an e-invoice or the file name when possible. Needed before archiving."
   },
   {
    "fieldname": "document_number",

@@ -1,8 +1,8 @@
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import today
 
 from docarchive import documents
+from docarchive.document_archive.doctype.business_document.business_document import missing_fields
 from docarchive.tests.factories import (
 	make_business_document,
 	make_document_type,
@@ -13,6 +13,7 @@ from docarchive.tests.factories import (
 	make_party,
 	make_settings,
 	party_fields,
+	unique,
 )
 
 
@@ -49,12 +50,34 @@ class TestCounterpartyDocuments(IntegrationTestCase):
 		with self.set_user("docs-outsider@example.com"):
 			self.assertEqual(documents.counterparty_documents("Contact", self.party.name), [])
 
-	def test_upload_defaults_to_setting_and_today(self):
+	def test_upload_defaults_to_setting_without_a_date(self):
 		make_settings(default_own_company=make_own_company().name, default_upload_type=self.type)
 		with self.set_user(make_manager("docs-defaults@example.com")):
-			self.assertEqual(
-				documents.upload_defaults(), {"document_type": self.type, "document_date": today()}
+			self.assertEqual(documents.upload_defaults(), {"document_type": self.type})
+
+	def test_date_from_file_name(self):
+		cases = {
+			"Rechnung_2026-03-15.pdf": "2026-03-15",
+			"scan20260401-1.pdf": "2026-04-01",
+			"Vertrag 1.2.2025 final.pdf": "2025-02-01",
+			"INV-12345678.pdf": None,
+			"2026-13-01.pdf": None,
+			"invoice.pdf": None,
+		}
+		for name, expected in cases.items():
+			with self.subTest(name):
+				self.assertEqual(documents.date_from_file_name(name), expected)
+
+	def test_dialog_date_from_file_name_or_left_empty(self):
+		with self.set_user(self.manager("docs-dates@example.com")):
+			files = [make_file(file_name=f"{unique('scan')}_2026-02-03.pdf"), make_file()]
+			names = documents.create_documents(
+				"Contact", self.party.name, frappe.as_json([f.file_url for f in files]), self.type
 			)
+		dated, empty = (frappe.get_doc("Business Document", name) for name in names)
+		self.assertEqual(str(dated.document_date), "2026-02-03")
+		self.assertIsNone(empty.document_date)
+		self.assertIn("Document Date", missing_fields(empty))
 
 	def test_upload_defaults_to_last_used_type(self):
 		other = make_document_type().name

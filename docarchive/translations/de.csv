@@ -246,3 +246,5 @@ Tax,Steuer
 Type,Art
 VAT IDs,USt-IdNrn.
 "{0} in the XML differs: {1}","{0} im XML weicht ab: {1}"
+Empty: taken from an e-invoice or the file name when possible.,"Leer: wird, wenn möglich, aus einer E-Rechnung oder dem Dateinamen übernommen."
+Empty: taken from an e-invoice or the file name when possible. Needed before archiving.,"Leer: wird, wenn möglich, aus einer E-Rechnung oder dem Dateinamen übernommen. Vor der Archivierung nötig."

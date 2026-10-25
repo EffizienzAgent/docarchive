@@ -27,7 +27,11 @@ def incomplete_filters():
 	types = frappe.get_list(
 		"Business Document Type", fields=["name", *(flag for flag, _conditions in REQUIREMENTS)]
 	)
-	queries = [[["file", "is", "not set"]], [["archive_status", "=", "Failed"]]]
+	queries = [
+		[["file", "is", "not set"]],
+		[["document_date", "is", "not set"]],
+		[["archive_status", "=", "Failed"]],
+	]
 	for flag, conditions in REQUIREMENTS:
 		names = [t.name for t in types if t.get(flag)]
 		if names:
@@ -47,7 +51,7 @@ def documents_to_assign() -> list[frappe._dict]:
 			limit_page_length=0,
 		):
 			documents[doc.name] = doc
-	ordered = sorted(documents.values(), key=lambda d: (d.document_date, d.name), reverse=True)
+	ordered = sorted(documents.values(), key=lambda d: (str(d.document_date or ""), d.name), reverse=True)
 	for doc in ordered:
 		doc.missing = missing_fields(doc)
 	return ordered
