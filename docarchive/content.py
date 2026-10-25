@@ -16,7 +16,8 @@ def read_bytes(file_url) -> bytes | None:
 		data = frappe.get_attr(method)(file_url)
 		if data is not None:
 			return data
-	return read_stored(file_url) or read_local(file_url)
+	data = read_stored(file_url)
+	return data if data is not None else read_local(file_url)
 
 
 def read_stored(file_url) -> bytes | None:
@@ -24,8 +25,10 @@ def read_stored(file_url) -> bytes | None:
 
 	if not storage.is_active():
 		return None
-	key = storage.safe_key_for(file_url)
-	return storage.get(key) if key else None
+	try:
+		return storage.read_file_url(file_url)
+	except storage.UnsafeFileURL:
+		return None
 
 
 def read_local(file_url) -> bytes | None:

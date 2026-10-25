@@ -552,6 +552,13 @@ class TestBusinessDocumentFiles(BusinessDocumentTestCase):
 		):
 			self.assertEqual(content.read_bytes(local.file_url), PDF)
 
+	def test_read_bytes_returns_empty_stored_files(self):
+		with (
+			patch("s3storage.storage.is_active", return_value=True),
+			patch("s3storage.storage.get", return_value=b""),
+		):
+			self.assertEqual(content.read_bytes("/private/files/empty.txt"), b"")
+
 
 class TestBusinessDocumentHardening(IntegrationTestCase):
 	def setUp(self):
