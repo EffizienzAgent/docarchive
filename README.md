@@ -139,23 +139,25 @@ Archive Settings → **E-Mail Accounts** has one row per Frappe Email Account (S
 | Outgoing Originals From | Frappe | **Frappe**: the original of a sent mail is rebuilt after sending. **Sent Folder**: it comes from the IMAP Sent folder through mailsync (see below). Only for IMAP accounts. |
 | Archive Internal Mails | off | Whether mails where every address is internal qualify at all. |
 | Contacts Count as Counterparty | off | Whether a Contact without a linked party (e.g. a private contact) may be set as counterparty automatically. |
-| Keep Unarchived Originals (Days) | 90 | After this, captured originals that were not archived are deleted. |
+| Keep Unarchived Originals (Days) | 90 | After this, captured originals that were not archived are deleted. At least 1. |
 | Own Company | empty | Own company for this account's mails. Empty: the normal resolution. |
 | Internal Domains | domain of the account's address | Comma-separated. |
 
+Mail Originals keep the account's name as plain text, so an Email Account can be deleted once its row here is removed; its originals stay and expire as described under [Cleanup](#cleanup).
+
 Capturing never makes receiving or sending fail: every capture runs in its own savepoint, and errors go to the Error Log ("docarchive mail capture") while the mail goes through.
 
-- **Incoming**: every mail that becomes a new Communication (IMAP, POP3, Frappe Mail) keeps its raw message as a private **Mail Original** with its SHA-256.
+- **Incoming**: every mail Frappe receives into a Communication (IMAP, POP3, Frappe Mail) keeps its raw message as a private **Mail Original** with its SHA-256. This includes a mail that is read again for an existing Communication without an original: the original is filled in. An existing original is never replaced.
 - **Outgoing (Frappe)**: after a successful send, docarchive rebuilds the message that went to the first recipient from the Email Queue. This is the message Frappe built, not a byte copy of what went over the wire: print-format attachments are rendered again, and the copies of other recipients differ in tracking and unsubscribe links. The meta records this. Newsletters and queue rows with "redact message after send" are not captured.
 - **Outgoing (Sent Folder via mailsync)**: if the mail server stores sent mails itself (e.g. Microsoft 365, Gmail), the copy in the IMAP Sent folder is closer to what was sent. With the mailsync app installed, docarchive handles mailsync's `mailsync_mail_read` hook and captures each mail with origin `mailsync`. mailsync calls this hook once per mail, when it first reads the mail's UID. Mails that are already in the Sent folder when mailsync runs for the first time are not handed in. Neither app imports the other; each works on its own.
 
 ### Automated and internal mails
 
-A mail counts as automated if it has a `List-Unsubscribe` header, an `Auto-Submitted` header other than `no`, or `Precedence: bulk`, `list` or `junk`. A mail is internal if every address in From, To and Cc belongs to an internal domain. Automatic mode never archives automated mails, and internal mails only when **Archive Internal Mails** is on. Internal mails get the seeded type **Internal Correspondence** (6 years, no counterparty required), all others **Correspondence** (6 years, counterparty required). In manual mode a person can still archive an automated or internal mail after a warning.
+A mail counts as automated if it has a `List-Unsubscribe` header, an `Auto-Submitted` header other than `no`, or `Precedence: bulk`, `list` or `junk`. A mail is internal if every address in From, To and Cc belongs to an internal domain. Automatic mode never archives automated mails, and internal mails only when **Archive Internal Mails** is on. Internal mails get the seeded type **Internal Correspondence** (6 years, no counterparty required), all others **Correspondence** (6 years, counterparty required). Both types are seeded once (on install, or by a patch on the first migrate after upgrading); a type of the same name is reused and flagged as correspondence, and a type you delete is not created again. Archiving refuses mails while their type is missing. In manual mode a person can still archive an automated or internal mail after a warning.
 
 ### Archiving and discarding
 
-- The Communication form has **Archive** (disabled with the reason when no original was captured) and, once archived, a link "Archived as …". The Communication list has **Archive** for selected mails and reports the mails it could not archive in one message. It needs read access to the Communication and create permission on Business Document.
+- The Communication form has **Archive** (disabled with the reason when no original was captured) and, once archived, a link "Archived as …". The Communication list has **Archive** for selected mails and reports the mails it could not archive in one message. It needs read access to the Communication and create permission on Business Document, checked on the new document, so User Permissions on the own company apply (also to `.eml` uploads).
 - Each mail becomes one Business Document per own company and Message-ID (without a Message-ID: per SHA-256). Archiving it again returns the existing document. The document gets the `.eml` as its file, the subject as title, the date the mail was received or sent, `source_doctype` = Communication, `source_system` = `email`, the account, and the correspondence fields: channel, direction, time, `thread_key` and the Message-ID headers. These are server-only for mails and locked once archiving starts.
 - The counterparty comes from the Communication's links: Contacts with only internal addresses are dropped, a Contact stands for its linked Customer, Supplier etc. (or for itself, if **Contacts Count as Counterparty** is on and it has none). If exactly one candidate is left, it is set; otherwise the document waits in `documents_to_assign()`. The nightly run picks up links added later until archiving starts. Host `docarchive_assign` hooks still run.
 - **Discard** (form button and list action, with confirmation) removes a mail document that has not started archiving, together with its captured original. It works for captured and uploaded mails, needs write permission and is refused for archived documents and documents marked for legal hold.
@@ -163,7 +165,7 @@ A mail counts as automated if it has a `List-Unsubscribe` header, an `Auto-Submi
 
 ### Cleanup
 
-A daily job deletes, per account, captured originals older than **Keep Unarchived Originals (Days)** that were not archived. It also removes mail documents of that age whose archiving has not started and that still have no counterparty, together with their original, unless they are marked for legal hold. So spam and private mail never reach WORM storage unless someone assigns them. Deleting a Communication deletes its unarchived original with it; an archived mail stays.
+A daily job deletes, per account, captured originals older than **Keep Unarchived Originals (Days)** that were not archived. This also applies to accounts set to **Off** (originals captured before) and to accounts whose row was removed, which use the default of 90 days. It also removes mail documents of that age whose archiving has not started and that still have no counterparty although their type requires one, together with their original, unless they are marked for legal hold. **Internal Correspondence** and other types without a required counterparty are not removed. So spam and private mail never reach WORM storage unless someone assigns them. Deleting a Communication deletes its unarchived original with it; an archived mail stays.
 
 ### Viewer
 
@@ -187,7 +189,7 @@ from docarchive import mail
 mail.capture(communication, raw, "my-app")  # Communication doc, bytes (or str), origin
 ```
 
-The account settings come from the Communication's `email_account`. Without an account, or with an account that is off or not configured, nothing is captured. `capture` returns the Mail Original's name, or `None`; it never raises. A Communication that already has an original keeps it. Automatic archiving and cleanup apply as for Frappe's own mails, and the origin goes into the meta.
+The account settings come from the Communication's `email_account`. Without an account, or with an account that is off or not configured, nothing is captured. `capture` returns the Mail Original's name, or `None`; it never raises. A Communication that already has an original keeps it; one without an original gets it. Automatic archiving and cleanup apply as for Frappe's own mails, and the origin goes into the meta.
 
 ### Meta
 
