@@ -685,3 +685,7 @@ Raw Fallback,Rohdaten (Ersatzspeicher)
 Storing the original of this e-mail failed. It will be retried automatically.,Das Original dieser E-Mail konnte nicht gespeichert werden. Es wird automatisch erneut versucht.
 {0} e-mail originals could not be stored,{0} E-Mail-Originale konnten nicht gespeichert werden
 Document Archive,Dokumentenarchiv
+Ignored,Ignoriert
+Ignored By,Ignoriert von
+Ignored At,Ignoriert am
+Mail Original {0} does not exist or you cannot read its e-mail.,Das E-Mail-Original {0} existiert nicht oder Sie dürfen seine E-Mail nicht lesen.
