@@ -63,11 +63,7 @@ File deletion runs inside the File controller, before any `doc_events` hook. So 
 
 ### Counterparty panel
 
-<<<<<<< ours
-The app's JS bundle offers a panel for any form: a list of the record's documents, an upload button (several files, drag and drop) and a dialog for type and date. The date is optional: when it is left empty, it comes from an e-invoice or from a date in the file name (`2026-03-15`, `20260315`, `15.3.2026`), else the document stays without a date and is listed as missing it. With several files, the dialog can file them as one document: the first file becomes the main file, the others its attachments.
-=======
-The app's JS bundle offers a panel for any form: the record's documents with search, filters (type, year, status) and sorting, row actions (open, open file, copy link, archive now, also for several at once) and an upload with drag and drop. The upload dialog has one row per file with title, type and date. A date in the file name (`2026-08-05`, `2026_08_05`, `20260805` or `05.08.2026`) becomes the document date and is left out of the title. Uploads without a date take it from the file name on the server too. With several files, the dialog can file them as one document: the first row becomes the main file, the others its attachments.
->>>>>>> theirs
+The app's JS bundle offers a panel for any form: the record's documents with search, filters (type, year, status) and sorting, row actions (open, open file, copy link, archive now, also for several at once) and an upload with drag and drop. The upload dialog has one row per file with title, type and date. A date in the file name (`2026-08-05`, `2026_08_05`, `20260805` or `05.08.2026`) becomes the document date and is left out of the title. Uploads without a date take it from an e-invoice or the file name on the server too; otherwise the document stays without a date and is listed as missing it. With several files, the dialog can file them as one document: the first row becomes the main file, the others its attachments.
 
 ```js
 frappe.ui.form.on("Customer", {
