@@ -20,76 +20,81 @@ Rules:
 
 ## 2. Keys
 
-Use three keys:
+Use two keys, optionally three:
 
-- An **owner key** that you keep offline. It manages policies and does the one-time switch to COMPLIANCE. It is never stored in the site.
-- A **writer key** (the archive key) for the Frappe site. In the archive buckets it may put objects (with a legal hold at upload), extend retention, read and list. It may never delete, shorten retention, bypass governance, change the legal hold of an existing version, or change policy, lock or versioning settings.
-- An optional **admin key** for the Frappe site. It may set and release legal holds on existing versions, delete object versions and, if you want early deletion, bypass GOVERNANCE retention. It may read and list, but never put objects, delete without a version ID (delete markers), change retention or change policy, lock or versioning settings. Without it, the site can still archive, and set a hold at upload time, but cannot set or release holds on archived documents or delete documents.
+- An **admin key** that you keep offline. It manages policies and does the one-time switch to COMPLIANCE.
+- A **writer key** for the Frappe site. In the archive buckets it may put objects, extend retention, read and list. It may never delete, shorten retention, bypass governance, or change policy, lock or versioning settings.
+- Optionally an **archive admin key** for the Frappe site (Archive Admin role). It may read, list, set and release legal holds on existing versions, and delete versions whose retention has ended, and, if you allow `s3:BypassGovernanceRetention`, GOVERNANCE versions before then. It may never upload, change retention or change bucket settings. No key can delete a COMPLIANCE version before its date.
 
 All other keys in the project get no access at all.
 
 ## 3. Bucket policy
 
-Ceph-based storage enforces `Deny` statements with an `Action` list and `NotPrincipal`. `NotAction` is accepted but ignored, so always list actions explicitly. **Every statement must exclude the owner key.** A policy that misses it can lock the owner key out of the bucket, and undoing that needs the provider's support.
+Ceph-based storage enforces `Deny` statements with an `Action` list and `NotPrincipal`. `NotAction` is accepted but ignored, so always list actions explicitly. **Every statement must exclude the admin key.** A policy that misses it can lock the admin key out of the bucket, and undoing that needs the provider's support.
 
-Replace `OWNER_PRINCIPAL`, `WRITER_PRINCIPAL` and `ADMIN_PRINCIPAL` with the principal format from your provider's documentation. Apply the policy to both buckets (change the resource names). Leave out `ADMIN_PRINCIPAL` until you create the admin key.
+Name every key other than the admin key in `Principal`, never in `NotPrincipal`: a `NotPrincipal` list that leaves out the admin key catches it too. The example below names only the admin key in `NotPrincipal`, which works as long as there is no third key; with an archive admin key, use the script below.
+
+Replace `ADMIN_PRINCIPAL` and `WRITER_PRINCIPAL` with the principal format from your provider's documentation. Apply the policy to both buckets (change the resource names).
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "OnlyOwnerWriterAdmin",
+      "Sid": "OnlyAdminAndWriter",
       "Effect": "Deny",
-      "NotPrincipal": { "AWS": ["OWNER_PRINCIPAL", "WRITER_PRINCIPAL", "ADMIN_PRINCIPAL"] },
+      "NotPrincipal": { "AWS": ["ADMIN_PRINCIPAL", "WRITER_PRINCIPAL"] },
       "Action": ["s3:*"],
-      "Resource": ["arn:aws:s3:::example-archive-fsn1", "arn:aws:s3:::example-archive-fsn1/*"]
-    },
-    {
-      "Sid": "OnlyOwnerChangesTheBucket",
-      "Effect": "Deny",
-      "NotPrincipal": { "AWS": ["OWNER_PRINCIPAL"] },
-      "Action": [
-        "s3:DeleteObject",
-        "s3:DeleteBucket",
-        "s3:PutBucketPolicy",
-        "s3:DeleteBucketPolicy",
-        "s3:PutBucketObjectLockConfiguration",
-        "s3:PutBucketVersioning",
-        "s3:PutLifecycleConfiguration",
-        "s3:PutObjectTagging",
-        "s3:DeleteObjectTagging"
-      ],
       "Resource": ["arn:aws:s3:::example-archive-fsn1", "arn:aws:s3:::example-archive-fsn1/*"]
     },
     {
       "Sid": "WriterCannotDestroy",
       "Effect": "Deny",
-      "NotPrincipal": { "AWS": ["OWNER_PRINCIPAL", "ADMIN_PRINCIPAL"] },
-      "Action": ["s3:DeleteObjectVersion", "s3:BypassGovernanceRetention"],
+      "NotPrincipal": { "AWS": ["ADMIN_PRINCIPAL"] },
+      "Action": [
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
+        "s3:DeleteBucket",
+        "s3:BypassGovernanceRetention",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "s3:PutBucketObjectLockConfiguration",
+        "s3:PutBucketVersioning",
+        "s3:PutLifecycleConfiguration",
+        "s3:PutObjectLegalHold"
+      ],
       "Resource": ["arn:aws:s3:::example-archive-fsn1", "arn:aws:s3:::example-archive-fsn1/*"]
-    },
-    {
-      "Sid": "AdminCannotWrite",
-      "Effect": "Deny",
-      "NotPrincipal": { "AWS": ["OWNER_PRINCIPAL", "WRITER_PRINCIPAL"] },
-      "Action": ["s3:PutObject", "s3:PutObjectRetention"],
-      "Resource": ["arn:aws:s3:::example-archive-fsn1", "arn:aws:s3:::example-archive-fsn1/*"]
-    },
-    {
-      "Sid": "WriterCannotChangeHolds",
-      "Effect": "Deny",
-      "Principal": { "AWS": ["WRITER_PRINCIPAL"] },
-      "Action": ["s3:PutObjectLegalHold"],
-      "Resource": ["arn:aws:s3:::example-archive-fsn1/*"]
     }
   ]
 }
 ```
 
-The writer keeps `s3:PutObject` (which includes `ObjectLockLegalHoldStatus=ON` at upload), `s3:PutObjectRetention`, `s3:GetObject`, `s3:GetObjectVersion`, `s3:GetObjectRetention`, `s3:GetObjectLegalHold` and `s3:ListBucket`. Object Lock itself makes `PutObjectRetention` extend-only. Without `s3:BypassGovernanceRetention`, the writer cannot shorten or remove GOVERNANCE retention either. The admin key keeps `s3:PutObjectLegalHold`, `s3:DeleteObjectVersion`, `s3:BypassGovernanceRetention` and the read and list actions. Drop `s3:BypassGovernanceRetention` from its allowed actions (add it to the `AdminCannotWrite` statement) if you do not want early deletion; the site then reports the AccessDenied on the copy. Policies take effect after a few seconds.
+The writer keeps `s3:PutObject`, `s3:PutObjectRetention`, `s3:GetObject`, `s3:GetObjectVersion`, `s3:GetObjectRetention` and `s3:ListBucket`. Object Lock itself makes `PutObjectRetention` extend-only. Without `s3:BypassGovernanceRetention`, the writer cannot shorten or remove GOVERNANCE retention either. Policies take effect after a few seconds.
 
-**Provider limitation (tested on Hetzner fsn1):** S3 has one permission, `s3:PutObjectLegalHold`, for setting and releasing a hold on an existing version. AWS can limit it to ON with the `s3:object-lock-legal-hold` condition, but Ceph RGW does not set that condition key, so an ON-only allow never matches. The policy above therefore denies the writer `PutObjectLegalHold` completely. What works: the writer sets a hold while uploading (`PutObject` with `ObjectLockLegalHoldStatus=ON`, used by **Set Legal Hold When Archiving**), and only the admin key changes the hold of an existing version, ON or OFF. Object Lock still refuses any delete of a held or locked version.
+### Setting the policy with a script
+
+`scripts/apply_bucket_policy.py` builds the same kind of policy for one bucket, with an optional archive admin key, and prints it. With `--apply` it sets it and then reads it back. `--profile` must be the admin key. The script refuses when that key's access key ID is not part of `--admin-principal`, so it cannot lock the admin key out. Run it once per bucket. It needs [uv](https://docs.astral.sh/uv/), which installs boto3 for the script.
+
+```
+uv run scripts/apply_bucket_policy.py --profile admin \
+  --endpoint https://fsn1.your-objectstorage.com --region fsn1 --bucket example-archive-fsn1 \
+  --admin-principal ADMIN_PRINCIPAL --writer-principal WRITER_PRINCIPAL \
+  --archive-admin-principal ARCHIVE_ADMIN_PRINCIPAL
+```
+
+- `--writer-legal-hold deny` (default) keeps the writer away from legal holds. `on-only` lets it set a hold but never release it. Ceph does not fill the condition key `s3:object-lock-legal-hold` for `PutObjectLegalHold`, so on Hetzner the writer can then only set the hold at upload (`ObjectLockLegalHoldStatus=ON` on `PutObject`). The policy fails closed: an unsupported condition key never lets the writer release a hold.
+- `--archive-admin-bypass denied` also takes `s3:BypassGovernanceRetention` from the archive admin.
+
+Run the check script (section 5) after every policy change.
+
+### Legal holds on Hetzner
+
+S3 has one permission, `s3:PutObjectLegalHold`, for setting and releasing a hold on an existing version. Ceph RGW does not fill the condition key `s3:object-lock-legal-hold`, so an ON-only rule for the writer never matches and the policy fails closed (tested on fsn1). docarchive therefore uses:
+
+- the writer key only for a hold at upload (`PutObject` with `ObjectLockLegalHoldStatus=ON`): **Set Legal Hold When Archiving** on a document, or `legal_hold=true` in the upload API. It covers the main file, every attachment, the `.meta.json` and later extension sidecars, and is checked with a versioned HEAD. It works without an archive admin key;
+- the archive admin key for every change of an existing version, ON and OFF: **Set Legal Hold** and **Release Legal Hold** on archived documents. Without that key both are hidden and refused.
+
+Use `--legal-hold upload` in the check script below to test this behaviour.
 
 ## 4. Site configuration
 
@@ -106,13 +111,6 @@ bench --site <site> set-config s3_archive_access_key <writer access key>
 bench --site <site> set-config s3_archive_secret_key <writer secret key>
 ```
 
-When you create the admin key, add it too:
-
-```
-bench --site <site> set-config s3_archive_admin_access_key <admin access key>
-bench --site <site> set-config s3_archive_admin_secret_key <admin secret key>
-```
-
 Then add two rows under **Archive Settings → Storage Targets**:
 
 | Target Name | Config Source | Site Config Prefix | Access Key Config Key | Secret Key Config Key | Lock Mode |
@@ -120,11 +118,28 @@ Then add two rows under **Archive Settings → Storage Targets**:
 | `primary` | Site Config | `s3_archive_primary` | `s3_archive_access_key` | `s3_archive_secret_key` | GOVERNANCE |
 | `secondary` | Site Config | `s3_archive_secondary` | `s3_archive_access_key` | `s3_archive_secret_key` | GOVERNANCE |
 
-In the **Admin Key** section of both rows, set **Admin Access Key Config Key** to `s3_archive_admin_access_key` and **Admin Secret Key Config Key** to `s3_archive_admin_secret_key`. As long as these site config values are missing, releasing holds and deleting documents are unavailable.
+With an archive admin key, add it to the site config and name it in the **Admin Key** section of both rows (**Admin Access Key Config Key** `s3_archive_admin_access_key`, **Admin Secret Key Config Key** `s3_archive_admin_secret_key`):
+
+```
+bench --site <site> set-config s3_archive_admin_access_key <archive admin access key>
+bench --site <site> set-config s3_archive_admin_secret_key <archive admin secret key>
+```
+
+As long as these values are missing, setting a hold on archived documents, releasing holds and deleting documents are unavailable; archiving and the hold at upload keep working. Never put the offline admin key into the site.
 
 ## 5. Check routine
 
-Run these checks with the AWS CLI against the test bucket first, then against each archive bucket. `--profile writer`, `--profile admin` and `--profile owner` hold the keys, and `--endpoint-url` points at the bucket's location.
+`scripts/check_object_lock.py` runs the key checks against one bucket: the writer may upload with retention, extend it and read, but never delete, shorten, bypass governance or change the bucket. With an archive admin key it also checks that key's limits, a short-lived COMPLIANCE version (90 seconds) and legal holds, and cleans up its `_check/` objects. Run it once per bucket, first against the test bucket:
+
+```
+uv run scripts/check_object_lock.py --writer-profile writer --admin-profile archive-admin \
+  --endpoint https://fsn1.your-objectstorage.com --region fsn1 --bucket example-archive-fsn1 \
+  --legal-hold upload
+```
+
+Keys can also come from `WRITER_ACCESS_KEY_ID`/`WRITER_SECRET_ACCESS_KEY` and `ADMIN_ACCESS_KEY_ID`/`ADMIN_SECRET_ACCESS_KEY`. `--legal-hold` says what the writer may do: `off` (default, skip the checks), `upload` (set a hold at upload, the Hetzner behaviour with `on-only`) or `api` (also with `PutObjectLegalHold`). It exits with status 1 if any check fails. Without an archive admin key the check objects stay: the locked ones until their short retention ends, the unlocked one until the admin key deletes it.
+
+The same checks by hand with the AWS CLI, first against the test bucket, then against each archive bucket. `--profile writer` and `--profile admin` hold the two keys, and `--endpoint-url` points at the bucket's location.
 
 ```
 # Upload with a short GOVERNANCE lock
@@ -143,28 +158,6 @@ aws s3api put-object-retention --profile writer --bucket example-archive-test --
 # Extending works
 aws s3api put-object-retention --profile writer --bucket example-archive-test --key check/probe.txt \
   --retention Mode=GOVERNANCE,RetainUntilDate=<later date>
-
-# The writer can set a hold only at upload, not on an existing version (the second must fail)
-aws s3api put-object --profile writer --bucket example-archive-test --key check/held.txt \
-  --body probe.txt --content-md5 "$(openssl md5 -binary probe.txt | base64)" \
-  --object-lock-mode GOVERNANCE --object-lock-retain-until-date "$(date -u -d '+1 day' +%FT%TZ)" \
-  --object-lock-legal-hold-status ON
-aws s3api put-object-legal-hold --profile writer --bucket example-archive-test --key check/probe.txt \
-  --version-id <id> --legal-hold Status=ON
-
-# The admin key sets and releases holds, but cannot write or add delete markers (the last two must fail)
-aws s3api put-object-legal-hold --profile admin --bucket example-archive-test --key check/probe.txt \
-  --version-id <id> --legal-hold Status=ON
-aws s3api put-object-legal-hold --profile admin --bucket example-archive-test --key check/probe.txt \
-  --version-id <id> --legal-hold Status=OFF
-aws s3api put-object --profile admin --bucket example-archive-test --key check/other.txt --body probe.txt
-aws s3api delete-object --profile admin --bucket example-archive-test --key check/probe.txt
-
-# A locked version cannot be deleted by the admin key without bypass (must fail);
-# with bypass it can, in GOVERNANCE only (only if you allow early deletion)
-aws s3api delete-object --profile admin --bucket example-archive-test --key check/probe.txt --version-id <id>
-aws s3api delete-object --profile admin --bypass-governance-retention \
-  --bucket example-archive-test --key check/probe.txt --version-id <id>
 
 # The bytes match
 aws s3api get-object --profile writer --bucket example-archive-test --key check/probe.txt out.txt
@@ -185,10 +178,10 @@ Repeat regularly on the real buckets:
 1. Run a trial in **GOVERNANCE**, but with the full retention date. Then switching later changes only the mode.
 2. Check the trial objects with the routine above, in both buckets.
 3. When you are satisfied, set **Lock Mode = COMPLIANCE** on each storage target. From then on, new uploads use COMPLIANCE.
-4. Switch existing objects by hand with the **owner key**. Keep the same retain-until date for every version of each document and its `.meta.json`:
+4. Switch existing objects by hand with the **admin key**. Keep the same retain-until date for every version of each document and its `.meta.json`:
 
    ```
-   aws s3api put-object-retention --profile owner --bypass-governance-retention \
+   aws s3api put-object-retention --profile admin --bypass-governance-retention \
      --bucket example-archive-fsn1 --key <key> --version-id <id> \
      --retention Mode=COMPLIANCE,RetainUntilDate=<same date>
    ```
@@ -196,4 +189,4 @@ Repeat regularly on the real buckets:
 5. Verify with `head-object` on both buckets.
 6. Run `bench --site <site> docarchive-sync-mode --target <name>` for each target, so the site records the new mode.
 
-**COMPLIANCE cannot be undone.** No key, not even the owner key, can delete a COMPLIANCE object or shorten its retention before the date, so early deletion in the site is never possible for it. A delete without a version ID only adds a delete marker. Never use COMPLIANCE in the test bucket.
+**COMPLIANCE cannot be undone.** No key, not even the admin key, can delete a COMPLIANCE object or shorten its retention before the date. A delete without a version ID only adds a delete marker. Never use COMPLIANCE in the test bucket.

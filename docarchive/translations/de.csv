@@ -206,6 +206,25 @@ Retention History,Verlauf der Aufbewahrung
 Pending Extension Metadata,Metadaten der ausstehenden Verlängerung
 Skipped,Übersprungen
 The recorded version of {0} is missing on the storage target.,Die gespeicherte Version von {0} fehlt auf dem Speicherziel.
+Archive Attachment Copy,Archivkopie der Anlage
+At most {0} attachments can be sent.,Es können höchstens {0} Anlagen gesendet werden.
+Attachment,Anlage
+Attachment Copies,Archivkopien der Anlagen
+Attachment {0} has no file.,Anlage {0} hat keine Datei.
+Attachment {0} is already part of this document.,Anlage {0} gehört schon zu diesem Dokument.
+Attachment {0} of document {1} cannot be read.,Anlage {0} von Dokument {1} kann nicht gelesen werden.
+Attachment {0} of document {1} no longer matches its checksum.,Anlage {0} von Dokument {1} passt nicht mehr zu ihrer Prüfsumme.
+Attachments,Anlagen
+Attachments cannot be changed once archiving has started.,"Anlagen können nicht mehr geändert werden, sobald die Archivierung begonnen hat."
+Business Document Attachment,Anlage zum Geschäftsdokument
+Each attachment needs file_name and content_base64.,Jede Anlage braucht file_name und content_base64.
+"Further files of this document, e.g. annexes or the XML of an e-invoice. The main file above is used for the preview and the title.","Weitere Dateien dieses Dokuments, z. B. Anlagen oder das XML einer E-Rechnung. Die Hauptdatei oben dient für Vorschau und Titel."
+One document with attachments,Ein Dokument mit Anlagen
+Proof of Service,Leistungsnachweis
+Structured Invoice (XML),Strukturierte Rechnung (XML)
+"The first file is the main file, the others become its attachments.","Die erste Datei ist die Hauptdatei, die anderen werden ihre Anlagen."
+Unknown attachment role {0}.,Unbekannte Rolle der Anlage {0}.
+Version ID,Versions-ID
 Open,Offen
 Complete,Vollständig
 Unchangeable until {0},Unveränderbar bis {0}
@@ -319,7 +338,7 @@ Legal hold is released on every copy.,Legal Hold ist auf allen Kopien aufgehoben
 Legal hold is set on every copy.,Legal Hold ist auf allen Kopien gesetzt.
 "Name of the site config key that holds the admin access key, e.g. s3_archive_admin_access_key.","Name des Site-Config-Schlüssels mit dem Admin-Zugangsschlüssel, z. B. s3_archive_admin_access_key."
 "Name of the site config key that holds the admin secret key, e.g. s3_archive_admin_secret_key.","Name des Site-Config-Schlüssels mit dem Admin-Geheimschlüssel, z. B. s3_archive_admin_secret_key."
-Not all sidecar versions are recorded: {0},Nicht alle Versionen der Zusatzdateien sind erfasst: {0}
+Not all object versions are recorded: {0},Nicht alle Objektversionen sind erfasst: {0}
 Off,Aus
 On,An
 Only archived documents can be put on legal hold.,Nur archivierte Dokumente können unter Legal Hold gestellt werden.
@@ -369,3 +388,4 @@ Every archived object gets a legal hold at upload. It can only be released with 
 Set when archiving.,Beim Festschreiben gesetzt.
 {0} must be true or false.,{0} muss true oder false sein.
 Only under legal hold,Nur unter Legal Hold
+Add attachment,Anlage hinzufügen

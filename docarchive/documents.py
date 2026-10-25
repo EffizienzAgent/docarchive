@@ -122,23 +122,27 @@ def create_documents(
 	document_type: str | None = None,
 	document_date: str | None = None,
 	documents=None,
+	combine: bool = False,
 ) -> list:
 	frappe.has_permission(counterparty_type, "read", counterparty, throw=True)
+	rows = upload_rows(file_urls, document_type, document_date, documents)
+	groups = [rows] if frappe.utils.cint(combine) and rows else [[row] for row in rows]
 	return [
 		frappe.get_doc(
 			{
 				"doctype": DOCUMENT,
 				"counterparty_type": counterparty_type,
 				"counterparty": counterparty,
-				"document_type": row.get("document_type"),
-				"document_date": row.get("document_date"),
-				"title": row.get("title"),
-				"file": row["file_url"],
+				"document_type": main.get("document_type"),
+				"document_date": main.get("document_date"),
+				"title": main.get("title"),
+				"file": main["file_url"],
+				"attachments": [{"file": row["file_url"], "title": row.get("title")} for row in rest],
 			}
 		)
 		.insert()
 		.name
-		for row in upload_rows(file_urls, document_type, document_date, documents)
+		for main, *rest in groups
 	]
 
 

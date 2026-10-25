@@ -45,6 +45,7 @@ STRIPPED = (
 	"archive_error",
 	"legal_hold_reason",
 )
+EINVOICE_FIELDS = ("einvoice_data", "einvoice_needs_review", "einvoice_checked")
 
 
 def is_contract(doc) -> bool:
@@ -77,9 +78,9 @@ def refusal(doc, early=False) -> str | None:
 		return _("A retention extension is still running.")
 	if is_contract(doc) and not doc.contract_end_date:
 		return _("The contract has no end date yet.")
-	missing = sorted({key for copy in copies for key in run.missing_sidecars(copy, doc)})
+	missing = sorted({key for copy in copies for key in run.missing_versions(copy, doc)})
 	if missing:
-		return _("Not all sidecar versions are recorded: {0}").format(", ".join(missing))
+		return _("Not all object versions are recorded: {0}").format(", ".join(missing))
 	if early:
 		if any(copy.lock_mode != "GOVERNANCE" for copy in copies):
 			return _("Copies locked in COMPLIANCE mode cannot be deleted early.")
@@ -240,6 +241,10 @@ def deletion_error(error, early) -> str:
 	return run.safe_error(error)
 
 
+def empty(doc, field):
+	return 0 if doc.meta.get_field(field).fieldtype in ("Check", "Int") else None
+
+
 def strip(doc, user, until, early, reason):
 	frappe.db.savepoint(run.SAVEPOINT)
 	deleted_at = now_datetime()
@@ -265,6 +270,7 @@ def strip(doc, user, until, early, reason):
 			**dict.fromkeys(STRIPPED),
 			"archive_size": 0,
 			**dict.fromkeys(("_comments", "_assign", "_liked_by", "_user_tags")),
+			**{field: empty(doc, field) for field in EINVOICE_FIELDS if doc.meta.has_field(field)},
 			"title": doc.name,
 			"archive_status": run.DELETED,
 			"deleted_at": deleted_at,
@@ -286,6 +292,9 @@ def strip(doc, user, until, early, reason):
 		"File", filters={"attached_to_doctype": DOCUMENT, "attached_to_name": doc.name}, pluck="name"
 	):
 		frappe.delete_doc("File", file, ignore_permissions=True)
+	frappe.db.delete("Business Document Attachment", {"parenttype": DOCUMENT, "parent": doc.name})
+	for row in doc.get("attachment_copies") or []:
+		frappe.db.set_value("Archive Attachment Copy", row.name, "object_key", None)
 	for entry in doc.legal_hold_log:
 		frappe.db.set_value("Legal Hold Log Entry", entry.name, {"reason": None, "result": None})
 	frappe.db.delete("Version", {"ref_doctype": DOCUMENT, "docname": doc.name})

@@ -28,6 +28,8 @@
   "counterparty",
   "own_company",
   "hold_on_archive",
+  "attachments_section",
+  "attachments",
   "source_section",
   "source_system",
   "source_account",
@@ -58,6 +60,7 @@
   "deleted_at",
   "archive_copies_section",
   "archive_copies",
+  "attachment_copies",
   "archive_meta",
   "retention_extensions",
   "extension_until",
@@ -156,6 +159,21 @@
    "in_standard_filter": 1,
    "read_only_depends_on": "eval:doc.archive_started_at",
    "description": "Empty: set by the host app or taken from the Archive Settings."
+  },
+  {
+   "fieldname": "attachments_section",
+   "fieldtype": "Section Break",
+   "label": "Attachments",
+   "collapsible": 1,
+   "collapsible_depends_on": "eval:doc.attachments && doc.attachments.length"
+  },
+  {
+   "fieldname": "attachments",
+   "fieldtype": "Table",
+   "label": "Attachments",
+   "options": "Business Document Attachment",
+   "read_only_depends_on": "eval:doc.archive_started_at",
+   "description": "Further files of this document, e.g. annexes or the XML of an e-invoice. The main file above is used for the preview and the title."
   },
   {
    "fieldname": "source_section",
@@ -331,6 +349,13 @@
    "fieldtype": "Table",
    "label": "Archive Copies",
    "options": "Archive Copy",
+   "read_only": 1
+  },
+  {
+   "fieldname": "attachment_copies",
+   "fieldtype": "Table",
+   "label": "Attachment Copies",
+   "options": "Archive Attachment Copy",
    "read_only": 1
   },
   {

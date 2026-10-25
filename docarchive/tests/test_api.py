@@ -129,6 +129,8 @@ class TestUploadApi(IntegrationTestCase):
 		other_type = make_document_type()
 		third = self.upload(data, document_type=other_type.slug)
 		self.assertEqual(third["status"], "created")
+		fourth = self.upload(data, source_system="Mail")
+		self.assertEqual(fourth["status"], "created")
 
 	def test_same_source_key_returns_existing(self):
 		key = unique("billing:invoice")

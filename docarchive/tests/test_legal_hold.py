@@ -191,3 +191,33 @@ class TestReleaseLegalHold(HoldTestCase):
 		frappe.set_user("Administrator")
 		self.configure(["primary", "secondary"], admin=False)
 		self.assertEqual(legal_hold.access(), {"set": False, "admin": False})
+
+
+class TestHoldsWithAttachments(HoldTestCase):
+	def attached(self, **fields):
+		from docarchive.tests.test_attachments import attachment
+
+		doc = self.archived(attachments=[attachment()], **fields)
+		self.assertEqual(len(self.recorded(doc)), 6)
+		self.assertIn(doc.attachments[0].object_key, {key for _bucket, key, _version in self.recorded(doc)})
+		return doc
+
+	def test_set_and_release_cover_attachment_versions(self):
+		doc = self.attached()
+		self.assertEqual(legal_hold.set_legal_hold([doc.name], "x")[doc.name]["status"], "held")
+		doc.reload()
+		on = sorted((b, k, v) for b, k, v, status, _by in self.holds() if status == "ON")
+		self.assertEqual(on, self.recorded(doc))
+		self.assertEqual(
+			legal_hold.release_legal_hold([doc.name], "y", confirm=1)[doc.name]["status"], "released"
+		)
+		off = sorted((b, k, v) for b, k, v, status, _by in self.holds() if status == "OFF")
+		self.assertEqual(off, self.recorded(doc))
+
+	def test_hold_when_archiving_covers_attachments(self):
+		self.configure(["primary", "secondary"], admin=False)
+		doc = self.attached(hold_on_archive=1)
+		puts = [put for fake in self.fakes.values() for put in fake.puts()]
+		self.assertEqual(len(puts), 6)
+		self.assertEqual({put["ObjectLockLegalHoldStatus"] for put in puts}, {"ON"})
+		self.assertEqual({copy.legal_hold for copy in doc.archive_copies}, {"On"})

@@ -1,0 +1,41 @@
+{
+ "docstatus": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Document Archive",
+ "custom": 0,
+ "name": "Archive Attachment Copy",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "field_order": [
+  "target_name",
+  "object_key",
+  "version_id"
+ ],
+ "fields": [
+  {
+   "fieldname": "target_name",
+   "fieldtype": "Data",
+   "label": "Target Name",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "object_key",
+   "fieldtype": "Data",
+   "label": "Object Key",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "version_id",
+   "fieldtype": "Data",
+   "label": "Version ID",
+   "in_list_view": 1,
+   "read_only": 1
+  }
+ ],
+ "permissions": []
+}

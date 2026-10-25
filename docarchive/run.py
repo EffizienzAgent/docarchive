@@ -10,6 +10,8 @@ from frappe.utils import add_to_date, get_system_timezone, now_datetime
 
 from docarchive import assignment, content, keys, retention, settings, storage_targets, store
 from docarchive.document_archive.doctype.business_document.business_document import (
+	extension,
+	file_name,
 	missing_fields,
 	own_file,
 )
@@ -18,6 +20,7 @@ DOCUMENT = "Business Document"
 SAVEPOINT = "docarchive_save"
 LOCK_SECONDS = 1800
 PENDING, ARCHIVED, FAILED, SKIPPED = "Pending", "Archived", "Failed", "Skipped"
+MAIN_ROLE = "Main"
 DELETED = "Deleted"
 CANDIDATE_FIELDS = [
 	"name",
@@ -183,11 +186,12 @@ def archive_locked(name, targets) -> str:
 	frappe.db.savepoint(SAVEPOINT)
 	try:
 		data, ext = file_bytes(doc)
+		attachments = attachment_bytes(doc)
 		if not doc.archive_started_at:
-			start(doc, data, ext, targets)
+			start(doc, data, ext, targets, attachments)
 		add_copies(doc, targets)
 		for target in targets:
-			copy_to(doc, target, data)
+			copy_to(doc, target, data, attachments)
 	except Exception as e:
 		frappe.db.rollback(save_point=SAVEPOINT)
 		doc = frappe.get_doc(DOCUMENT, name)
@@ -206,7 +210,21 @@ def file_bytes(doc):
 	return data, ext
 
 
-def start(doc, data, ext, targets):
+def attachment_bytes(doc) -> list[bytes]:
+	result = []
+	for row in doc.get("attachments") or []:
+		data = content.read_bytes(row.file)
+		if data is None:
+			raise ArchiveError(_("Attachment {0} of document {1} cannot be read.").format(row.idx, doc.name))
+		if content.sha256(data) != row.content_sha256:
+			raise ArchiveError(
+				_("Attachment {0} of document {1} no longer matches its checksum.").format(row.idx, doc.name)
+			)
+		result.append(data)
+	return result
+
+
+def start(doc, data, ext, targets, attachments=()):
 	years = retention.years_for(doc)
 	until = retention.retain_until(doc, years)
 	for target in targets:
@@ -215,6 +233,11 @@ def start(doc, data, ext, targets):
 	doc.retain_until = retention.to_db(until)
 	doc.object_key = object_key(doc, ext)
 	doc.meta_key = keys.meta_key(doc.object_key)
+	for number, (row, body) in enumerate(zip(doc.get("attachments") or [], attachments, strict=True), 1):
+		row.object_key = keys.attachment_key(
+			doc.object_key, number, row.title or row.role, extension(row.file)
+		)
+		row.archive_size = len(body)
 	doc.archive_sha256 = content.sha256(data)
 	doc.archive_size = len(data)
 	doc.archive_meta = json.dumps(meta(doc, years, until), sort_keys=True)
@@ -252,18 +275,59 @@ def copy_for(doc, target):
 	return next(copy for copy in doc.archive_copies if copy.target_name == target.name)
 
 
-def copy_to(doc, target, data):
+def mime_type(key):
+	return mimetypes.guess_type(key)[0] or "application/octet-stream"
+
+
+def attachment_copy(doc, target_name, key):
+	for row in doc.get("attachment_copies") or []:
+		if (row.target_name, row.object_key) == (target_name, key):
+			return row
+	return doc.append("attachment_copies", {"target_name": target_name, "object_key": key})
+
+
+def copy_to(doc, target, data, attachments=()):
 	copy = copy_for(doc, target)
 	if copy.status == ARCHIVED:
 		return
 	try:
 		until = retention.from_db(copy.retain_until)
-		mime = mimetypes.guess_type(doc.object_key)[0] or "application/octet-stream"
 		meta_body = keys.meta_bytes(doc.archive_meta, copy.lock_mode)
 		copy.meta_sha256 = copy.meta_sha256 or content.sha256(meta_body)
 		hold = bool(doc.legal_hold)
-		ensure(target, doc.object_key, data, until, mime, copy, "object_version_id", hold)
-		ensure(target, doc.meta_key, meta_body, until, "application/json", copy, "meta_version_id", hold)
+		ensure(
+			target,
+			doc.object_key,
+			data,
+			until,
+			mime_type(doc.object_key),
+			copy,
+			"object_version_id",
+			legal_hold=hold,
+		)
+		for row, body in zip(doc.get("attachments") or [], attachments, strict=True):
+			record = attachment_copy(doc, target.name, row.object_key)
+			ensure(
+				target,
+				row.object_key,
+				body,
+				until,
+				mime_type(row.object_key),
+				copy,
+				"version_id",
+				record,
+				hold,
+			)
+		ensure(
+			target,
+			doc.meta_key,
+			meta_body,
+			until,
+			"application/json",
+			copy,
+			"meta_version_id",
+			legal_hold=hold,
+		)
 		copy.update({"status": ARCHIVED, "archived_at": now_datetime(), "error": None})
 		if hold:
 			copy.legal_hold = "On"
@@ -274,19 +338,16 @@ def copy_to(doc, target, data):
 
 def copy_objects(copy, doc) -> list[tuple[str, str]]:
 	sidecars = json.loads(copy.sidecar_versions or "{}")
-	return [
-		(doc.object_key, copy.object_version_id),
-		(doc.meta_key, copy.meta_version_id),
-		*sorted(sidecars.items()),
-	]
+	return [(key, version) for key, version, _sha in locked_objects(doc, copy)] + sorted(sidecars.items())
 
 
-def missing_sidecars(copy, doc) -> list[str]:
+def missing_versions(copy, doc) -> list[str]:
 	recorded = json.loads(copy.sidecar_versions or "{}")
 	expected = (
 		f"{doc.object_key}.meta.{index}.json" for index in range(2, (doc.retention_extensions or 0) + 2)
 	)
-	return [key for key in expected if key not in recorded]
+	unrecorded = [key for key, version in copy_objects(copy, doc) if not version]
+	return unrecorded + [key for key in expected if key not in recorded]
 
 
 def hold_copy(doc, copy, target) -> str | None:
@@ -301,8 +362,9 @@ def hold_copy(doc, copy, target) -> str | None:
 	return None
 
 
-def ensure(target, key, body, until, content_type, copy, version_field, legal_hold=False):
-	mode, known_version = copy.lock_mode, copy.get(version_field)
+def ensure(target, key, body, until, content_type, copy, version_field, record=None, legal_hold=False):
+	record = record or copy
+	mode, known_version = copy.lock_mode, record.get(version_field)
 	sha256 = content.sha256(body)
 	store.validate_lock(mode, until)
 	existing = store.head(target, key, known_version)
@@ -314,7 +376,7 @@ def ensure(target, key, body, until, content_type, copy, version_field, legal_ho
 		raise ArchiveError(_("{0} already exists with different content.").format(key))
 	else:
 		version_id = known_version or existing.get("VersionId")
-	copy.set(version_field, version_id)
+	record.set(version_field, version_id)
 	store.verify(target, key, version_id, sha256, mode, until, legal_hold)
 
 
@@ -401,6 +463,24 @@ def counterparty(doc):
 def meta(doc, years, until) -> dict:
 	file = own_file(doc) if doc.file else None
 	document_type = frappe.get_cached_doc("Business Document Type", doc.document_type)
+	main = {
+		"key": doc.object_key,
+		"name": file.file_name if file else (doc.file or "").rsplit("/", 1)[-1] or None,
+		"role": MAIN_ROLE,
+		"sha256": doc.archive_sha256,
+		"size": doc.archive_size,
+	}
+	attachments = [
+		{
+			"key": row.object_key,
+			"name": file_name(doc, row.file),
+			"role": row.role,
+			"title": row.title,
+			"sha256": row.content_sha256,
+			"size": row.archive_size,
+		}
+		for row in doc.get("attachments") or []
+	]
 	return {
 		"format": "docarchive-meta/1",
 		"archived_at": utc_iso(frappe.utils.get_datetime(doc.archive_started_at)),
@@ -415,12 +495,8 @@ def meta(doc, years, until) -> dict:
 			"own_company": doc.own_company,
 		},
 		"counterparty": counterparty(doc),
-		"file": {
-			"key": doc.object_key,
-			"name": file.file_name if file else (doc.file or "").rsplit("/", 1)[-1] or None,
-			"sha256": doc.archive_sha256,
-			"size": doc.archive_size,
-		},
+		"file": main,
+		"files": [main, *attachments],
 		"source": {
 			"system": doc.source_system,
 			"account": doc.source_account,
@@ -530,17 +606,31 @@ def prepare_extension(doc, until, note=None):
 	save(doc)
 
 
+def locked_objects(doc, copy) -> list[tuple[str, str, str]]:
+	versions = {
+		row.object_key: row.version_id
+		for row in doc.get("attachment_copies") or []
+		if row.target_name == copy.target_name
+	}
+	return [
+		(doc.object_key, copy.object_version_id, doc.archive_sha256),
+		*(
+			(row.object_key, versions.get(row.object_key), row.content_sha256)
+			for row in doc.get("attachments") or []
+		),
+		(doc.meta_key, copy.meta_version_id, copy.meta_sha256),
+	]
+
+
 def extend_copy(doc, copy, target, until):
 	copy.sidecar_version_id = None
-	objects = (
-		(doc.object_key, copy.object_version_id, doc.archive_sha256),
-		(doc.meta_key, copy.meta_version_id, copy.meta_sha256),
-	)
-	for key, version, sha256 in objects:
+	for key, version, sha256 in locked_objects(doc, copy):
 		store.extend_locked(target, key, version, sha256, copy.lock_mode, until)
 	body = keys.meta_bytes(doc.extension_meta, copy.lock_mode)
 	hold = bool(doc.legal_hold)
-	ensure(target, sidecar_key(doc), body, until, "application/json", copy, "sidecar_version_id", hold)
+	ensure(
+		target, sidecar_key(doc), body, until, "application/json", copy, "sidecar_version_id", legal_hold=hold
+	)
 	sidecars = json.loads(copy.sidecar_versions or "{}")
 	sidecars[sidecar_key(doc)] = copy.sidecar_version_id
 	copy.sidecar_versions = json.dumps(sidecars, sort_keys=True)
@@ -625,8 +715,9 @@ def sync_document(name, target):
 	frappe.db.savepoint(SAVEPOINT)
 	doc = frappe.get_doc(DOCUMENT, name)
 	copy = next(c for c in doc.archive_copies if c.target_name == target.name)
-	objects = ((doc.object_key, copy.object_version_id), (doc.meta_key, copy.meta_version_id))
-	modes = {store.retention(target, key, version)["mode"] for key, version in objects}
+	modes = {
+		store.retention(target, key, version)["mode"] for key, version, _sha in locked_objects(doc, copy)
+	}
 	if modes == {copy.lock_mode}:
 		return None
 	if modes == {"COMPLIANCE"} and copy.lock_mode == "GOVERNANCE":

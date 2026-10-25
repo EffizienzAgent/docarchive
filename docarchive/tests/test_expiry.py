@@ -350,3 +350,30 @@ class TestReviewFixes(ExpiryTestCase):
 				with self.assertRaises(frappe.PermissionError):
 					call()
 		self.assertEqual(self.deletes(), [])
+
+
+class TestDeletionWithAttachments(ExpiryTestCase):
+	def test_deletes_attachment_versions_and_strips_their_rows_and_files(self):
+		from docarchive.tests.test_attachments import attachment
+
+		doc = self.expire(self.archived(attachments=[attachment()]))
+		recorded = self.recorded(doc)
+		self.assertEqual(len(recorded), 6)
+		attachment_file = doc.attachments[0].file
+		self.assertEqual(self.delete([doc.name]), {doc.name: "Deleted"})
+		self.assertEqual(self.deletes(), [(*row, False) for row in recorded])
+		doc.reload()
+		self.assertEqual(doc.attachments, [])
+		self.assertFalse(frappe.db.exists("File", {"file_url": attachment_file}))
+		self.assertEqual({row.object_key for row in doc.attachment_copies}, {None})
+		self.assertTrue(all(row.version_id for row in doc.attachment_copies))
+
+	def test_unrecorded_attachment_version_blocks_deletion(self):
+		from docarchive.tests.test_attachments import attachment
+
+		doc = self.expire(self.archived(attachments=[attachment()]))
+		frappe.db.set_value("Archive Attachment Copy", doc.attachment_copies[0].name, "version_id", None)
+		[row] = expiry.preview([doc.name])
+		self.assertIn("Not all object versions are recorded", row["reason"])
+		self.assertEqual(expiry.run_job([doc.name], "Administrator"), {doc.name: "Skipped"})
+		self.assertEqual(self.deletes(), [])
