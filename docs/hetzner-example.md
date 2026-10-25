@@ -140,5 +140,6 @@ Repeat regularly on the real buckets:
    ```
 
 5. Verify with `head-object` on both buckets.
+6. Run `bench --site <site> docarchive-sync-mode --target <name>` for each target, so the site records the new mode.
 
 **COMPLIANCE cannot be undone.** No key, not even the admin key, can delete a COMPLIANCE object or shorten its retention before the date. A delete without a version ID only adds a delete marker. Never use COMPLIANCE in the test bucket.

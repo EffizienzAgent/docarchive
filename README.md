@@ -180,11 +180,17 @@ The `.meta.json` holds the document data (ID, title, type, date, number, contrac
 
 `retain_until` is January 2, 00:00 UTC, of the year after (start year + retention years). The extra day covers the end of the year in every time zone. The start is the document date, or the contract end date for types whose retention counts from it. Years come from the Archive Settings rule for own company and type, else the type's default. Without either, the document fails with an error and nothing is written.
 
+### Contract end and retention extension
+
+After archiving starts, the contract end date can be set for the first time or moved later, never earlier. Each night, after archiving, the run recomputes `retain_until` for archived documents whose type counts from the contract end, using the retention years stored at archive start. When the new date is later than a copy's date, it extends the retention of the file and its `.meta.json` on that target with `PutObjectRetention`, in the same mode. Each copy records its own date. The document's `retain_until` moves only when every enabled target has the new date, and a failed target is retried the next night. A shorter date never leads to a request.
+
+Each extension also writes a sidecar `<key>.meta.<n>.json` (n = 2, 3, …) to every target, locked with the new date and the copy's mode. It holds the metadata with the new retention, the extension (previous and new date, contract end, time) and the earlier extensions, so the newest sidecar carries the whole trail. The original `.meta.json` is never rewritten: Object Lock versions are immutable, and a second version under the same key would hide the first. The sidecar content is frozen before the first write, so a retry writes the same bytes, and a contract end that moves again in the meantime leads to the next extension. Before extending, the run checks the SHA-256 of the exact object version it recorded.
+
 ### Object Lock writes
 
-`docarchive.store.put_locked(target, key, body, mode, retain_until)` is the only code that calls `PutObject`. Before any request it checks that the mode is `GOVERNANCE` or `COMPLIANCE` and that `retain_until` is a timezone-aware datetime in the future. It always sends `ObjectLockMode`, `ObjectLockRetainUntilDate`, `ContentMD5` and the SHA-256 as object metadata. A test parses the app's source: each S3 client method may be used in exactly one function of `store.py`, copy, multipart, presigned URL, legal hold and policy calls are banned, `BypassGovernanceRetention` is only allowed in the smoke check, and only `store.py` may import boto3, botocore or `s3storage.client`.
+`docarchive.store.put_locked(target, key, body, mode, retain_until)` is the only code that calls `PutObject`. Before any request it checks that the mode is `GOVERNANCE` or `COMPLIANCE` and that `retain_until` is a timezone-aware datetime in the future. It always sends `ObjectLockMode`, `ObjectLockRetainUntilDate`, `ContentMD5` and the SHA-256 as object metadata. `docarchive.store.extend_locked` is the only code that calls `PutObjectRetention`; see the retention extension above. A test parses the app's source: each S3 client method may be used in exactly one function of `store.py`, copy, multipart, presigned URL, legal hold and policy calls are banned, `BypassGovernanceRetention` is only allowed in the smoke check, and only `store.py` may import boto3, botocore or `s3storage.client`.
 
-The lock mode comes from the storage target and is recorded per copy. Switch a target to COMPLIANCE once your trial is done. New documents then use COMPLIANCE; see [docs/hetzner-example.md](docs/hetzner-example.md) for switching existing objects.
+The lock mode comes from the storage target and is recorded per copy. Switch a target to COMPLIANCE once your trial is done. New documents then use COMPLIANCE. Existing objects are switched outside the app with an admin key (see [docs/hetzner-example.md](docs/hetzner-example.md)). Then run `bench --site <site> docarchive-sync-mode --target <name>`: it reads the retention of both recorded object versions of every archived copy on that target. It only records an upgrade from GOVERNANCE to COMPLIANCE when both objects report COMPLIANCE, never a downgrade. Documents with any other difference are listed as mismatched, errors are listed per document, and the command exits with status 1 if there are any.
 
 ### Archive now
 
@@ -194,8 +200,9 @@ Users who may write a document see **Archive now** on its form when archiving is
 
 ```bash
 bench --site <site> docarchive-run --dry-run   # list what would be archived, write nothing
-bench --site <site> docarchive-run             # archive now (needs Enabled)
+bench --site <site> docarchive-run             # archive now (needs Enabled), exit 1 on failures
 bench --site <site> docarchive-smoke --target primary
+bench --site <site> docarchive-sync-mode --target primary   # after switching objects to COMPLIANCE
 ```
 
 `docarchive-smoke` works without Enabled. It uploads a tiny `_smoke/` object with a 1-day GOVERNANCE lock, reads it back and checks its retention. Then it tries to delete that version with the target's credentials, once normally and once with `BypassGovernanceRetention`. Both must be refused with AccessDenied (or the provider's object-lock error), and a versioned HEAD must still find the object. It exits with status 1 if any check fails. Each run leaves one small object that expires after a day.

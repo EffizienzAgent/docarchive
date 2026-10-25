@@ -183,6 +183,7 @@ Missing before archiving: {0},Fehlt vor dem Archivieren: {0}
 No storage target is configured.,Es ist kein Speicherziel eingerichtet.
 Source Record Type,Art des Quelldatensatzes
 Source Record,Quelldatensatz
+"{0} is locked in mode {1}, not {2}. Run docarchive-sync-mode first.","{0} ist im Modus {1} gesperrt, nicht {2}. Bitte zuerst docarchive-sync-mode ausführen."
 This source_key is already used by another source.,Dieser source_key wird bereits von einer anderen Quelle verwendet.
 Object Version ID,Objektversion
 Meta Version ID,Meta-Version
@@ -197,5 +198,11 @@ Max. Days in the Future,Max. Tage in der Zukunft
 Max. Contract Years,Max. Vertragsjahre
 A document date may be at most this many days after today.,Ein Belegdatum darf höchstens so viele Tage nach heute liegen.
 A contract end date may be at most this many years after the document date.,Ein Vertragsende darf höchstens so viele Jahre nach dem Belegdatum liegen.
+Meta SHA-256,Meta SHA-256
+Latest Sidecar Version ID,Version der letzten Verlängerungs-Metadaten
+Retention Extensions,Verlängerungen der Aufbewahrung
+Pending Extension Until (UTC),Ausstehende Verlängerung bis (UTC)
+Retention History,Verlauf der Aufbewahrung
+Pending Extension Metadata,Metadaten der ausstehenden Verlängerung
 Skipped,Übersprungen
 The recorded version of {0} is missing on the storage target.,Die gespeicherte Version von {0} fehlt auf dem Speicherziel.

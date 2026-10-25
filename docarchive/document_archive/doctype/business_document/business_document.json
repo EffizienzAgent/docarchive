@@ -55,7 +55,11 @@
   "retain_until",
   "archive_copies_section",
   "archive_copies",
-  "archive_meta"
+  "archive_meta",
+  "retention_extensions",
+  "extension_until",
+  "retention_history",
+  "extension_meta"
  ],
  "fields": [
   {
@@ -327,6 +331,33 @@
    "label": "Archive Metadata",
    "options": "JSON",
    "read_only": 1
+  },
+  {
+   "fieldname": "retention_extensions",
+   "fieldtype": "Int",
+   "label": "Retention Extensions",
+   "read_only": 1
+  },
+  {
+   "fieldname": "extension_until",
+   "fieldtype": "Datetime",
+   "label": "Pending Extension Until (UTC)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "retention_history",
+   "fieldtype": "Code",
+   "label": "Retention History",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "extension_meta",
+   "fieldtype": "Code",
+   "label": "Pending Extension Metadata",
+   "options": "JSON",
+   "read_only": 1,
+   "hidden": 1
   }
  ],
  "permissions": [

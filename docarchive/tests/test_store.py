@@ -17,10 +17,10 @@ CLIENT_CALLS = {
 	"get_object": "read_sha256",
 	"get_object_retention": "retention",
 	"delete_object": "smoke_delete",
+	"put_object_retention": "extend_locked",
 	"BypassGovernanceRetention": "smoke_delete",
 }
 BANNED = {
-	"put_object_retention",
 	"delete_objects",
 	"copy_object",
 	"upload_file",

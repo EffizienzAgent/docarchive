@@ -17,7 +17,9 @@
   "archived_at",
   "error",
   "object_version_id",
-  "meta_version_id"
+  "meta_version_id",
+  "meta_sha256",
+  "sidecar_version_id"
  ],
  "fields": [
   {
@@ -72,6 +74,18 @@
    "fieldname": "meta_version_id",
    "fieldtype": "Data",
    "label": "Meta Version ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "meta_sha256",
+   "fieldtype": "Data",
+   "label": "Meta SHA-256",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sidecar_version_id",
+   "fieldtype": "Data",
+   "label": "Latest Sidecar Version ID",
    "read_only": 1
   }
  ],
