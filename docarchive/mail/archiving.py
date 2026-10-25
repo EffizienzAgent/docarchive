@@ -440,7 +440,7 @@ def _create(original, own_company, check_permission=False, raw=None):
 	doc.insert(ignore_permissions=True)
 	doc.file = _attach(original, doc.name, raw)
 	doc.save(ignore_permissions=True)
-	threads.join(doc.name)
+	threads.join_safely(doc.name)
 	return doc.name
 
 

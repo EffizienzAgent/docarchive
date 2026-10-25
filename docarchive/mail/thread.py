@@ -18,6 +18,8 @@ FIELDS = [
 
 MAX_MAILS = 200
 MAX_ROUNDS = 10
+MAX_ROOTS = 5
+SAVEPOINT = "docarchive_thread_join"
 
 
 @frappe.whitelist()
@@ -74,6 +76,22 @@ def _collect(start):
 	return list(found.values())[:MAX_MAILS]
 
 
+def join_safely(name: str) -> str | None:
+	for attempt in range(2):
+		try:
+			frappe.db.savepoint(SAVEPOINT)
+			return join(name)
+		except frappe.QueryDeadlockError:
+			frappe.db.rollback(save_point=SAVEPOINT)
+			if attempt:
+				frappe.log_error(title="docarchive thread join")
+		except Exception:
+			frappe.db.rollback(save_point=SAVEPOINT)
+			frappe.log_error(title="docarchive thread join")
+			return None
+	return None
+
+
 def join(name: str) -> str | None:
 	doc = frappe.db.get_value(
 		DOCUMENT,
@@ -107,6 +125,12 @@ def join(name: str) -> str | None:
 	root = (related[0].thread_root or related[0].thread_key) if related else doc.thread_root or doc.thread_key
 	frappe.db.set_value(DOCUMENT, name, "thread_root", root, update_modified=False)
 	others = list(roots - {root})
+	if len(roots) > MAX_ROOTS:
+		frappe.log_error(
+			title="docarchive thread join",
+			message=f"{name} refers to {len(roots)} conversations; only joined to the first.",
+		)
+		others = []
 	if others:
 		for field in ("thread_root", "thread_key"):
 			filters = {"own_company": doc.own_company, field: ("in", others)}

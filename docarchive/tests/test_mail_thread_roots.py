@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import frappe
 
 from docarchive.mail import archiving, thread
@@ -86,6 +88,31 @@ class TestThreadRoots(MailArchivingTestCase):
 		doc.thread_root = "forged"
 		doc.save(ignore_permissions=True)
 		self.assertEqual(frappe.db.get_value(DOCUMENT, doc.name, "thread_root"), "merged")
+
+	def test_join_merges_at_most_five_roots(self):
+		ids = [message_id() for _ in range(6)]
+		docs = [
+			archiving.archive(self.mail("2026-03-10 09:00:00", mime(text=i, Message_ID=f"<{i}>")))
+			for i in ids
+		]
+		with patch("frappe.log_error") as log_error:
+			last = archiving.archive(
+				self.mail("2026-03-12 09:00:00", mime(text="x", References=references(*ids)))
+			)
+		log_error.assert_called_once()
+		self.assertEqual(len(self.roots(*docs)), 6)
+		self.assertIn(frappe.db.get_value(DOCUMENT, last, "thread_root"), self.roots(*docs))
+
+	def test_join_retries_a_deadlock_and_never_fails_archiving(self):
+		with patch.object(thread, "join", side_effect=[frappe.QueryDeadlockError, "root"]) as join:
+			archiving.archive(self.capture())
+		self.assertEqual(join.call_count, 2)
+		with (
+			patch.object(thread, "join", side_effect=RuntimeError("boom")),
+			patch("frappe.log_error") as log_error,
+		):
+			self.assertTrue(archiving.archive(self.capture()))
+		log_error.assert_called_once()
 
 	def test_other_company_is_not_joined(self):
 		from docarchive.tests.factories import make_own_company
