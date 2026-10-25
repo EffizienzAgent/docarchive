@@ -9,15 +9,27 @@ frappe.ui.form.on("Communication", {
 
 function docarchive_communication(frm, status) {
 	if (status.archived) {
-		if (!status.business_document) return frm.dashboard.set_headline(__("This e-mail is archived."));
-		const href = frappe.utils.get_form_link("Business Document", status.business_document);
-		const link = `<a href="${frappe.utils.escape_html(href)}">${frappe.utils.escape_html(status.business_document)}</a>`;
-		frm.dashboard.set_headline(__("Archived as {0}", [link]));
-		return;
+		docarchive.set_archive_headline(frm, status);
+		return docarchive_thread_pending(frm);
 	}
 	if (!frappe.model.can_create("Business Document")) return;
 	const $button = frm.add_custom_button(__("Archive"), () =>
 		docarchive.archive_communications([frm.doc.name], () => frm.reload_doc()),
 	);
 	if (status.reason) $button.prop("disabled", true).attr("title", status.reason);
+}
+
+function docarchive_thread_pending(frm) {
+	if (!frappe.model.can_create("Business Document")) return;
+	frappe
+		.xcall("docarchive.mail.thread_pending", { communication: frm.doc.name })
+		.then(({ count, items }) => {
+			if (!count) return;
+			frm.add_custom_button(__("Archive {0} more e-mails of this thread", [count]), () =>
+				docarchive.archive_communications(
+					items.map((item) => item.communication),
+					() => frm.reload_doc(),
+				),
+			);
+		});
 }

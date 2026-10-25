@@ -318,14 +318,6 @@ function fileCard(file) {
 		preview(file));
 }
 
-function sentAt(doc) {
-	return doc.correspondence_at || doc.date || "";
-}
-
-function threadOf(doc) {
-	if (!doc.thread_key) return [];
-	return docs.filter((other) => other.thread_key === doc.thread_key).sort((a, b) => sentAt(a).localeCompare(sentAt(b)) || a.id.localeCompare(b.id));
-}
 
 function show(id, file = 0) {
 	const doc = byId.get(id);
@@ -338,7 +330,7 @@ function show(id, file = 0) {
 	const index = rows.findIndex((row) => row.id === id);
 	const step = (delta) => rows[index + delta] && show(rows[index + delta].id);
 	const detail = document.getElementById("detail");
-	const thread = threadOf(doc);
+	const thread = ViewerCore.threadOf(doc, docs);
 	const title = doc.title || doc.id;
 	detail.replaceChildren(...[
 		h("div", { class: "nav" },

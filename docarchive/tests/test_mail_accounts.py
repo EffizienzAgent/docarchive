@@ -27,7 +27,7 @@ class TestMailAccounts(IntegrationTestCase):
 	def test_row_defaults(self):
 		make_mail_settings(self.account, mode="Manual")
 		row = accounts.account_settings(self.account)
-		self.assertEqual((row.keep_days, row.archive_internal, row.contacts_as_counterparty), (90, 0, 0))
+		self.assertEqual((row.keep_days, row.archive_internal, row.contacts_as_counterparty), (14, 0, 0))
 
 	def test_internal_domains_default_to_account_domain(self):
 		make_mail_settings(self.account, mode="Manual")

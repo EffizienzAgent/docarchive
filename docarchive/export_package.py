@@ -12,10 +12,10 @@ from pathlib import Path, PurePosixPath
 
 import frappe
 from frappe import _
-from frappe.utils import get_datetime, now_datetime
+from frappe.utils import cint, get_datetime, now_datetime
 from frappe.utils.html_utils import sanitize_html
 
-from docarchive import content, retention, run, settings
+from docarchive import content, counterparty, retention, run, settings
 
 VIEWER = Path(__file__).with_name("export_viewer.html")
 VIEWER_CORE = Path(__file__).with_name("export_viewer_core.js")
@@ -64,6 +64,7 @@ CSV_FIELDS = (
 	"sha256",
 	"size",
 	"verified",
+	"counterparty_label",
 )
 
 
@@ -264,7 +265,7 @@ def document_row(doc, copy, entry) -> dict:
 		"number": document.get("number"),
 		"contract_end_date": document.get("contract_end_date"),
 		"own_company": document.get("own_company") or doc.own_company,
-		"counterparty": meta.get("counterparty"),
+		"counterparty": counterparty_of(doc, meta),
 		"source": meta.get("source"),
 		"retention": meta.get("retention"),
 		"history": history,
@@ -278,12 +279,29 @@ def document_row(doc, copy, entry) -> dict:
 	}
 
 
+def counterparty_of(doc, meta) -> dict | None:
+	party = meta.get("counterparty") or {}
+	doctype = party.get("doctype") or doc.get("counterparty_type")
+	party_id = party.get("id") or doc.get("counterparty")
+	if not party_id:
+		return None
+	name = party.get("name") or doc.get("counterparty_name") or counterparty.title_of(doctype, party_id)
+	return {
+		"doctype": doctype,
+		"id": party_id,
+		"name": name,
+		"type_label": _(doctype) if doctype else None,
+		"label": f"{name} ({party_id})" if name and name != party_id else party_id,
+	}
+
+
 def thread_fields(doc, meta) -> dict:
 	correspondence = meta.get("correspondence") or {}
 	mail = correspondence.get("mail") or {}
 	at = doc.get("correspondence_at")
 	return {
 		"thread_key": correspondence.get("thread_key") or doc.get("thread_key"),
+		"thread_root": doc.get("thread_root"),
 		"message_id": mail.get("message_id") or doc.get("mail_message_id"),
 		"in_reply_to": mail.get("in_reply_to") or doc.get("mail_in_reply_to"),
 		"references": mail.get("references") or (doc.get("mail_references") or "").split(),
@@ -304,6 +322,7 @@ def manifest_csv(documents) -> str:
 					"counterparty_type": party.get("doctype"),
 					"counterparty": party.get("id"),
 					"counterparty_name": party.get("name"),
+					"counterparty_label": party.get("label"),
 					"file_role": file.get("role"),
 					"file_name": file.get("name"),
 					"key": file.get("key"),
@@ -429,8 +448,13 @@ def brand() -> dict:
 		"name": (config.get("export_brand_name") or "").strip() or None,
 		"logo": logo_uri(config.get("export_brand_logo")),
 		"color": color if valid_color(color) else None,
-		"credit": bool(config.get("export_show_credit")),
+		"credit": _credit(),
 	}
+
+
+def _credit() -> bool:
+	value = settings.stored("export_show_credit")
+	return value in (None, "") or bool(cint(value))
 
 
 def viewer(data, brand=None) -> str:

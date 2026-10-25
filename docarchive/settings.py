@@ -3,6 +3,14 @@ from frappe import _
 from frappe.utils import getdate
 
 DEFAULT_EXTENSIONS = "pdf\npng\njpg\njpeg\ntif\ntiff\nxml"
+SETTINGS = "Archive Settings"
+DEFAULTS = {
+	"export_show_credit": 1,
+	"overdue_hours": 48,
+	"export_expiry_days": 7,
+	"mail_write_timeout": 30,
+	"follow_threads": 1,
+}
 
 
 def allowed_extensions() -> set[str]:
@@ -12,6 +20,24 @@ def allowed_extensions() -> set[str]:
 
 def get():
 	return frappe.get_cached_doc("Archive Settings")
+
+
+def stored(field):
+	rows = frappe.db.sql("select value from tabSingles where doctype=%s and field=%s", (SETTINGS, field))
+	return rows[0][0] if rows else None
+
+
+def fill_defaults():
+	values = dict(
+		frappe.db.sql(
+			"select field, value from tabSingles where doctype=%s and field in %s",
+			(SETTINGS, tuple(DEFAULTS)),
+		)
+	)
+	for field, default in DEFAULTS.items():
+		if values.get(field) in (None, ""):
+			frappe.db.set_single_value(SETTINGS, field, default, update_modified=False)
+	frappe.clear_document_cache(SETTINGS)
 
 
 def enabled_company(name):

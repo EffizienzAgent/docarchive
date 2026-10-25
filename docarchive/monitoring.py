@@ -24,7 +24,8 @@ def alert_link(condition, problem=None) -> str:
 
 
 def overdue_hours() -> int:
-	return cint(settings.get().get("overdue_hours")) or DEFAULT_OVERDUE_HOURS
+	value = settings.get().get("overdue_hours")
+	return DEFAULT_OVERDUE_HOURS if value in (None, "") else cint(value)
 
 
 def target_names() -> set[str]:
@@ -169,9 +170,10 @@ class State:
 
 	def overdue(self) -> list[dict]:
 		"""Eligible documents that are not archived and waited longer than the overdue hours."""
-		if not self.eligible:
+		hours = overdue_hours()
+		if not self.eligible or not hours:
 			return []
-		cutoff = add_to_date(now_datetime(), hours=-overdue_hours())
+		cutoff = add_to_date(now_datetime(), hours=-hours)
 		rows = frappe.get_all(
 			DOCUMENT,
 			filters={"name": ("in", self.eligible), "archive_status": ("!=", run.FAILED)},

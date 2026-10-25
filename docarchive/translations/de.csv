@@ -584,6 +584,7 @@ Documents marked for legal hold cannot be discarded.,"Dokumente, die für einen 
 Archive e-mails,E-Mails archivieren
 Archive it anyway?,Trotzdem archivieren?
 Archived as {0},Archiviert als {0}
+Filed as {0},Abgelegt als {0}
 Checksum does not match,Prüfsumme stimmt nicht überein
 Checksum matches,Prüfsumme stimmt überein
 Discard,Verwerfen
@@ -598,7 +599,7 @@ Not in Frappe,Nicht in Frappe
 Only a Business Document can be the source of an upload.,Nur ein Geschäftsdokument kann die Quelle eines Uploads sein.
 Origin: {0},Herkunft: {0}
 Original available,Original vorhanden
-Archived in another thread,In einem anderen Thread archiviert
+Archived in another thread,In einem anderen Verlauf abgelegt
 Read from the mailbox by mailsync,Von mailsync aus dem Postfach gelesen
 Rebuilt by Frappe after sending,Von Frappe nach dem Versand neu aufgebaut
 Received by Frappe,Von Frappe empfangen
@@ -617,7 +618,7 @@ Upload e-mails,E-Mails hochladen
 Uploaded as .eml by a person,Von einer Person als .eml hochgeladen
 Received through Frappe Mail,Über Frappe Mail empfangen
 "Of {0} selected e-mails, {1} look automated and {2} only have internal addresses. Archive them anyway?",Von {0} ausgewählten E-Mails sehen {1} automatisch erzeugt aus und {2} haben nur interne Adressen. Trotzdem archivieren?
-This e-mail is archived.,Diese E-Mail ist archiviert.
+This e-mail is filed.,Diese E-Mail ist abgelegt.
 Another export is still running. Please wait until it is done.,"Ein anderer Export läuft noch. Bitte warten, bis er fertig ist."
 The export was interrupted.,Der Export wurde unterbrochen.
 "This file type is only offered as a download, so it cannot run in the viewer.","Dieser Dateityp wird nur zum Herunterladen angeboten, damit er im Viewer nicht ausgeführt werden kann."
@@ -679,9 +680,30 @@ never,nie
 {0} documents have fewer copies than enabled storage targets,{0} Dokumente haben weniger Kopien als aktive Speicherziele
 Extending the retention failed for {0} documents,Die Verlängerung der Aufbewahrung ist für {0} Dokumente fehlgeschlagen
 "Archiving is enabled, but no storage target is configured","Die Archivierung ist aktiviert, aber kein Speicherziel ist eingerichtet"
-Archive Admins are notified about documents that are ready but not archived after this many hours. Empty or 0: 48 hours.,"Archiv-Admins werden benachrichtigt, wenn bereite Dokumente nach so vielen Stunden noch nicht archiviert sind. Leer oder 0: 48 Stunden."
+Archive Admins are notified about documents that are ready but not archived after this many hours. 0 turns the check off.,"Archiv-Admins werden benachrichtigt, wenn bereite Dokumente nach so vielen Stunden noch nicht archiviert sind. 0 schaltet die Prüfung ab."
 Rebuilt At (UTC),Neu erstellt am (UTC)
 Raw Fallback,Rohdaten (Ersatzspeicher)
 Storing the original of this e-mail failed. It will be retried automatically.,Das Original dieser E-Mail konnte nicht gespeichert werden. Es wird automatisch erneut versucht.
 {0} e-mail originals could not be stored,{0} E-Mail-Originale konnten nicht gespeichert werden
 Document Archive,Dokumentenarchiv
+Ignored,Ignoriert
+Ignored By,Ignoriert von
+Ignored At,Ignoriert am
+This e-mail original does not exist or you cannot read its e-mail.,Dieses E-Mail-Original existiert nicht oder Sie dürfen seine E-Mail nicht lesen.
+You cannot read this e-mail.,Sie dürfen diese E-Mail nicht lesen.
+Audit Pending,Protokollierung ausstehend
+Mail Write Budget (Seconds),Zeitbudget für E-Mail-Speicherung (Sekunden)
+"If writing a received mail to the file storage takes longer than this, the next mails are kept in the database for 5 minutes instead. 1 to 30.","Dauert das Speichern einer empfangenen E-Mail im Dateispeicher länger, werden die folgenden E-Mails 5 Minuten lang stattdessen in der Datenbank gehalten. 1 bis 30."
+The mail write budget must be between 1 and 30 seconds.,Das Zeitbudget für die E-Mail-Speicherung muss zwischen 1 und 30 Sekunden liegen.
+Only documents and mail originals can be shown.,Nur Dokumente und E-Mail-Originale können angezeigt werden.
+Ignore,Ignorieren
+Unignore,Nicht mehr ignorieren
+Counterparty Name,Name der Gegenpartei
+Thread Root,Gesprächsursprung
+"Filed as {0}, not yet archived","Abgelegt als {0}, noch nicht festgeschrieben"
+Archived as {0} until {1},Archiviert als {0} bis {1}
+Archiving {0} failed,Festschreiben von {0} fehlgeschlagen
+File later e-mails of a filed thread automatically,Folge-E-Mails eines abgelegten Verlaufs automatisch ablegen
+Archive Reason,Ablagegrund
+Filed automatically because the thread is filed,"Automatisch abgelegt, weil der Verlauf abgelegt ist"
+Archive {0} more e-mails of this thread,{0} weitere E-Mails dieses Verlaufs ablegen

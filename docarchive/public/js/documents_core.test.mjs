@@ -129,3 +129,11 @@ test("deleted documents are hidden unless asked for", () => {
 	assert.deepEqual(names(filter_documents(docs, { show_deleted: true })), ["c", "b", "a", "d"]);
 	assert.equal(document_state({ archive_status: "Deleted" }), "deleted");
 });
+
+test("counterparty shows as name and id", async () => {
+	const { party_label } = await import("./documents_core.js");
+	assert.equal(party_label("Acme GmbH", "CUST-1"), "Acme GmbH · CUST-1");
+	assert.equal(party_label("CUST-1", "CUST-1"), "CUST-1");
+	assert.equal(party_label(null, "CUST-1"), "CUST-1");
+	assert.equal(party_label("Acme", null), "Acme");
+});

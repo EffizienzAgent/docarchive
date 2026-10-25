@@ -14,6 +14,9 @@ DOCUMENT = "Business Document"
 
 
 class TestCleanup(MailArchivingTestCase):
+	def configure(self, **fields):
+		super().configure(**{"keep_days": 90, **fields})
+
 	def aged(self, doctype, name, days=91):
 		frappe.db.set_value(doctype, name, "creation", add_days(now_datetime(), -days), update_modified=False)
 

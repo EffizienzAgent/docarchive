@@ -10,6 +10,7 @@ Add these to your app's `hooks.py`:
 | `docarchive_counterparty_doctypes` | – | List of doctypes allowed as counterparty. Empty: any doctype that is not a child table or a single. |
 | `docarchive_read_file` | `file_url` | Return the raw bytes of a file, or `None`. docarchive reads files in s3storage's bucket and in the site folder itself; use this hook for files stored elsewhere. Hooks are asked first and the last hook wins. |
 | `docarchive_einvoice_extractors` | `data`, `file_name` | Return e-invoice metadata or `None`. See [E-invoices](e-invoices.md#e-invoices). |
+| `docarchive_mail_changed` | `action` (`"archived"`, `"ignored"` or `"unignored"`), `originals` (Mail Original names), `communications` (their Communications), as keyword arguments | Called after the transaction commits when mails were archived (manually, in bulk or automatically), ignored or unignored, e.g. to refresh a badge. Exceptions are logged ("docarchive mail changed hook") and never break the action. Not called when nothing changed (e.g. for mails that were already archived), and not for newly captured mails or mails deleted by the cleanup, so load counts fresh when a page opens. Because it runs after the commit, only publish realtime events or enqueue jobs in it; anything it writes is not committed. |
 
 Own company resolution: an explicit value, then the `docarchive_assign` hooks, then the successor company by date, then the default company from Archive Settings. While a document has no date, the successor and default companies are not applied: own company stays empty and is listed as missing until the date is set.
 
@@ -38,6 +39,52 @@ Rows the user can act on have a checkbox. A bar above the list then offers "Arch
 ## Triage
 
 `docarchive.triage(names, { start, on_close })` opens a dialog that walks through documents one by one: the fields and what is still missing on the left, and the file on the right (PDF and images inline, other types as a download). "Save and next" (Ctrl/Cmd+Enter), "Skip", "Back" and Alt+Left/Right move through the list; Esc closes. "Open document" opens the form in a new tab, so the dialog and unsaved input stay; documents that are not archived yet can be deleted from the dialog. Each save is a normal `doc.save()` with permission checks, and validation errors stay inline. `docarchive.triage_all()` opens it on every document that still needs work. The Business Document list has "Assign" for selected documents and "Assign all".
+
+## Mails to archive
+
+For accounts in Manual mode (see [Correspondence](correspondence.md#mails-to-archive)):
+
+- `docarchive.mail.candidates(limit=50, expiring_within_days=None)` (whitelisted): stored, unarchived, not ignored originals, ordered by `expires_at` ascending. Each item has `name` (Mail Original), `message_id`, `subject`, `from`, `to`, `date`, `account`, `communication`, `expires_at` (creation + the account's keep days, a naive datetime in the system time zone like all Frappe datetimes; the daily cleanup deletes the original on its first run after that), `automated`, `internal` and `suggested_counterparty` (`{counterparty_type, counterparty, title}` if archiving would set exactly one counterparty, else `None`; nothing is written). `limit` is capped at 200. `expiring_within_days` keeps only items expiring within that many days from now (already expired ones that the cleanup has not removed yet included).
+- `docarchive.mail.count_candidates(expiring_within_days=None)` (whitelisted): the number of those items, for badges.
+- `docarchive.mail.ignore(names)` / `docarchive.mail.unignore(names)` (whitelisted, POST): Mail Original names; return `{"ignored": [...], "skipped": [...], "refused": {name: reason}}` (`unignored` for `unignore`): the originals that changed, those that already were (un)ignored, and those that do not exist or whose mail the user cannot read.
+- `docarchive.mail.archive_originals(names)` (whitelisted, POST): archives Mail Originals, returns `{"archived": {original: business_document}, "refused": {original: reason}}`. Already archived originals are listed under `archived` with their document. `docarchive.mail.archiving.archive_communications(names)` does the same keyed by Communication. In the desk, `docarchive.archive_communications(communications, on_done)` asks first when mails look automated or internal.
+
+- `docarchive.mail.thread_pending(communication)` (whitelisted): the stored, unfiled, not ignored originals of the same conversation, within the user's mail scope: `{count, items: [{name, communication, subject, date}]}`. Archive them with `docarchive.archive_communications`.
+- `docarchive.mail.archiving.status(communication)` also returns `archive_status` and `retain_until` of the mail's document when the user can read it. `docarchive.set_archive_headline(frm, {business_document, archive_status, retain_until})` shows them as the form headline: filed but not yet archived (orange), archived until a date in UTC (green), archiving failed (red), deleted (gray), or plain text when the document is not readable.
+
+All of them, and `warnings`, need create permission on Business Document (without it `candidates` is empty, the count is 0 and the actions raise a PermissionError) and use one scope for "my mails": the Communications the user can list (Frappe's rules: System Manager and Super Email User see all, others the mails of the email accounts in their user settings). This does not depend on the document a Communication references. The bulk actions refuse mails outside that scope one by one under `refused` and go on with the rest. `docarchive.mail.archiving.status(communication)` (the Communication form's Archive button) uses the same scope and reports a mail outside it as not available, with the reason.
+
+A "Heute" section with the mails expiring within 3 days:
+
+```python
+# hooks.py
+docarchive_mail_changed = ["myapp.today.mail_changed"]
+```
+
+```python
+# myapp/today.py
+import frappe
+from docarchive import mail
+
+
+@frappe.whitelist()
+def mails_to_archive():
+	return {"count": mail.count_candidates(expiring_within_days=3), "items": mail.candidates(10, 3)}
+
+
+def mail_changed(action, originals, communications):
+	frappe.publish_realtime("myapp_today_changed", {"action": action}, after_commit=False)
+```
+
+```js
+frappe.xcall("myapp.today.mails_to_archive").then(({ count, items }) => {
+	// show `count` as a badge; per item: subject, from, expires_at, suggested_counterparty?.title,
+	// a hint if item.automated or item.internal, and buttons:
+	//   docarchive.archive_communications([item.communication], refresh)
+	//   frappe.xcall("docarchive.mail.ignore", { names: [item.name] }).then(refresh)
+});
+frappe.realtime.on("myapp_today_changed", refresh);
+```
 
 ## Dashboard helpers
 

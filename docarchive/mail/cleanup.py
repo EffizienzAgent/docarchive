@@ -12,6 +12,7 @@ DEFAULT_KEEP_DAYS = 90
 
 def run() -> dict:
 	result = {"originals": 0, "documents": 0}
+	_log_automatic()
 	keep = {row.email_account: row.keep_days for row in frappe.get_single("Archive Settings").mail_accounts}
 	for account in _accounts():
 		cutoff = add_days(now_datetime(), -(keep.get(account) or DEFAULT_KEEP_DAYS))
@@ -22,6 +23,15 @@ def run() -> dict:
 	except Exception:
 		frappe.log_error(title="docarchive mail cleanup")
 	return result
+
+
+def _log_automatic():
+	try:
+		frappe.db.savepoint(SAVEPOINT)
+		archiving.log_automatic()
+	except Exception:
+		frappe.db.rollback(save_point=SAVEPOINT)
+		frappe.log_error(title="docarchive mail audit")
 
 
 def _accounts():

@@ -37,3 +37,61 @@ test("attachment file names lose markup characters", () => {
 	assert.equal(safe_file_name("Rechnung 2026.pdf"), "Rechnung 2026.pdf");
 	assert.equal(safe_file_name("<>"), "attachment");
 });
+
+test("archive results are escaped line by line", async () => {
+	const { archive_lines } = await import("./mail_core.js");
+	const lines = archive_lines(
+		{ archived: { "<a>": "DOC-1" }, refused: { "MO-2": "<b>no</b>" } },
+		{ link: (doc) => `[${doc}]`, archived_as: (link) => `Archived as ${link}` },
+	);
+	assert.deepEqual(lines, ["&lt;a&gt;: Archived as [DOC-1]", "MO-2: &lt;b&gt;no&lt;/b&gt;"]);
+});
+
+test("mail original actions follow its status", async () => {
+	const { original_actions } = await import("./mail_core.js");
+	const base = { archived: false, viewable: true, ignored: false, reason: null };
+	assert.deepEqual(original_actions(base, true), {
+		headline: null,
+		show: true,
+		archive: true,
+		archive_reason: null,
+		ignore: true,
+		unignore: false,
+	});
+	assert.equal(original_actions({ ...base, ignored: true }, true).unignore, true);
+	assert.equal(original_actions(base, false).archive, false);
+	const pending = original_actions({ ...base, viewable: false, reason: "still being stored" }, true);
+	assert.deepEqual([pending.show, pending.archive_reason, pending.ignore], [false, "still being stored", false]);
+	assert.deepEqual(original_actions({ archived: true, business_document: "DOC-1", viewable: true }, true), {
+		headline: true,
+		show: true,
+	});
+});
+
+test("the archive headline follows the document's status", async () => {
+	const { archive_headline } = await import("./mail_core.js");
+	const t = (text, args = []) => args.reduce((out, arg, index) => out.replace(`{${index}}`, arg), text);
+	const helpers = { link: (name) => `<a>${name}</a>`, date: (value) => `on ${value}`, t };
+	assert.deepEqual(archive_headline({ business_document: "DOC-1", archive_status: "Pending" }, helpers), {
+		html: "Filed as <a>DOC-1</a>, not yet archived",
+		color: "orange",
+	});
+	assert.deepEqual(
+		archive_headline({ business_document: "DOC-1", archive_status: "Archived", retain_until: "<2036>" }, helpers),
+		{ html: "Archived as <a>DOC-1</a> until on &lt;2036&gt;", color: "green" },
+	);
+	assert.equal(archive_headline({ business_document: "DOC-1", archive_status: "Failed" }, helpers).color, "red");
+	assert.equal(archive_headline({ business_document: "DOC-1" }, helpers).color, "orange");
+	assert.deepEqual(archive_headline({ business_document: "DOC-1", archive_status: "Archived" }, helpers), {
+		html: "Archived as <a>DOC-1</a>",
+		color: "green",
+	});
+	assert.deepEqual(archive_headline({ business_document: "DOC-1", archive_status: "Deleted" }, helpers), {
+		html: "<a>DOC-1</a> · Deleted",
+		color: "gray",
+	});
+	assert.deepEqual(archive_headline({ business_document: null }, helpers), {
+		html: "This e-mail is filed.",
+		color: "blue",
+	});
+});

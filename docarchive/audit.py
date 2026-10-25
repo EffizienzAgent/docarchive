@@ -53,6 +53,11 @@ EXPORT_COMPLETED = "export.completed"
 EXPORT_FAILED = "export.failed"
 SETTINGS_CHANGED = "settings.changed"
 DOCUMENT_CHANGED = "document.changed"
+MAIL_ARCHIVED = "mail.archived"
+MAIL_DISCARDED = "mail.discarded"
+MAIL_IGNORED = "mail.ignored"
+MAIL_UNIGNORED = "mail.unignored"
+MAIL_UPLOADED = "mail.uploaded"
 
 
 def utc(value) -> datetime:

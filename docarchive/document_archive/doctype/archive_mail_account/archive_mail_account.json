@@ -61,7 +61,7 @@
    "fieldname": "keep_days",
    "fieldtype": "Int",
    "label": "Keep Unarchived Originals (Days)",
-   "default": "90"
+   "default": "14"
   },
   {
    "fieldname": "own_company",

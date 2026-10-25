@@ -271,6 +271,8 @@ class TestDeskApi(MailArchivingTestCase):
 				"original": False,
 				"archived": False,
 				"business_document": None,
+				"archive_status": None,
+				"retain_until": None,
 				"automated": False,
 				"internal": False,
 				"reason": "No original was captured for this e-mail.",
@@ -283,18 +285,32 @@ class TestDeskApi(MailArchivingTestCase):
 				"original": True,
 				"archived": True,
 				"business_document": name,
+				"archive_status": "Pending",
+				"retain_until": None,
 				"automated": True,
 				"internal": False,
 				"reason": None,
 			},
 		)
 
-	def test_status_needs_read_permission(self):
+	def test_status_outside_the_read_scope_is_not_available(self):
 		comm = self.communication()
+		archiving.archive(self.capture(comm=comm))
 		frappe.set_user(make_outsider(address("outsider")))
 		self.addCleanup(frappe.set_user, "Administrator")
-		with self.assertRaises(frappe.PermissionError):
-			archiving.status(comm.name)
+		self.assertEqual(
+			archiving.status(comm.name),
+			{
+				"original": False,
+				"archived": False,
+				"business_document": None,
+				"archive_status": None,
+				"retain_until": None,
+				"automated": False,
+				"internal": False,
+				"reason": "You cannot read this e-mail.",
+			},
+		)
 
 	def test_status_hides_unreadable_document(self):
 		comm = self.communication()
@@ -322,8 +338,7 @@ class TestDeskApi(MailArchivingTestCase):
 		comm = self.communication()
 		frappe.set_user(make_outsider(address("warnings-outsider")))
 		self.addCleanup(frappe.set_user, "Administrator")
-		with self.assertRaises(frappe.PermissionError):
-			archiving.warnings([comm.name])
+		self.assertEqual(archiving.warnings([comm.name]), {"automated": [], "internal": []})
 
 	def test_archive_communications(self):
 		comm = self.communication()

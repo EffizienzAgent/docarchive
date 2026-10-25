@@ -1,13 +1,14 @@
 import base64
+import time
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 
 import frappe
 from frappe.core.doctype.file.exceptions import MaxFileSizeReachedError
 from frappe.email.doctype.email_queue.email_queue import SendMailContext
-from frappe.utils import convert_utc_to_system_timezone, get_datetime, now_datetime, strip_html
+from frappe.utils import cint, convert_utc_to_system_timezone, get_datetime, now_datetime, strip_html
 
-from docarchive import content
+from docarchive import content, settings
 from docarchive.keys import slug
 from docarchive.mail import accounts, archiving, headers
 
@@ -25,11 +26,13 @@ UPLOAD_ORIGIN = "manual-upload"
 PENDING, STORED, FAILED = "Pending", "Stored", "Failed"
 MAX_ATTEMPTS = 5
 JOB = "docarchive.mail.originals.store"
+JOB_TIMEOUT = 1500
 ERROR_LENGTH = 500
 REBUILD_WINDOW = timedelta(hours=1)
 FALLBACK_LIMIT = 10 * 1024 * 1024
 PAUSE_KEY = "docarchive:mail-file-writes-paused"
 PAUSE_SECONDS = 300
+DEFAULT_WRITE_BUDGET = MAX_WRITE_BUDGET = 30
 
 
 class Unavailable(Exception):
@@ -121,7 +124,8 @@ def enqueue(name: str) -> None:
 	try:
 		frappe.enqueue(
 			JOB,
-			queue="long",
+			queue="default",
+			timeout=JOB_TIMEOUT,
 			job_id=f"docarchive-mail-original-{name}",
 			deduplicate=True,
 			original=name,
@@ -332,12 +336,15 @@ def _write(original, raw) -> str | None:
 		messages = len(frappe.local.message_log)
 		try:
 			frappe.db.savepoint(WRITE_SAVEPOINT)
+			started = time.monotonic()
 			file_doc = new_file(original, raw, _message_id(original))
 			try:
 				_link(original, file_doc.file_url)
 			except Exception:
 				_discard(file_doc)
 				raise
+			if time.monotonic() - started > write_budget():
+				_pause()
 			return "file"
 		except MaxFileSizeReachedError as error:
 			fail(WRITE_SAVEPOINT)
@@ -384,6 +391,11 @@ def _failed(original, message):
 	except Exception:
 		fail()
 	return None
+
+
+def write_budget() -> int:
+	value = settings.get().get("mail_write_timeout")
+	return min(cint(value) or DEFAULT_WRITE_BUDGET, MAX_WRITE_BUDGET)
 
 
 def _paused():

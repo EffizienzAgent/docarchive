@@ -1,10 +1,25 @@
 import frappe
 from frappe import _
 
+TITLE_LENGTH = 140
+
 
 @frappe.whitelist()
 def doctypes() -> list[str]:
 	return list(dict.fromkeys(frappe.get_hooks("docarchive_counterparty_doctypes")))
+
+
+def title_of(doctype, name) -> str | None:
+	if not (doctype and name):
+		return None
+	try:
+		field = frappe.get_meta(doctype).get_title_field()
+		row = frappe.db.get_value(doctype, name, ["name", field], as_dict=True)
+	except Exception:
+		return None
+	if not row:
+		return None
+	return (row.get(field) or row.name)[:TITLE_LENGTH]
 
 
 def validate(doc):

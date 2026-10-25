@@ -41,3 +41,5 @@ s3storage_before_object_write = ["docarchive.guards.protect_object"]
 # docarchive_counterparty_doctypes: doctypes allowed as counterparty (empty: any).
 # docarchive_read_file: callables returning the raw bytes of a file URL, or None.
 # docarchive_einvoice_extractors: callables (data, file_name) returning e-invoice metadata, or None.
+# docarchive_mail_changed: callables (action, originals, communications) called after commit when mails are
+#   archived, ignored or unignored.

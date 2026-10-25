@@ -35,7 +35,11 @@
   "mail_at",
   "automated",
   "internal",
-  "business_document"
+  "business_document",
+  "ignored",
+  "ignored_by",
+  "ignored_at",
+  "audit_pending"
  ],
  "fields": [
   {
@@ -209,7 +213,35 @@
    "fieldtype": "Link",
    "label": "Business Document",
    "read_only": 1,
-   "options": "Business Document"
+   "options": "Business Document",
+   "search_index": 1
+  },
+  {
+   "fieldname": "ignored",
+   "fieldtype": "Check",
+   "label": "Ignored",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ignored_by",
+   "fieldtype": "Link",
+   "label": "Ignored By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ignored_at",
+   "fieldtype": "Datetime",
+   "label": "Ignored At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "audit_pending",
+   "fieldtype": "Data",
+   "label": "Audit Pending",
+   "read_only": 1,
+   "hidden": 1,
+   "search_index": 1
   }
  ],
  "permissions": [

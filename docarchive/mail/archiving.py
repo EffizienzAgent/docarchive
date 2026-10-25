@@ -2,13 +2,17 @@ import frappe
 from frappe import _
 from frappe.utils import get_datetime, getdate
 
-from docarchive import content, counterparty, settings
+from docarchive import audit, content, counterparty, settings
 from docarchive.document_types import CORRESPONDENCE, INTERNAL_CORRESPONDENCE
-from docarchive.mail import accounts, headers
+from docarchive.mail import access, accounts, events, headers
+from docarchive.mail import thread as threads
 
 DOCUMENT = "Business Document"
 ORIGINAL = "Mail Original"
 COMMUNICATION = "Communication"
+MANUAL, AUTOMATIC, THREAD = "Manual", "Automatic", "Thread"
+FOLLOW_SAVEPOINT = "docarchive_mail_follow"
+FOLLOW_JOB = "docarchive.mail.archiving.follow_up_job"
 DIRECTIONS = ("Incoming", "Outgoing")
 SAVEPOINT = "docarchive_mail_archive"
 SEND_NOTE = "Copies to other recipients differ only in tracking and unsubscribe links."
@@ -19,17 +23,23 @@ EMAIL_LENGTH = 140
 def archive(
 	original_name: str, own_company: str | None = None, check_permission: bool = False, raw=None
 ) -> str:
+	return archive_with_outcome(original_name, own_company, check_permission, raw)[0]
+
+
+def archive_with_outcome(original_name, own_company=None, check_permission=False, raw=None, reason=MANUAL):
 	original = frappe.get_doc(ORIGINAL, original_name)
 	if original.business_document:
-		return original.business_document
-	reason = refusal(original_name)
-	if reason:
-		frappe.throw(reason)
+		return original.business_document, "skipped"
+	refused = refusal(original_name)
+	if refused:
+		frappe.throw(refused)
 	row = accounts.account_row(original.email_account) or frappe._dict()
 	own_company = settings.own_company_for(original.mail_at, own_company or row.own_company)
-	name = _existing(original, own_company) or _create(original, own_company, check_permission, raw)
+	name, outcome = _existing(original, own_company), "linked"
+	if not name:
+		name, outcome = _create(original, own_company, check_permission, raw, reason), "created"
 	original.db_set("business_document", name, update_modified=False)
-	return name
+	return name, outcome
 
 
 def refusal(original_name: str | None) -> str | None:
@@ -47,17 +57,87 @@ def refusal(original_name: str | None) -> str | None:
 
 def auto_archive(original_name: str, raw=None) -> str | None:
 	original = frappe.db.get_value(
-		ORIGINAL, original_name, ["email_account", "automated", "internal"], as_dict=True
+		ORIGINAL, original_name, ["email_account", "automated", "internal", "communication"], as_dict=True
 	)
 	row = accounts.account_settings(original.email_account)
-	if (
-		not row
-		or row.mode != "Automatic"
-		or original.automated
-		or (original.internal and not row.archive_internal)
-	):
+	if not row:
 		return None
-	return archive(original_name, raw=raw)
+	if row.mode == "Automatic" and not original.automated and (row.archive_internal or not original.internal):
+		reason = AUTOMATIC
+	elif threads.follows(original_name, row):
+		reason = THREAD
+	else:
+		return None
+	return _archive_unattended(original_name, reason, original.communication, raw)
+
+
+def _archive_unattended(original_name, reason, communication, raw=None):
+	name, outcome = archive_with_outcome(original_name, raw=raw, reason=reason)
+	if outcome != "skipped":
+		pending = f"{reason.lower()}:{outcome}"
+		frappe.db.set_value(ORIGINAL, original_name, "audit_pending", pending, update_modified=False)
+		events.changed("archived", [original_name], [communication])
+	return name
+
+
+def schedule_follow_up(documents) -> None:
+	for document in dict.fromkeys(documents):
+		frappe.enqueue(
+			FOLLOW_JOB,
+			queue="default",
+			job_id=f"docarchive-follow-thread-{document}",
+			deduplicate=True,
+			enqueue_after_commit=True,
+			document=document,
+		)
+
+
+def follow_up_job(document: str) -> None:
+	follow_up([document])
+	frappe.db.commit()
+
+
+def follow_up(documents) -> int:
+	done = 0
+	for document in dict.fromkeys(documents):
+		messages = len(frappe.local.message_log)
+		try:
+			frappe.db.savepoint(FOLLOW_SAVEPOINT)
+			for original, _row in threads.later_originals(document):
+				if done >= threads.MAX_MAILS:
+					return done
+				communication = frappe.db.get_value(ORIGINAL, original, "communication")
+				_archive_unattended(original, THREAD, communication)
+				done += 1
+		except Exception:
+			frappe.db.rollback(save_point=FOLLOW_SAVEPOINT)
+			del frappe.local.message_log[messages:]
+			frappe.log_error(title="docarchive follow thread")
+	return done
+
+
+def log_automatic() -> int:
+	rows = frappe.get_all(
+		ORIGINAL,
+		filters={"audit_pending": ("is", "set")},
+		fields=["name", "business_document", "audit_pending"],
+		order_by="creation asc",
+	)
+	by_how = {}
+	for row in rows:
+		how, _sep, outcome = row.audit_pending.rpartition(":")
+		by_how.setdefault(how or "automatic", []).append((DOCUMENT, row.business_document, outcome))
+	for how, documents in by_how.items():
+		audit_log(audit.MAIL_ARCHIVED, documents, _counted({"how": how}, documents, {}))
+	if rows:
+		frappe.db.set_value(
+			ORIGINAL,
+			{"name": ("in", [row.name for row in rows])},
+			"audit_pending",
+			None,
+			update_modified=False,
+		)
+	return len(rows)
 
 
 def remove_document(name: str) -> None:
@@ -125,7 +205,17 @@ def assign(doc):
 
 @frappe.whitelist()
 def status(communication: str) -> dict:
-	frappe.has_permission(COMMUNICATION, "read", communication, throw=True)
+	if communication not in access.readable([communication]):
+		return {
+			"original": False,
+			"archived": False,
+			"business_document": None,
+			"automated": False,
+			"internal": False,
+			"archive_status": None,
+			"retain_until": None,
+			"reason": _("You cannot read this e-mail."),
+		}
 	original = (
 		frappe.db.get_value(
 			ORIGINAL,
@@ -139,20 +229,24 @@ def status(communication: str) -> dict:
 	return {
 		"original": bool(original.name),
 		"archived": bool(document),
-		"business_document": document
-		if document and frappe.has_permission(DOCUMENT, "read", document)
-		else None,
+		**document_state(document),
 		"automated": bool(original.automated),
 		"internal": bool(original.internal),
 		"reason": refusal(original.name),
 	}
 
 
+def document_state(document) -> dict:
+	if not (document and frappe.has_permission(DOCUMENT, "read", document)):
+		return {"business_document": None, "archive_status": None, "retain_until": None}
+	archive_status, retain_until = frappe.db.get_value(DOCUMENT, document, ["archive_status", "retain_until"])
+	return {"business_document": document, "archive_status": archive_status, "retain_until": retain_until}
+
+
 @frappe.whitelist()
 def warnings(names) -> dict:
-	names = _names(names)
-	for name in names:
-		frappe.has_permission(COMMUNICATION, "read", name, throw=True)
+	allowed = access.readable(_names(names))
+	names = [name for name in _names(names) if name in allowed]
 	rows = frappe.get_all(
 		ORIGINAL,
 		filters={"communication": ("in", names or [""]), "business_document": ("is", "not set")},
@@ -170,24 +264,59 @@ def warnings(names) -> dict:
 def archive_communications(names) -> dict:
 	names = _names(names)
 	frappe.has_permission(DOCUMENT, "create", throw=True)
-	for name in names:
-		frappe.has_permission(COMMUNICATION, "read", name, throw=True)
-	result = {"archived": {}, "refused": {}}
-	for name in names:
-		original = frappe.db.get_value(ORIGINAL, {"communication": name})
+	allowed = access.readable(names)
+	originals = dict(
+		frappe.get_all(
+			ORIGINAL,
+			filters={"communication": ("in", list(allowed) or [""])},
+			fields=["communication", "name"],
+			as_list=True,
+		)
+	)
+	refused = {name: _("You cannot read this e-mail.") for name in names if name not in allowed}
+	return archive_each([(name, originals.get(name), name) for name in names if name in allowed], refused)
+
+
+def archive_each(items, refused=None) -> dict:
+	result = {"archived": {}, "refused": dict(refused or {})}
+	archived, documents = [], []
+	for key, original, communication in items:
 		reason = refusal(original)
 		if reason:
-			result["refused"][name] = reason
+			result["refused"][key] = reason
 			continue
 		messages = len(frappe.local.message_log)
 		try:
 			frappe.db.savepoint(SAVEPOINT)
-			result["archived"][name] = archive(original, check_permission=True)
+			name, outcome = archive_with_outcome(original, check_permission=True)
+			result["archived"][key] = name
+			documents.append((DOCUMENT, name, outcome))
+			if outcome != "skipped":
+				archived.append((original, communication))
 		except (frappe.ValidationError, frappe.PermissionError) as error:
 			frappe.db.rollback(save_point=SAVEPOINT)
 			del frappe.local.message_log[messages:]
-			result["refused"][name] = str(error)
+			result["refused"][key] = str(error)
+	audit_log(audit.MAIL_ARCHIVED, documents, _counted({"how": "manual"}, documents, result["refused"]))
+	events.changed("archived", [o for o, _c in archived], [c for _o, c in archived])
+	schedule_follow_up([name for _doctype, name, outcome in documents if outcome != "skipped"])
 	return result
+
+
+def _counted(details, documents, refused):
+	counts = {}
+	for _doctype, _name, outcome in documents:
+		counts[outcome] = counts.get(outcome, 0) + 1
+	return {
+		**details,
+		"counts": dict(sorted(counts.items())),
+		**({"refused": len(refused)} if refused else {}),
+	}
+
+
+def audit_log(action, documents, details=None):
+	if audit.changes_anything(documents):
+		audit.log(action, details=details, documents=documents)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -231,6 +360,17 @@ def archive_upload(
 		name = archive(original, company, check_permission=True)
 		party = frappe._dict(counterparty_type=counterparty_type, counterparty=counterparty)
 		_complete(name, party if counterparty_type and counterparty else thread, source_doctype, source_name)
+		audit_log(
+			audit.MAIL_UPLOADED,
+			[(DOCUMENT, name, "created")],
+			{"direction": direction, "gap": bool(gap_message_id)},
+		)
+	else:
+		audit_log(
+			audit.MAIL_UPLOADED,
+			[(DOCUMENT, name, "linked")],
+			{"direction": direction, "gap": bool(gap_message_id)},
+		)
 	frappe.delete_doc("File", file_name, ignore_permissions=True)
 	return name
 
@@ -248,6 +388,11 @@ def discard(names) -> dict:
 			continue
 		remove_document(name)
 		result["discarded"].append(name)
+	audit_log(
+		audit.MAIL_DISCARDED,
+		[(DOCUMENT, name, "discarded") for name in result["discarded"]],
+		{"refused": len(result["refused"])} if result["refused"] else {},
+	)
 	return result
 
 
@@ -323,7 +468,7 @@ def _existing_document(message_id, sha256, own_company):
 	return frappe.db.get_value(DOCUMENT, filters)
 
 
-def _create(original, own_company, check_permission=False, raw=None):
+def _create(original, own_company, check_permission=False, raw=None, reason=MANUAL):
 	doc = frappe.get_doc(
 		{
 			"doctype": DOCUMENT,
@@ -340,9 +485,12 @@ def _create(original, own_company, check_permission=False, raw=None):
 			"correspondence_direction": original.direction,
 			"correspondence_at": original.mail_at,
 			"thread_key": original.thread_key,
+			"thread_root": original.thread_key,
+			"filing_reason": reason,
 			"mail_message_id": original.message_id,
 			"mail_in_reply_to": original.in_reply_to,
 			"mail_references": original.mail_references,
+			**(_thread_party(original, own_company) if reason == THREAD else {}),
 		}
 	)
 	if check_permission:
@@ -351,7 +499,21 @@ def _create(original, own_company, check_permission=False, raw=None):
 	doc.insert(ignore_permissions=True)
 	doc.file = _attach(original, doc.name, raw)
 	doc.save(ignore_permissions=True)
+	threads.schedule_join(doc.name)
 	return doc.name
+
+
+def _thread_party(original, own_company) -> dict:
+	party = _party_email(original).lower()
+	ids = [*(original.mail_references or "").split(), original.in_reply_to]
+	documents = threads.thread_documents(own_company, original.thread_key, [i for i in ids if i])
+	earliest = next(
+		(doc for doc in documents if doc.counterparty and (doc.source_party_email or "").lower() == party),
+		None,
+	)
+	if not (party and earliest):
+		return {}
+	return {"counterparty_type": earliest.counterparty_type, "counterparty": earliest.counterparty}
 
 
 def _party_email(original):
@@ -383,41 +545,63 @@ def _attach(original, document, raw=None):
 
 
 def _candidates(doc):
-	row = accounts.account_row(doc.get("source_account")) or frappe._dict(
-		email_account=doc.get("source_account")
-	)
-	domains = accounts.internal_domains(row)
-	found = []
-	for link in frappe.get_all(
-		"Communication Link",
-		filters={"parenttype": COMMUNICATION, "parent": doc.source_name},
-		fields=["link_doctype", "link_name"],
-		order_by="idx",
-	):
-		if link.link_doctype == "Contact":
-			found.extend(_contact_parties(link.link_name, domains, row.contacts_as_counterparty))
-		else:
-			found.append((link.link_doctype, link.link_name))
-	allowed = counterparty.doctypes()
-	return [party for party in dict.fromkeys(found) if not allowed or party[0] in allowed]
+	return parties({doc.source_name: doc.get("source_account")})[doc.source_name]
 
 
-def _contact_parties(contact, domains, contacts_count):
-	if _internal_contact(contact, domains):
-		return []
+def parties(communications: dict) -> dict[str, list[tuple[str, str]]]:
 	links = frappe.get_all(
-		"Dynamic Link",
-		filters={"parenttype": "Contact", "parentfield": "links", "parent": contact},
-		fields=["link_doctype", "link_name"],
+		"Communication Link",
+		filters={"parenttype": COMMUNICATION, "parent": ("in", list(communications) or [""])},
+		fields=["parent", "link_doctype", "link_name"],
 		order_by="idx",
 	)
-	if links:
-		return [(link.link_doctype, link.link_name) for link in links]
-	return [("Contact", contact)] if contacts_count else []
-
-
-def _internal_contact(contact, domains):
-	emails = frappe.get_all(
-		"Contact Email", filters={"parenttype": "Contact", "parent": contact}, pluck="email_id"
+	contacts = list({link.link_name for link in links if link.link_doctype == "Contact"})
+	contact_links = _by_parent(
+		frappe.get_all(
+			"Dynamic Link",
+			filters={"parenttype": "Contact", "parentfield": "links", "parent": ("in", contacts or [""])},
+			fields=["parent", "link_doctype", "link_name"],
+			order_by="idx",
+		)
 	)
-	return bool(emails) and all(email.rpartition("@")[2].lower() in domains for email in emails)
+	emails = _by_parent(
+		frappe.get_all(
+			"Contact Email",
+			filters={"parenttype": "Contact", "parent": ("in", contacts or [""])},
+			fields=["parent", "email_id"],
+		)
+	)
+	rows = {}
+	found = {name: [] for name in communications}
+	for link in links:
+		if link.link_doctype != "Contact":
+			found[link.parent].append((link.link_doctype, link.link_name))
+			continue
+		account = communications[link.parent]
+		if account not in rows:
+			row = accounts.account_row(account) or frappe._dict(email_account=account)
+			rows[account] = (row, accounts.internal_domains(row))
+		row, domains = rows[account]
+		if _internal_contact(emails.get(link.link_name, []), domains):
+			continue
+		links_of_contact = contact_links.get(link.link_name)
+		if links_of_contact:
+			found[link.parent].extend((item.link_doctype, item.link_name) for item in links_of_contact)
+		elif row.contacts_as_counterparty:
+			found[link.parent].append(("Contact", link.link_name))
+	allowed = counterparty.doctypes()
+	return {
+		name: [party for party in dict.fromkeys(items) if not allowed or party[0] in allowed]
+		for name, items in found.items()
+	}
+
+
+def _by_parent(rows):
+	grouped = {}
+	for row in rows:
+		grouped.setdefault(row.parent, []).append(row)
+	return grouped
+
+
+def _internal_contact(emails, domains):
+	return bool(emails) and all(row.email_id.rpartition("@")[2].lower() in domains for row in emails)

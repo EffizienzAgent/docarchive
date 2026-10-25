@@ -53,6 +53,9 @@ def make_settings(rules=(), targets=None, manager_roles=None, **fields):
 			"successor_from_date": None,
 			"max_future_days": 31,
 			"max_contract_years": 50,
+			"overdue_hours": 48,
+			"mail_write_timeout": 30,
+			"follow_threads": 1,
 			**fields,
 		}
 	)
@@ -250,7 +253,9 @@ def resume_mail_writes(case):
 
 
 def store_mail_inline(case):
-	from docarchive.mail import originals
+	from docarchive.mail import archiving, originals, thread
 
 	resume_mail_writes(case)
 	case.enterContext(patch("docarchive.mail.originals.schedule", side_effect=originals.store))
+	case.enterContext(patch("docarchive.mail.thread.schedule_join", side_effect=thread.join))
+	case.enterContext(patch("docarchive.mail.archiving.schedule_follow_up", side_effect=archiving.follow_up))

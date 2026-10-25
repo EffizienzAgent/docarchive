@@ -33,6 +33,7 @@ LOCKED_FIELDS = (
 )
 PROTECTED_FIELDS = (
 	"content_sha256",
+	"filing_reason",
 	"archive_status",
 	"archive_started_at",
 	"archived_at",
@@ -165,6 +166,7 @@ class BusinessDocument(Document):
 		self.restore_protected(before)
 		if before and before.archive_started_at:
 			self.enforce_lock(before)
+			self.counterparty_name = before.counterparty_name
 		else:
 			self.validate_file(before)
 			self.validate_attachments(before)
@@ -176,6 +178,8 @@ class BusinessDocument(Document):
 			self.resolve_own_company()
 			einvoice.record_conflicts(self)
 		counterparty.validate(self)
+		if not (before and before.archive_started_at):
+			self.counterparty_name = counterparty.title_of(self.counterparty_type, self.counterparty)
 		self.validate_dates()
 		self.validate_contract_end()
 		self.set_title(before)
@@ -209,6 +213,7 @@ class BusinessDocument(Document):
 		return super().db_set(fieldname, value, *args, **kwargs)
 
 	def restore_protected(self, before):
+		self.restore_thread_root(before)
 		if self.flags.archive_write:
 			return
 		self.reset_fields(PROTECTED_FIELDS, before)
@@ -219,6 +224,12 @@ class BusinessDocument(Document):
 			prior = old.get(row.name)
 			for field in ATTACHMENT_PROTECTED:
 				row.set(field, prior.get(field) if prior else None)
+
+	def restore_thread_root(self, before):
+		if before:
+			self.thread_root = before.thread_root
+		elif not self.flags.archive_write:
+			self.thread_root = None
 
 	def is_mail(self):
 		return bool(

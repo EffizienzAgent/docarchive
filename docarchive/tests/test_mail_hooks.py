@@ -334,8 +334,10 @@ class TestMailEndToEnd(IntegrationTestCase):
 			return account.get_inbound_mails()[0].process()
 
 	def test_receive_stores_in_job_after_commit(self):
-		def run_now(method, queue, job_id, deduplicate, **kwargs):
-			self.assertEqual((queue, deduplicate), ("long", True))
+		def run_now(method, queue, job_id, deduplicate, timeout=None, **kwargs):
+			if method != originals.JOB:
+				return
+			self.assertEqual((queue, timeout, deduplicate), ("default", 1500, True))
 			frappe.get_attr(method)(**kwargs)
 
 		comm = self.receive()
@@ -346,7 +348,7 @@ class TestMailEndToEnd(IntegrationTestCase):
 		with patch("frappe.enqueue", side_effect=run_now) as enqueue:
 			frappe.db.after_commit.run()
 			frappe.db.after_commit.run()
-		enqueue.assert_called_once()
+		self.assertEqual([call.args[0] for call in enqueue.call_args_list].count(originals.JOB), 1)
 		original = frappe.get_doc("Mail Original", name)
 		self.assertEqual(original.status, "Stored")
 		self.assertEqual(content.read_bytes(original.file), self.raw)

@@ -5,7 +5,9 @@ docarchive.mail_core = core;
 
 const VIEWER = "docarchive.mail.viewer";
 const ARCHIVING = "docarchive.mail.archiving";
+const INBOX = "docarchive.mail.inbox";
 const DOCUMENT = "Business Document";
+const ORIGINAL = "Mail Original";
 const esc = (value) => frappe.utils.escape_html(value ?? "");
 const doc_link = (name) =>
 	`<a href="${esc(frappe.utils.get_form_link(DOCUMENT, name))}">${esc(name)}</a>`;
@@ -60,12 +62,12 @@ function headers_html(mail) {
 			${origin ? `<span class="text-muted small">${esc(__("Origin: {0}", [origin]))}</span>` : ""}</p>`;
 }
 
-function attachment_url(name, index) {
-	const args = new URLSearchParams({ name, index });
+function attachment_url(name, index, doctype = DOCUMENT) {
+	const args = new URLSearchParams({ name, index, doctype });
 	return `/api/method/${VIEWER}.attachment?${args}`;
 }
 
-function attachments_html(name, mail, can_file) {
+function attachments_html(name, mail, can_file, doctype) {
 	if (!mail.attachments.length) return "";
 	const rows = mail.attachments
 		.map(
@@ -73,7 +75,7 @@ function attachments_html(name, mail, can_file) {
 				<td>${esc(file.file_name)}</td>
 				<td class="text-muted docarchive-nowrap">${esc(core.size_label(file.size))}</td>
 				<td class="docarchive-actions">
-					<a class="btn btn-xs btn-default" href="${esc(attachment_url(name, file.index))}"
+					<a class="btn btn-xs btn-default" href="${esc(attachment_url(name, file.index, doctype))}"
 						download="${esc(file.file_name)}">${esc(__("Download"))}</a>
 					${
 						can_file
@@ -109,12 +111,24 @@ function file_attachment(name, source, file) {
 		.catch(() => frappe.msgprint(__("The attachment could not be loaded.")));
 }
 
-docarchive.show_mail = function (name) {
+docarchive.set_archive_headline = function (frm, state) {
+	const { html, color } = core.archive_headline(state, {
+		link: doc_link,
+		date: docarchive.format_retain_until,
+		t: __,
+	});
+	frm.dashboard.set_headline(html, color);
+};
+
+docarchive.show_mail = function (name, { doctype = DOCUMENT } = {}) {
+	const is_document = doctype === DOCUMENT;
 	Promise.all([
-		frappe.xcall(`${VIEWER}.render`, { name }),
-		frappe.db.get_value(DOCUMENT, name, ["counterparty_type", "counterparty", "document_date"]),
+		frappe.xcall(`${VIEWER}.render`, { name, doctype }),
+		is_document
+			? frappe.db.get_value(DOCUMENT, name, ["counterparty_type", "counterparty", "document_date"])
+			: Promise.resolve({ message: {} }),
 	]).then(([mail, { message: source }]) => {
-		const can_file = frappe.model.can_create(DOCUMENT) && source.counterparty;
+		const can_file = is_document && frappe.model.can_create(DOCUMENT) && source.counterparty;
 		const dialog = new frappe.ui.Dialog({
 			title: core.mail_title(mail.headers.subject, __("(no subject)")),
 			size: "extra-large",
@@ -129,7 +143,7 @@ docarchive.show_mail = function (name) {
 			? `<p class="text-muted small">${esc(__("Remote images are blocked."))}
 				<button class="btn btn-xs btn-default" data-action="load-images">${esc(__("Load images"))}</button></p>`
 			: "";
-		$mail.html(`${headers_html(mail)}${images}${body}${attachments_html(name, mail, can_file)}`);
+		$mail.html(`${headers_html(mail)}${images}${body}${attachments_html(name, mail, can_file, doctype)}`);
 		const show = (html, remote) => {
 			$mail.find("iframe")[0].srcdoc = core.mail_document(html, remote);
 		};
@@ -237,32 +251,48 @@ function warning_text(names, { automated, internal }) {
 	);
 }
 
-docarchive.archive_communications = function (names, on_done) {
-	return frappe.xcall(`${ARCHIVING}.warnings`, { names }).then((found) => {
-		if (!found.automated.length && !found.internal.length) return archive_mails(names, on_done);
+function archive_with_warnings(names, on_done, methods) {
+	return frappe.xcall(methods.warnings, { names }).then((found) => {
+		if (!found.automated.length && !found.internal.length) return archive_mails(names, on_done, methods);
 		return new Promise((resolve) =>
-			frappe.confirm(warning_text(names, found), () => resolve(archive_mails(names, on_done))),
+			frappe.confirm(warning_text(names, found), () =>
+				resolve(archive_mails(names, on_done, methods)),
+			),
 		);
+	});
+}
+
+docarchive.archive_communications = function (names, on_done) {
+	return archive_with_warnings(names, on_done, {
+		warnings: `${ARCHIVING}.warnings`,
+		archive: `${ARCHIVING}.archive_communications`,
 	});
 };
 
-function archive_mails(names, on_done) {
+docarchive.archive_originals = function (names, on_done) {
+	return archive_with_warnings(names, on_done, {
+		warnings: `${INBOX}.warnings`,
+		archive: `${INBOX}.archive_originals`,
+	});
+};
+
+function archive_mails(names, on_done, methods) {
 	return frappe
-		.call({ method: `${ARCHIVING}.archive_communications`, args: { names }, freeze: true })
+		.call({ method: methods.archive, args: { names }, freeze: true })
 		.then(({ message: result }) => {
 			const archived = Object.entries(result.archived);
 			const refused = Object.entries(result.refused);
 			if (archived.length === 1 && !refused.length) {
 				frappe.show_alert({
-					message: __("Archived as {0}", [doc_link(archived[0][1])]),
+					message: __("Filed as {0}", [doc_link(archived[0][1])]),
 					indicator: "green",
 				});
 			} else {
 				report(
-					[
-						...archived.map(([comm, doc]) => `${esc(comm)}: ${__("Archived as {0}", [doc_link(doc)])}`),
-						...refused.map(([comm, reason]) => `${esc(comm)}: ${esc(reason)}`),
-					],
+					core.archive_lines(result, {
+						link: doc_link,
+						archived_as: (link) => __("Filed as {0}", [link]),
+					}),
 					__("Archive e-mails"),
 				);
 			}
@@ -363,7 +393,7 @@ docarchive.archive_emls = function (
 			await discard();
 			if (names.length) {
 				frappe.show_alert({
-					message: __("Archived as {0}", [names.map(doc_link).join(", ")]),
+					message: __("Filed as {0}", [names.map(doc_link).join(", ")]),
 					indicator: "green",
 				});
 			}

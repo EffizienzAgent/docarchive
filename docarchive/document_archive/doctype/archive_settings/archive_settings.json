@@ -30,6 +30,8 @@
   "storage_targets",
   "mail_section",
   "mail_accounts",
+  "mail_write_timeout",
+  "follow_threads",
   "export_section",
   "export_part_size_mb",
   "export_expiry_days",
@@ -168,6 +170,20 @@
    "description": "Capture and archive business e-mails of these accounts."
   },
   {
+   "fieldname": "mail_write_timeout",
+   "fieldtype": "Int",
+   "label": "Mail Write Budget (Seconds)",
+   "default": "30",
+   "non_negative": 1,
+   "description": "If writing a received mail to the file storage takes longer than this, the next mails are kept in the database for 5 minutes instead. 1 to 30."
+  },
+  {
+   "fieldname": "follow_threads",
+   "fieldtype": "Check",
+   "label": "File later e-mails of a filed thread automatically",
+   "default": "1"
+  },
+  {
    "fieldname": "export_section",
    "fieldtype": "Section Break",
    "label": "Export"
@@ -242,7 +258,7 @@
    "label": "Overdue After (Hours)",
    "default": "48",
    "non_negative": 1,
-   "description": "Archive Admins are notified about documents that are ready but not archived after this many hours. Empty or 0: 48 hours."
+   "description": "Archive Admins are notified about documents that are ready but not archived after this many hours. 0 turns the check off."
   },
   {
    "fieldname": "last_run_finished_at",
