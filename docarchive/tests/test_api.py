@@ -129,6 +129,8 @@ class TestUploadApi(IntegrationTestCase):
 		other_type = make_document_type()
 		third = self.upload(data, document_type=other_type.slug)
 		self.assertEqual(third["status"], "created")
+		fourth = self.upload(data, source_system="Mail")
+		self.assertEqual(fourth["status"], "created")
 
 	def test_same_source_key_returns_existing(self):
 		key = unique("billing:invoice")
@@ -159,6 +161,17 @@ class TestUploadApi(IntegrationTestCase):
 		for value in (None, "", "15.03.2026", "2026-02-30"):
 			with self.subTest(value=value), self.assertRaises(api.UploadError):
 				self.upload(document_date=value)
+
+	def test_legal_hold_flag(self):
+		for value, expected in (("true", 1), ("1", 1), ("false", 0), (None, 0)):
+			with self.subTest(value=value):
+				result = self.upload(legal_hold=value)
+				self.assertEqual(result["legal_hold"], expected)
+				self.assertEqual(
+					frappe.db.get_value("Business Document", result["name"], "hold_on_archive"), expected
+				)
+		with self.assertRaises(api.UploadError):
+			self.upload(legal_hold="maybe")
 
 	def test_unknown_type_rejected(self):
 		for value in (None, "no-such-type"):

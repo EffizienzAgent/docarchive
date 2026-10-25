@@ -3,23 +3,39 @@ import base64
 import hashlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+import frappe
 from frappe.tests import IntegrationTestCase
 
 from docarchive import store
-from docarchive.tests.fake_s3 import LockedFakeS3
+from docarchive.tests.fake_s3 import AdminClient, LockedFakeS3
 
 APP_DIR = Path(store.__file__).resolve().parent
 CLIENT_CALLS = {
-	"put_object": "put_locked",
-	"head_object": "head",
-	"get_object": "read_sha256",
-	"get_object_retention": "retention",
-	"delete_object": "smoke_delete",
-	"put_object_retention": "extend_locked",
-	"BypassGovernanceRetention": "smoke_delete",
+	("_client", "put_object"): "put_locked",
+	("_client", "head_object"): "head",
+	("_client", "get_object"): "download",
+	("_client", "get_object_retention"): "retention",
+	("_client", "delete_object"): "smoke_delete",
+	("_client", "put_object_retention"): "extend_locked",
+	("_admin_client", "put_object_legal_hold"): "_admin_hold",
+	("_admin_client", "delete_object"): "_admin_delete",
 }
+GUARDED_NAMES = {
+	"BypassGovernanceRetention": {"smoke_delete", "delete_early"},
+	"_admin_delete": {"_admin_delete", "delete_expired", "delete_early"},
+	"_admin_hold": {"_admin_hold", "set_hold", "release_hold"},
+}
+CLIENTS = {client for client, _method in CLIENT_CALLS}
+CLIENT_OWNERS = {
+	"_client": {"__init__", *(f for (client, _m), f in CLIENT_CALLS.items() if client == "_client")},
+	"_admin_client": {"__init__", "has_admin_access", "_admin_hold", "_admin_delete"},
+}
+ALLOWED = dict(GUARDED_NAMES)
+for (_client, method), function in CLIENT_CALLS.items():
+	ALLOWED.setdefault(method, set()).add(function)
 BANNED = {
 	"delete_objects",
 	"copy_object",
@@ -33,7 +49,6 @@ BANNED = {
 	"complete_multipart_upload",
 	"generate_presigned_url",
 	"generate_presigned_post",
-	"put_object_legal_hold",
 	"put_object_lock_configuration",
 	"put_bucket_policy",
 	"put_bucket_versioning",
@@ -47,8 +62,9 @@ def future(days=1):
 	return datetime.now(UTC) + timedelta(days=days)
 
 
-def fake_target(name="primary", fake=None, lock_mode="GOVERNANCE"):
-	return store.Target(name, f"archive-{name}", lock_mode, fake or LockedFakeS3())
+def fake_target(name="primary", fake=None, lock_mode="GOVERNANCE", admin=False):
+	fake = fake or LockedFakeS3()
+	return store.Target(name, f"archive-{name}", lock_mode, fake, AdminClient(fake) if admin else None)
 
 
 def app_modules():
@@ -65,11 +81,24 @@ def names_in(node):
 		yield node.value
 	elif isinstance(node, ast.keyword) and node.arg:
 		yield node.arg
+	elif isinstance(node, ast.Name):
+		yield node.id
 	elif isinstance(node, ast.Import):
 		yield from (f"import:{alias.name}" for alias in node.names)
 	elif isinstance(node, ast.ImportFrom) and node.module:
 		yield f"import:{node.module}"
 		yield from (f"import:{node.module}.{alias.name}" for alias in node.names)
+		yield from (alias.name for alias in node.names)
+
+
+def client_call(node):
+	if (
+		isinstance(node, ast.Attribute)
+		and isinstance(node.value, ast.Attribute)
+		and node.value.attr in CLIENTS
+	):
+		return (node.value.attr, node.attr)
+	return None
 
 
 def violations(modules):
@@ -78,21 +107,19 @@ def violations(modules):
 		functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
 		for node in ast.walk(tree):
 			line = getattr(node, "lineno", 0)
-			client_attr = (
-				isinstance(node, ast.Attribute)
-				and isinstance(node.value, ast.Attribute)
-				and node.value.attr == "_client"
-			)
-			if client_attr and node.attr not in CLIENT_CALLS:
-				found.append((path, None, f"_client.{node.attr}"))
 			owner = next((f.name for f in functions if f.lineno <= line <= (f.end_lineno or f.lineno)), None)
+			call = client_call(node)
+			if call and (path, owner) != ("store.py", CLIENT_CALLS.get(call)):
+				found.append((path, owner, ".".join(call)))
 			for name in names_in(node):
 				module = name.removeprefix("import:")
 				if name in BANNED:
 					found.append((path, owner, name))
-				elif name in CLIENT_CALLS and (path, owner) != ("store.py", CLIENT_CALLS[name]):
+				elif name in ALLOWED and (path != "store.py" or owner not in ALLOWED[name]):
 					found.append((path, owner, name))
-				elif name in ("_client", "_client_for") and path != "store.py":
+				elif name in CLIENTS and (path != "store.py" or owner not in CLIENT_OWNERS[name]):
+					found.append((path, owner, name))
+				elif name == "_client_for" and path != "store.py":
 					found.append((path, owner, name))
 				elif name.startswith("import:") and module.startswith(CLIENT_MODULES) and path != "store.py":
 					found.append((path, owner, name))
@@ -212,7 +239,10 @@ class TestStore(IntegrationTestCase):
 				store.verify(target, "k", version, digest, mode, date)
 
 	def test_store_has_no_general_delete(self):
-		self.assertEqual([name for name in dir(store) if "delete" in name.lower()], ["smoke_delete"])
+		self.assertEqual(
+			[name for name in dir(store) if "delete" in name.lower()],
+			["_admin_delete", "delete_early", "delete_expired", "smoke_delete"],
+		)
 
 	def test_only_store_reaches_the_raw_client(self):
 		modules = list(app_modules())
@@ -252,7 +282,188 @@ class TestStore(IntegrationTestCase):
 			"raw client": ("run.py", "def f(t):\n    return t._client\n"),
 			"client factory": ("run.py", "def f(c):\n    return store._client_for(c)\n"),
 			"unlisted method": ("store.py", "def head(t):\n    t._client.list_object_versions(Bucket='b')\n"),
+			"release with archive key": (
+				"store.py",
+				"def release_hold(t):\n    t._client.put_object_legal_hold(Bucket='b')\n",
+			),
+			"set with archive key": (
+				"store.py",
+				"def set_hold(t):\n    t._client.put_object_legal_hold(Bucket='b')\n",
+			),
+			"admin hold outside helper": (
+				"store.py",
+				"def set_hold(t):\n    t._admin_client.put_object_legal_hold(Bucket='b')\n",
+			),
+			"admin hold from run": ("run.py", "def f(t):\n    store._admin_hold(t, 'k', 'v', 'OFF')\n"),
+			"admin delete elsewhere": (
+				"store.py",
+				"def delete_expired(t):\n    t._admin_client.delete_object(Bucket='b')\n",
+			),
+			"admin put": ("store.py", "def _admin_delete(t):\n    t._admin_client.put_object(Bucket='b')\n"),
+			"admin retention": (
+				"store.py",
+				"def release_hold(t):\n    t._admin_client.put_object_retention(Bucket='b')\n",
+			),
+			"bypass on expired delete": (
+				"store.py",
+				"def delete_expired(t):\n    _admin_delete(t, 'k', 'v', BypassGovernanceRetention=True)\n",
+			),
+			"admin delete from run": ("run.py", "def f(t):\n    store._admin_delete(t, 'k', 'v')\n"),
+			"admin client aliased": (
+				"store.py",
+				"def smoke_delete(t):\n    c = t._admin_client\n    c.delete_object(BypassGovernanceRetention=True)\n",
+			),
+			"admin client by name": (
+				"store.py",
+				"def smoke_delete(t):\n    getattr(t, '_admin_client').delete_object(VersionId='v')\n",
+			),
+			"archive client aliased": (
+				"store.py",
+				"def deletable(t):\n    c = t._client\n    c.delete_object(BypassGovernanceRetention=True)\n",
+			),
+			"admin delete imported": ("run.py", "from docarchive.store import _admin_delete\n"),
+			"admin client elsewhere": ("run.py", "def f(t):\n    return t._admin_client\n"),
+			"hold elsewhere": ("run.py", "def f(t):\n    t._client.put_object_legal_hold(Bucket='b')\n"),
 		}
 		for case, (path, source) in samples.items():
 			with self.subTest(case):
 				self.assertTrue(violations([(path, ast.parse(source))]))
+
+
+class TestHoldAndDelete(IntegrationTestCase):
+	def locked(self, admin=True, mode="GOVERNANCE", until=None, **fake):
+		target = fake_target(fake=LockedFakeS3(**fake), admin=admin, lock_mode=mode)
+		version = store.put_locked(target, "k", b"x", mode, until or future(30))["version_id"]
+		return target, version
+
+	def expire(self, target):
+		for versions in target._client.versions.values():
+			for version in versions:
+				version["ObjectLockRetainUntilDate"] = datetime.now(UTC) - timedelta(days=1)
+
+	def test_put_locked_can_set_the_hold_at_upload(self):
+		target, _version = self.locked(admin=False)
+		held = store.put_locked(target, "h", b"x", "GOVERNANCE", future(30), legal_hold=True)
+		self.assertEqual(target._client.puts()[-1]["ObjectLockLegalHoldStatus"], "ON")
+		self.assertNotIn("ObjectLockLegalHoldStatus", target._client.puts()[0])
+		self.assertEqual(store.hold_status(target, "h", held["version_id"]), "ON")
+		sha = hashlib.sha256(b"x").hexdigest()
+		store.verify(target, "h", held["version_id"], sha, "GOVERNANCE", future(29), legal_hold=True)
+		with self.assertRaises(store.VerifyError):
+			store.verify(target, "k", _version, sha, "GOVERNANCE", future(29), legal_hold=True)
+
+	def test_set_hold_uses_the_admin_key_and_verifies(self):
+		target, version = self.locked()
+		store.set_hold(target, "k", version)
+		self.assertEqual(store.hold_status(target, "k", version), "ON")
+		[(operation, kwargs)] = target._client.calls_by("admin")
+		self.assertEqual(operation, "put_object_legal_hold")
+		self.assertEqual((kwargs["VersionId"], kwargs["LegalHold"]), (version, {"Status": "ON"}))
+		self.assertNotIn("put_object_legal_hold", [op for op, _kw in target._client.calls_by("archive")])
+
+	def test_set_hold_needs_admin_key_and_version(self):
+		plain, plain_version = self.locked(admin=False)
+		with self.assertRaises(store.LockError):
+			store.set_hold(plain, "k", plain_version)
+		target, _version = self.locked()
+		with self.assertRaises(store.LockError):
+			store.set_hold(target, "k", None)
+		self.assertNotIn(
+			"put_object_legal_hold", [op for op, _kw in plain._client.calls + target._client.calls]
+		)
+
+	def test_release_needs_the_admin_key(self):
+		target = fake_target()
+		version = store.put_locked(target, "k", b"x", "GOVERNANCE", future(30), legal_hold=True)["version_id"]
+		with self.assertRaises(store.LockError):
+			store.release_hold(target, "k", version)
+		with self.assertRaises(Exception) as caught:
+			target._client.put_object_legal_hold(
+				Bucket=target.bucket, Key="k", VersionId=version, LegalHold={"Status": "OFF"}
+			)
+		self.assertEqual(store.error_code(caught.exception), "AccessDenied")
+		self.assertEqual(store.hold_status(target, "k", version), "ON")
+
+	def test_release_uses_the_admin_key(self):
+		target, version = self.locked()
+		store.set_hold(target, "k", version)
+		store.release_hold(target, "k", version)
+		self.assertEqual(store.hold_status(target, "k", version), "OFF")
+		[_set, (operation, kwargs)] = target._client.calls_by("admin")
+		self.assertEqual((operation, kwargs["LegalHold"]), ("put_object_legal_hold", {"Status": "OFF"}))
+
+	def test_delete_expired_deletes_only_the_given_version(self):
+		target, version = self.locked()
+		other = store.put_locked(target, "k", b"y", "GOVERNANCE", future(30))["version_id"]
+		self.expire(target)
+		target._client.versions[("archive-primary", "k")][1]["ObjectLockRetainUntilDate"] = future(30)
+		self.assertTrue(store.delete_expired(target, "k", version))
+		self.assertEqual(target._client.deleted(), [("k", version, False)])
+		self.assertEqual(target._client.calls_by("admin")[0][0], "delete_object")
+		self.assertIsNone(store.head(target, "k", version))
+		self.assertEqual(store.head(target, "k", other)["VersionId"], other)
+		self.assertFalse(store.delete_expired(target, "k", version))
+
+	def test_delete_expired_refuses_locked_held_and_without_admin(self):
+		target, version = self.locked()
+		with self.assertRaises(store.LockError):
+			store.delete_expired(target, "k", version)
+		self.expire(target)
+		store.set_hold(target, "k", version)
+		with self.assertRaises(store.LockError):
+			store.delete_expired(target, "k", version)
+		plain, plain_version = self.locked(admin=False)
+		self.expire(plain)
+		with self.assertRaises(store.LockError):
+			store.delete_expired(plain, "k", plain_version)
+		for fake in (target._client, plain._client):
+			self.assertEqual(fake.deleted(), [])
+
+	def test_delete_expired_lets_storage_refusals_through(self):
+		target, version = self.locked()
+		self.expire(target)
+		target._client.deny = {("admin", "delete_object")}
+		with self.assertRaises(Exception) as caught:
+			store.delete_expired(target, "k", version)
+		self.assertTrue(store.refused(caught.exception))
+		self.assertTrue(store.head(target, "k", version))
+
+	def test_delete_early_sends_bypass_only_for_governance(self):
+		target, version = self.locked(bypass_allowed=True)
+		self.assertTrue(store.delete_early(target, "k", version))
+		self.assertEqual(target._client.deleted(), [("k", version, True)])
+		compliance, compliance_version = self.locked(mode="COMPLIANCE", bypass_allowed=True)
+		with self.assertRaises(store.LockError):
+			store.delete_early(compliance, "k", compliance_version)
+		held, held_version = self.locked(bypass_allowed=True)
+		store.set_hold(held, "k", held_version)
+		with self.assertRaises(store.LockError):
+			store.delete_early(held, "k", held_version)
+		for fake in (compliance._client, held._client):
+			self.assertEqual(fake.deleted(), [])
+
+	def test_delete_early_without_bypass_permission_is_refused(self):
+		target, version = self.locked()
+		with self.assertRaises(Exception) as caught:
+			store.delete_early(target, "k", version)
+		self.assertTrue(store.refused(caught.exception))
+		self.assertTrue(store.head(target, "k", version))
+
+	def test_admin_key_is_optional(self):
+		config = frappe._dict(
+			name="primary",
+			bucket="b",
+			lock_mode="GOVERNANCE",
+			endpoint="https://s3.example.test",
+			region="r",
+			access_key="key",
+			secret_key="secret",
+		)
+		with patch("docarchive.store._client_for", side_effect=lambda c: c["access_key"]):
+			self.assertFalse(store.has_admin_access(store.from_config(config)))
+			config.admin_access_key = "admin"
+			self.assertFalse(store.has_admin_access(store.from_config(config)))
+			config.admin_secret_key = "admin-secret"
+			target = store.from_config(config)
+		self.assertTrue(store.has_admin_access(target))
+		self.assertEqual((target._client, target._admin_client), ("key", "admin"))

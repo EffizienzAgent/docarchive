@@ -21,6 +21,7 @@
   "default_upload_type",
   "manager_roles",
   "allowed_extensions",
+  "store_einvoice_xml",
   "max_future_days",
   "max_contract_years",
   "retention_section",
@@ -29,6 +30,9 @@
   "storage_targets",
   "mail_section",
   "mail_accounts",
+  "export_section",
+  "export_part_size_mb",
+  "export_expiry_days",
   "granted_permissions"
  ],
  "fields": [
@@ -96,6 +100,13 @@
    "description": "One file extension per line. Only these file types can be filed."
   },
   {
+   "fieldname": "store_einvoice_xml",
+   "fieldtype": "Check",
+   "label": "Store E-Invoice XML as Attachment",
+   "default": "0",
+   "description": "Also store the XML embedded in a ZUGFeRD or Factur-X PDF as an attachment of the document. The PDF itself is always archived unchanged."
+  },
+  {
    "fieldname": "max_future_days",
    "fieldtype": "Int",
    "label": "Max. Days in the Future",
@@ -145,6 +156,27 @@
    "label": "E-Mail Accounts",
    "options": "Archive Mail Account",
    "description": "Capture and archive business e-mails of these accounts."
+  },
+  {
+   "fieldname": "export_section",
+   "fieldtype": "Section Break",
+   "label": "Export"
+  },
+  {
+   "fieldname": "export_part_size_mb",
+   "fieldtype": "Int",
+   "label": "Export Part Size (MB)",
+   "default": "2048",
+   "non_negative": 1,
+   "description": "Exports above this size are split into several ZIP files."
+  },
+  {
+   "fieldname": "export_expiry_days",
+   "fieldtype": "Int",
+   "label": "Keep Exports For (Days)",
+   "default": "7",
+   "non_negative": 1,
+   "description": "Export files are deleted after this many days."
   },
   {
    "fieldname": "granted_permissions",

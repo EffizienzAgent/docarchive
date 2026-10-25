@@ -1,0 +1,64 @@
+{
+ "docstatus": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Document Archive",
+ "custom": 0,
+ "name": "Business Document Attachment",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "editable_grid": 1,
+ "field_order": [
+  "file",
+  "role",
+  "title",
+  "content_sha256",
+  "object_key",
+  "archive_size"
+ ],
+ "fields": [
+  {
+   "fieldname": "file",
+   "fieldtype": "Attach",
+   "label": "File",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "role",
+   "fieldtype": "Select",
+   "label": "Role",
+   "options": "Attachment\nStructured Invoice (XML)\nProof of Service",
+   "default": "Attachment",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "content_sha256",
+   "fieldtype": "Data",
+   "label": "Content SHA-256",
+   "read_only": 1
+  },
+  {
+   "fieldname": "object_key",
+   "fieldtype": "Data",
+   "label": "Object Key",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_size",
+   "fieldtype": "Int",
+   "label": "Archive Size",
+   "read_only": 1
+  }
+ ],
+ "permissions": []
+}

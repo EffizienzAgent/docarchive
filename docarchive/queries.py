@@ -9,6 +9,7 @@ FIELDS = [
 	"document_number",
 	"document_date",
 	"own_company",
+	"einvoice_needs_review",
 	"counterparty_type",
 	"counterparty",
 	"contract_end_date",
@@ -29,7 +30,13 @@ def incomplete_filters():
 	types = frappe.get_list(
 		"Business Document Type", fields=["name", *dict.fromkeys(flag for flag, _conditions in REQUIREMENTS)]
 	)
-	queries = [[["file", "is", "not set"]], [["archive_status", "=", "Failed"]]]
+	queries = [
+		[["file", "is", "not set"]],
+		[["document_date", "is", "not set"]],
+		[["own_company", "is", "not set"]],
+		[["einvoice_needs_review", "=", 1]],
+		[["archive_status", "=", "Failed"]],
+	]
 	for flag, conditions in REQUIREMENTS:
 		names = [t.name for t in types if t.get(flag)]
 		if names:
@@ -44,12 +51,12 @@ def documents_to_assign() -> list[frappe._dict]:
 	for filters in incomplete_filters():
 		for doc in frappe.get_list(
 			"Business Document",
-			filters=[["archive_status", "!=", "Archived"], *filters],
+			filters=[["archive_status", "not in", ["Archived", "Deleted"]], *filters],
 			fields=FIELDS,
 			limit_page_length=0,
 		):
 			documents[doc.name] = doc
-	ordered = sorted(documents.values(), key=lambda d: (d.document_date, d.name), reverse=True)
+	ordered = sorted(documents.values(), key=lambda d: (str(d.document_date or ""), d.name), reverse=True)
 	for doc in ordered:
 		doc.missing = missing_fields(doc)
 	return ordered

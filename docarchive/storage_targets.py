@@ -12,6 +12,7 @@ SITE_CONFIG = "Site Config"
 FIELDS = "Fields"
 LOCATION = ("endpoint", "region", "bucket")
 CREDENTIALS = ("access_key", "secret_key")
+ADMIN_CREDENTIALS = ("admin_access_key", "admin_secret_key")
 CONFIG_KEY = re.compile(r"^[a-z][a-z0-9_]*$")
 LOCAL_NAMES = (".localhost", ".local", ".internal", ".lan", ".home.arpa")
 BUCKET = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
@@ -40,6 +41,12 @@ def validate_row(row):
 		if not (row.access_key and row.secret_key):
 			frappe.throw(
 				_("Storage target {0} needs an access key and a secret key.").format(row.target_name)
+			)
+		if bool(row.admin_access_key) != bool(row.admin_secret_key):
+			frappe.throw(
+				_(
+					"Storage target {0} needs both an admin access key and an admin secret key, or neither."
+				).format(row.target_name)
 			)
 	else:
 		validate_key_names(row)
@@ -82,6 +89,13 @@ def validate_key_names(row):
 					_(label), row.target_name
 				)
 			)
+	admin = (row.admin_access_key_config_key, row.admin_secret_key_config_key)
+	if any(admin) and not all(CONFIG_KEY.match(value or "") for value in admin):
+		frappe.throw(
+			_(
+				"Storage target {0} needs both admin key config keys as site config key names, or neither."
+			).format(row.target_name)
+		)
 
 
 def location(row) -> frappe._dict:
@@ -128,11 +142,15 @@ def target(row) -> frappe._dict:
 		credentials = {
 			"access_key": frappe.conf.get(row.access_key_config_key),
 			"secret_key": frappe.conf.get(row.secret_key_config_key),
+			"admin_access_key": row.admin_access_key_config_key
+			and frappe.conf.get(row.admin_access_key_config_key),
+			"admin_secret_key": row.admin_secret_key_config_key
+			and frappe.conf.get(row.admin_secret_key_config_key),
 		}
 	else:
 		credentials = {
 			name: get_decrypted_password(row.doctype, row.name, name, raise_exception=False)
-			for name in CREDENTIALS
+			for name in (*CREDENTIALS, *ADMIN_CREDENTIALS)
 		}
 	return frappe._dict(name=row.target_name, lock_mode=row.lock_mode, **location(row), **credentials)
 

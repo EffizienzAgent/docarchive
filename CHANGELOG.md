@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.4.0](https://github.com/EffizienzAgent/docarchive/compare/v0.3.0...v0.4.0) (2026-10-25)
+
+
+### Features
+
+* export the archive as ZIP packages with an offline viewer, mail previews and verified checksums; requires s3storage v0.3.0 ([4e279bd](https://github.com/EffizienzAgent/docarchive/commit/4e279bddf266c0bd4a92cf868eb4f69bd1801fae)), closes [#19](https://github.com/EffizienzAgent/docarchive/issues/19)
+
+## [0.3.0](https://github.com/EffizienzAgent/docarchive/compare/v0.2.0...v0.3.0) (2026-10-25)
+
+
+### Features
+
+* **documents panel:** search, type/year/status filters, date sorting, row actions, bulk "Archive now" and a drop zone; the upload dialog has one row per file and a date in the file name prefills the document date ([#10](https://github.com/EffizienzAgent/docarchive/pull/10)) ([952f7ef](https://github.com/EffizienzAgent/docarchive/commit/952f7ef8d1db5b791fb6eba63edcdb631fad8c19))
+* **triage dialog** for documents that need work: file preview and fields side by side, save and next, skip and back with keyboard shortcuts; "Assign" and "Assign all" in the list ([#12](https://github.com/EffizienzAgent/docarchive/pull/12)) ([50250be](https://github.com/EffizienzAgent/docarchive/commit/50250bee288c3c4f5c4ac8291df41a2e6f03911c))
+* **manual retention extension** by years or to a date, one by one or in bulk with a preview, recorded in a locked sidecar; "Retention Overview" report and a "Retention ends in 90 days" number card ([#13](https://github.com/EffizienzAgent/docarchive/pull/13)) ([98d1bf4](https://github.com/EffizienzAgent/docarchive/commit/98d1bf45169fbea488bfc4b6b6eb7e83cdc8fdb7))
+* **multiple files per document:** an Attachments table archived next to the main file with the same lock; uploads add new attachments to a known document ([#14](https://github.com/EffizienzAgent/docarchive/pull/14)) ([f99c99a](https://github.com/EffizienzAgent/docarchive/commit/f99c99a685ccc16fc984e14cc41a6c235934e6b0), [3f4003e](https://github.com/EffizienzAgent/docarchive/commit/3f4003ec8aff1e0dd183c4f491568a48ef86d7df))
+* **legal hold and deletion:** legal hold per copy (also at archive time), release and deletion of expired documents with an admin key, "Expired Documents" report and a deletion log, attachments included ([#15](https://github.com/EffizienzAgent/docarchive/pull/15)) ([b98d1d3](https://github.com/EffizienzAgent/docarchive/commit/b98d1d39e9303911fe297cbdb2877af505edc242), [42dde9f](https://github.com/EffizienzAgent/docarchive/commit/42dde9f5136f011dd9224d37609de2b2fe340f32), [1c53423](https://github.com/EffizienzAgent/docarchive/commit/1c53423da681ca27b401e0acab3076c7393c45ee), [531d23c](https://github.com/EffizienzAgent/docarchive/commit/531d23cc4adbe64641304de37c0895d24cf1c6f7)), closes [#11](https://github.com/EffizienzAgent/docarchive/issues/11)
+* **e-invoice metadata:** reads XRechnung/EN 16931 (CII, UBL) and ZUGFeRD/Factur-X and suggests date, number, title, type and own company without overwriting set values; the upload date is optional and `docarchive-extract [--dry-run]` backfills existing documents ([#16](https://github.com/EffizienzAgent/docarchive/pull/16)) ([36d63fc](https://github.com/EffizienzAgent/docarchive/commit/36d63fcc371256c4b9f2c56912e67b09753ec388), [29b2ece](https://github.com/EffizienzAgent/docarchive/commit/29b2ece7bfdcb96b7890cf563c99d923a84e30b4))
+* **bucket policy scripts:** `scripts/apply_bucket_policy.py` sets a deny-only archive bucket policy, `scripts/check_object_lock.py` checks what the writer and admin keys can do ([#18](https://github.com/EffizienzAgent/docarchive/pull/18)) ([e3de81b](https://github.com/EffizienzAgent/docarchive/commit/e3de81baf12dc9edffe0aff72ff1799c1b746000))
+
+
+### Bug Fixes
+
+* **upload API:** content-based deduplication only matches documents from the same `source_system` and `source_account`, so an upload never returns or replaces another source's document ([#14](https://github.com/EffizienzAgent/docarchive/pull/14)) ([cf1c560](https://github.com/EffizienzAgent/docarchive/commit/cf1c560f1e83afe3426834180ccbc877399efe40))
+
 ## [0.2.0](https://github.com/EffizienzAgent/docarchive/compare/v0.1.1...v0.2.0) (2026-10-25)
 
 

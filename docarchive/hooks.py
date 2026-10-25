@@ -1,6 +1,6 @@
 app_name = "docarchive"
 app_title = "Document Archive"
-app_publisher = "EffizienzAgent"
+app_publisher = "EffizienzAgent (Tobias Mende)"
 app_description = "A WORM document archive app for the Frappe Framework"
 app_email = "oss@effizienzagent.de"
 app_license = "mit"
@@ -8,6 +8,7 @@ app_license = "mit"
 required_apps = ["s3storage"]
 
 app_include_js = "docarchive.bundle.js"
+app_include_css = "docarchive.bundle.css"
 
 after_install = "docarchive.setup.apply_defaults"
 after_migrate = "docarchive.setup.apply_defaults"
@@ -23,7 +24,7 @@ extend_doctype_class = {
 }
 scheduler_events = {
 	"cron": {"30 2 * * *": ["docarchive.run.schedule"]},
-	"daily": ["docarchive.mail.cleanup.run"],
+	"daily": ["docarchive.mail.cleanup.run", "docarchive.export.expire"],
 }
 has_permission = {"File": "docarchive.guards.file_permission"}
 docarchive_assign = ["docarchive.mail.archiving.assign"]
@@ -36,3 +37,4 @@ s3storage_before_object_write = ["docarchive.guards.protect_object"]
 # docarchive_assign: callables that fill own_company / counterparty_type / counterparty on a document.
 # docarchive_counterparty_doctypes: doctypes allowed as counterparty (empty: any).
 # docarchive_read_file: callables returning the raw bytes of a file URL, or None.
+# docarchive_einvoice_extractors: callables (data, file_name) returning e-invoice metadata, or None.
