@@ -266,7 +266,24 @@ Copy link,Link kopieren
 {0} of {1} documents,{0} von {1} Dokumenten
 Only the newest {0} are shown.,Nur die neuesten {0} werden angezeigt.
 No file,Keine Datei
+Open document,Dokument öffnen
+Permanently delete {0}?,{0} endgültig löschen?
 Download,Herunterladen
+Main file,Hauptdatei
+Open in new tab,In neuem Tab
+Open form,Formular öffnen
+Loading preview...,Vorschau wird geladen...
+No preview available.,Keine Vorschau verfügbar.
+HTML files are only shown in the viewer.,HTML-Dateien werden nur im Viewer angezeigt.
+Close preview,Vorschau schließen
+Close preview (Esc),Vorschau schließen (Esc)
+Drag to resize,Ziehen zum Ändern der Breite
+Selection,Auswahl
+Select {0},{0} auswählen
+{0} selected,{0} ausgewählt
+Clear selection,Auswahl aufheben
+Extend term,Frist verlängern
+No bulk action is available for this document.,Für dieses Dokument ist keine Sammelaktion verfügbar.
 Assign documents,Dokumente zuordnen
 {0} of {1},{0} von {1}
 Save and next,Speichern & weiter

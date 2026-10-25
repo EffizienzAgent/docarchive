@@ -40,6 +40,7 @@ def item(doc) -> dict:
 		"retain_until": doc.retain_until,
 		"locked": bool(doc.archive_started_at),
 		"can_write": bool(doc.has_permission("write")),
+		"can_delete": not doc.archive_started_at and bool(doc.has_permission("delete")),
 		"modified": str(doc.modified),
 	}
 
