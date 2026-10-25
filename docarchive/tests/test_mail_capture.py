@@ -308,6 +308,17 @@ class TestMailStoreJob(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			archiving.archive(name)
 
+	def test_fresh_bytes_revive_a_failed_original(self):
+		name = self.pending()
+		originals.remove_spool(name)
+		frappe.db.set_value("Mail Original", name, {"status": "Failed", "attempts": 5, "error": "x"})
+		self.scheduled.clear()
+		self.assertEqual(mail.capture(self.comm, EML, "t"), name)
+		self.assertEqual(self.row(name, "status", "attempts", "error"), ("Pending", 0, None))
+		self.assertEqual(self.scheduled, [name])
+		originals.store(name)
+		self.assertEqual(content.read_bytes(self.row(name, "file")), EML)
+
 	def test_unlinked_original_is_retried(self):
 		name = self.pending()
 		frappe.db.set_value("Mail Original", name, {"communication": None, "status": "Failed"})
