@@ -499,6 +499,23 @@ class TestUploadAttachments(IntegrationTestCase):
 		again = self.json_upload(main, second)
 		self.assertEqual((again["status"], again["name"]), ("exists", replaced["name"]))
 
+	def test_duplicates_stay_within_their_source(self):
+		main, first, second = (pdf(unique(x).encode()) for x in ("main", "first", "second"))
+		mine = self.json_upload(main, first, source_system="Billing", source_account="1")
+		cases = {
+			"other account": {"source_system": "Billing", "source_account": "2"},
+			"other system": {"source_system": "Mail", "source_account": "1"},
+			"no source": {},
+		}
+		for case, scope in cases.items():
+			with self.subTest(case):
+				other = self.json_upload(main, first, second, **scope)
+				self.assertEqual((other["status"], other["replaces"]), ("created", None))
+				self.assertNotEqual(other["name"], mine["name"])
+		self.assertEqual(self.shas(mine["name"]), [content.sha256(first)])
+		same = self.json_upload(main, first, second, source_system="Billing", source_account="1")
+		self.assertEqual((same["status"], same["name"]), ("updated", mine["name"]))
+
 
 class TestTriageAttachments(IntegrationTestCase):
 	def setUp(self):
