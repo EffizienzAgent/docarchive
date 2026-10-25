@@ -441,7 +441,7 @@ Export files are deleted after this many days.,Export-Dateien werden nach so vie
 Export started in the background,Export im Hintergrund gestartet
 Exported Documents,Exportierte Dokumente
 Exported at,Exportiert am
-Exports above this size are split into several ZIP files.,Exporte über dieser Größe werden auf mehrere ZIP-Dateien aufgeteilt.
+Exports above this size are split into several ZIP files. At most 4096 MB.,Exporte über dieser Größe werden auf mehrere ZIP-Dateien aufgeteilt. Höchstens 4096 MB.
 Files,Dateien
 From,Von
 From Date,Von Datum
@@ -483,3 +483,6 @@ of,von
 {0} objects could not be verified. See manifest.json.,{0} Objekte konnten nicht geprüft werden. Siehe manifest.json.
 {0} objects could not be verified. See Mismatch Details.,{0} Objekte konnten nicht geprüft werden. Siehe Details zu Abweichungen.
 Main,Hauptdatei
+Another export is still running. Please wait until it is done.,"Ein anderer Export läuft noch. Bitte warten, bis er fertig ist."
+The export was interrupted.,Der Export wurde unterbrochen.
+"This file type is only offered as a download, so it cannot run in the viewer.","Dieser Dateityp wird nur zum Herunterladen angeboten, damit er im Viewer nicht ausgeführt werden kann."

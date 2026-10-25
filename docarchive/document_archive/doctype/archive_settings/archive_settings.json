@@ -154,7 +154,7 @@
    "label": "Export Part Size (MB)",
    "default": "2048",
    "non_negative": 1,
-   "description": "Exports above this size are split into several ZIP files."
+   "description": "Exports above this size are split into several ZIP files. At most 4096 MB."
   },
   {
    "fieldname": "export_expiry_days",

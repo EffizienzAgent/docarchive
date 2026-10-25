@@ -83,6 +83,7 @@ ul.plain { margin: 0; padding-left: 18px; }
 const DATA = /*DOCARCHIVE_DATA*/;
 const L = DATA.labels;
 const PAGE = 100;
+const ACTIVE = ["html", "htm", "xhtml", "xht", "svg", "svgz", "mht", "mhtml", "js", "xsl", "xslt"];
 const docs = DATA.documents;
 const byId = new Map(docs.map((doc) => [doc.id, doc]));
 const state = { search: "", type: "", party: "", company: "", year: "", held: false, problems: false, shown: PAGE, current: null };
@@ -191,6 +192,7 @@ function renderList() {
 function preview(file) {
 	if (!file.path) return h("div", { class: "body muted" }, L.problem);
 	const kind = ext(file);
+	if (ACTIVE.includes(kind)) return h("div", { class: "body muted" }, L.download_only);
 	if (file.preview) {
 		return [
 			h("div", { class: "note" }, L.rendered_preview),
@@ -206,12 +208,10 @@ function preview(file) {
 }
 
 function fileCard(file) {
-	const actions = file.path
-		? [
-			h("a", { class: "btn primary", href: href(file.path), target: "_blank", rel: "noopener" }, L.open_original),
-			h("a", { class: "btn", href: href(file.path), download: file.name || "" }, L.download_original),
-		]
-		: [];
+	const active = ACTIVE.includes(ext(file));
+	const open = h("a", { class: "btn primary", href: href(file.path || ""), target: "_blank", rel: "noopener" }, L.open_original);
+	const download = h("a", { class: "btn", href: href(file.path || ""), download: file.name || "", type: "application/octet-stream" }, L.download_original);
+	const actions = file.path ? (active ? [download] : [open, download]) : [];
 	return h("div", { class: "card" },
 		h("div", { class: "head" },
 			h("span", { class: "name" }, file.title || file.name || file.key,
