@@ -485,6 +485,9 @@ Clear the search or close,Suche leeren oder schließen
 Switch between attachments,Zwischen Anhängen wechseln
 Show the shortcuts,Tastenkürzel anzeigen
 Made with docarchive,Erstellt mit docarchive
+Close,Schließen
+Search,Suchen
+Yes,Ja
 Export Viewer,Export-Viewer
 "Shown in the offline viewer (index.html) of every export. Leave empty for a neutral viewer.","Wird im Offline-Viewer (index.html) jedes Exports angezeigt. Leer lassen für einen neutralen Viewer."
 Brand Name,Markenname
