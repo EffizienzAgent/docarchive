@@ -240,11 +240,60 @@ class TestMailStoreJob(IntegrationTestCase):
 		self.assertIn(name, self.scheduled)
 		self.assertEqual(self.row(name, "status", "attempts"), ("Pending", 0))
 
-	def test_missing_spool_fails_at_once(self):
+	def test_missing_spool_counts_as_attempt(self):
 		name = self.pending()
 		originals.remove_spool(name)
 		originals.store(name)
-		self.assertEqual(self.row(name, "status", "attempts"), ("Failed", 1))
+		status, attempts, error = self.row(name, "status", "attempts", "error")
+		self.assertEqual((status, attempts), ("Pending", 1))
+		self.assertIn("spool", error)
+
+	def test_failed_row_shows_the_reason(self):
+		name = self.pending()
+		with patch("docarchive.mail.originals.store_file", side_effect=Exception("File too big")):
+			originals.store(name)
+		self.assertIn("File too big", self.row(name, "error"))
+		originals.store(name)
+		self.assertIsNone(self.row(name, "error"))
+
+	def test_remove_spool_logs_os_errors(self):
+		with (
+			patch("os.remove", side_effect=PermissionError("denied")),
+			patch("frappe.log_error") as log_error,
+		):
+			originals.remove_spool("x")
+		log_error.assert_called_with(title="docarchive mail capture")
+
+	def test_spool_is_private(self):
+		name = self.pending()
+		self.assertEqual(os.stat(originals.spool_path(name)).st_mode & 0o777, 0o600)
+		self.assertEqual(os.stat(os.path.dirname(originals.spool_path(name))).st_mode & 0o777, 0o700)
+
+	def test_sweep_keeps_pending_and_skips_folders_and_errors(self):
+		name = self.pending()
+		folder = os.path.dirname(originals.spool_path(name))
+		os.utime(originals.spool_path(name), (0, 0))
+		sub = os.path.join(folder, "subdir")
+		os.makedirs(sub, exist_ok=True)
+		self.addCleanup(os.rmdir, sub)
+		os.utime(sub, (0, 0))
+		for orphan in ("orphan-a", "orphan-b"):
+			originals.write_spool(orphan, b"x")
+			os.utime(originals.spool_path(orphan), (0, 0))
+		real_remove = os.remove
+
+		def remove(path):
+			if "orphan-a" in path:
+				raise PermissionError("denied")
+			real_remove(path)
+
+		with patch("os.remove", side_effect=remove), patch("frappe.log_error"):
+			originals.sweep_spool()
+		self.assertTrue(os.path.exists(originals.spool_path(name)))
+		self.assertTrue(os.path.isdir(sub))
+		self.assertTrue(os.path.exists(originals.spool_path("orphan-a")))
+		self.assertFalse(os.path.exists(originals.spool_path("orphan-b")))
+		originals.remove_spool("orphan-a")
 
 	def test_deleted_email_queue_fails_at_once(self):
 		sent = make_communication(self.account, "Sent")

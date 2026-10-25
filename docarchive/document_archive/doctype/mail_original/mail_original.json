@@ -16,6 +16,7 @@
   "status",
   "attempts",
   "email_queue",
+  "error",
   "file",
   "sha256",
   "size",
@@ -76,6 +77,12 @@
    "fieldname": "email_queue",
    "fieldtype": "Data",
    "label": "Email Queue",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error",
    "read_only": 1
   },
   {

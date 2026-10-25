@@ -25,6 +25,7 @@ MAX_ATTEMPTS = 5
 JOB = "docarchive.mail.originals.store"
 SPOOL = ("private", "docarchive", "mail-spool")
 ORPHAN_SECONDS = 86400
+ERROR_LENGTH = 500
 
 
 class Unavailable(Exception):
@@ -111,7 +112,7 @@ def store(original: str) -> None:
 		_complete(original, _rebuilt(original) if original.email_queue else read_spool(name))
 	except Exception as error:
 		fail(STORE_SAVEPOINT)
-		_attempted(name, permanent=isinstance(error, Unavailable))
+		_attempted(name, error)
 		return
 	frappe.db.after_commit.add(lambda: remove_spool(name))
 	_auto_archive(name)
@@ -161,11 +162,20 @@ def _rebuilt(original):
 	return _as_bytes(ctx.build_message(recipient))
 
 
-def _attempted(name, permanent=False):
+def _attempted(name, error):
 	try:
 		attempts = (frappe.db.get_value(ORIGINAL, name, "attempts") or 0) + 1
-		status = FAILED if permanent or attempts >= MAX_ATTEMPTS else PENDING
-		frappe.db.set_value(ORIGINAL, name, {"attempts": attempts, "status": status}, update_modified=False)
+		status = FAILED if isinstance(error, Unavailable) or attempts >= MAX_ATTEMPTS else PENDING
+		frappe.db.set_value(
+			ORIGINAL,
+			name,
+			{
+				"attempts": attempts,
+				"status": status,
+				"error": (str(error) or type(error).__name__)[:ERROR_LENGTH],
+			},
+			update_modified=False,
+		)
 	except Exception:
 		fail()
 
@@ -227,8 +237,11 @@ def spool_path(name: str) -> str:
 
 def write_spool(name: str, raw: bytes) -> None:
 	path = spool_path(name)
-	os.makedirs(os.path.dirname(path), exist_ok=True)
-	with open(f"{path}.tmp", "wb") as f:
+	folder = os.path.dirname(path)
+	os.makedirs(folder, mode=0o700, exist_ok=True)
+	os.chmod(folder, 0o700)
+	descriptor = os.open(f"{path}.tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+	with os.fdopen(descriptor, "wb") as f:
 		f.write(raw)
 	os.replace(f"{path}.tmp", path)
 
@@ -238,7 +251,7 @@ def read_spool(name: str) -> bytes:
 		with open(spool_path(name), "rb") as f:
 			return f.read()
 	except FileNotFoundError:
-		raise Unavailable(f"The spooled bytes of Mail Original {name} are missing.") from None
+		raise FileNotFoundError(f"The spool file of Mail Original {name} is missing.") from None
 
 
 def remove_spool(name: str) -> None:
@@ -246,6 +259,8 @@ def remove_spool(name: str) -> None:
 		os.remove(spool_path(name))
 	except FileNotFoundError:
 		pass
+	except OSError:
+		fail()
 
 
 def sweep_spool() -> int:
@@ -255,10 +270,17 @@ def sweep_spool() -> int:
 	waiting = set(frappe.get_all(ORIGINAL, filters={"status": ("in", (PENDING, FAILED))}, pluck="name"))
 	removed = 0
 	for entry in os.scandir(folder):
-		name = entry.name.removesuffix(".tmp").removesuffix(".eml")
-		if name not in waiting and time.time() - entry.stat().st_mtime > ORPHAN_SECONDS:
-			os.remove(entry.path)
-			removed += 1
+		try:
+			name = entry.name.removesuffix(".tmp").removesuffix(".eml")
+			if (
+				entry.is_file(follow_symlinks=False)
+				and name not in waiting
+				and time.time() - entry.stat().st_mtime > ORPHAN_SECONDS
+			):
+				os.remove(entry.path)
+				removed += 1
+		except OSError:
+			fail()
 	return removed
 
 
@@ -300,7 +322,9 @@ def _complete(original, raw):
 	parsed = headers.parse(raw)
 	row = accounts.account_row(original.email_account)
 	internal = bool(row) and headers.is_internal(parsed, accounts.internal_domains(row))
-	original.update({**_header_fields(raw, parsed), "internal": int(internal), "status": STORED})
+	original.update(
+		{**_header_fields(raw, parsed), "internal": int(internal), "status": STORED, "error": None}
+	)
 	original.save(ignore_permissions=True)
 	original.db_set("file", store_file(original, raw))
 
