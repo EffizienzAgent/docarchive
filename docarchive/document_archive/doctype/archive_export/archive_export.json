@@ -1,0 +1,209 @@
+{
+ "docstatus": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Document Archive",
+ "custom": 0,
+ "name": "Archive Export",
+ "autoname": "EXP-.YYYY.-.#####",
+ "naming_rule": "Expression (old style)",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "in_create": 1,
+ "track_changes": 0,
+ "field_order": [
+  "status",
+  "requested_by",
+  "requested_at",
+  "expires_at",
+  "column_break_status",
+  "progress",
+  "total_documents",
+  "exported_documents",
+  "skipped_documents",
+  "archive_size",
+  "mismatches",
+  "scope_section",
+  "target_name",
+  "own_company",
+  "document_type",
+  "column_break_scope",
+  "date_from",
+  "date_to",
+  "counterparty_type",
+  "counterparty",
+  "files_section",
+  "parts",
+  "details_section",
+  "mismatch_details",
+  "error"
+ ],
+ "fields": [
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Queued\nRunning\nCompleted\nFailed\nExpired",
+   "default": "Queued",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "requested_by",
+   "fieldtype": "Link",
+   "label": "Requested By",
+   "options": "User",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "requested_at",
+   "fieldtype": "Datetime",
+   "label": "Requested At",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "label": "Download Expires At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "progress",
+   "fieldtype": "Percent",
+   "label": "Progress",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_documents",
+   "fieldtype": "Int",
+   "label": "Documents",
+   "read_only": 1
+  },
+  {
+   "fieldname": "exported_documents",
+   "fieldtype": "Int",
+   "label": "Exported Documents",
+   "read_only": 1
+  },
+  {
+   "fieldname": "skipped_documents",
+   "fieldtype": "Int",
+   "label": "Not on Storage Target",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_size",
+   "fieldtype": "Int",
+   "label": "Size (Bytes)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mismatches",
+   "fieldtype": "Int",
+   "label": "Checksum Mismatches",
+   "read_only": 1
+  },
+  {
+   "fieldname": "scope_section",
+   "fieldtype": "Section Break",
+   "label": "Scope"
+  },
+  {
+   "fieldname": "target_name",
+   "fieldtype": "Data",
+   "label": "Storage Target",
+   "read_only": 1
+  },
+  {
+   "fieldname": "own_company",
+   "fieldtype": "Link",
+   "label": "Own Company",
+   "options": "Own Company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "document_type",
+   "fieldtype": "Link",
+   "label": "Business Document Type",
+   "options": "Business Document Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_scope",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "date_from",
+   "fieldtype": "Date",
+   "label": "From Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_to",
+   "fieldtype": "Date",
+   "label": "To Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "counterparty_type",
+   "fieldtype": "Link",
+   "label": "Counterparty Type",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "counterparty",
+   "fieldtype": "Dynamic Link",
+   "label": "Counterparty",
+   "options": "counterparty_type",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "files_section",
+   "fieldtype": "Section Break",
+   "label": "Download"
+  },
+  {
+   "fieldname": "parts",
+   "fieldtype": "Table",
+   "label": "Parts",
+   "options": "Archive Export Part",
+   "read_only": 1
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Details",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "mismatch_details",
+   "fieldtype": "Code",
+   "label": "Mismatch Details",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Archive Admin",
+   "read": 1,
+   "report": 1
+  }
+ ]
+}

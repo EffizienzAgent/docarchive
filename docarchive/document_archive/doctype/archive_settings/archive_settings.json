@@ -28,6 +28,9 @@
   "retention_rules",
   "storage_section",
   "storage_targets",
+  "export_section",
+  "export_part_size_mb",
+  "export_expiry_days",
   "granted_permissions"
  ],
  "fields": [
@@ -139,6 +142,27 @@
    "label": "Storage Targets",
    "options": "Archive Storage Target",
    "description": "Every enabled target gets a locked copy of each archived document."
+  },
+  {
+   "fieldname": "export_section",
+   "fieldtype": "Section Break",
+   "label": "Export"
+  },
+  {
+   "fieldname": "export_part_size_mb",
+   "fieldtype": "Int",
+   "label": "Export Part Size (MB)",
+   "default": "2048",
+   "non_negative": 1,
+   "description": "Exports above this size are split into several ZIP files."
+  },
+  {
+   "fieldname": "export_expiry_days",
+   "fieldtype": "Int",
+   "label": "Keep Exports For (Days)",
+   "default": "7",
+   "non_negative": 1,
+   "description": "Export files are deleted after this many days."
   },
   {
    "fieldname": "granted_permissions",

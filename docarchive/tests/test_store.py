@@ -16,7 +16,7 @@ APP_DIR = Path(store.__file__).resolve().parent
 CLIENT_CALLS = {
 	("_client", "put_object"): "put_locked",
 	("_client", "head_object"): "head",
-	("_client", "get_object"): "read_sha256",
+	("_client", "get_object"): "download",
 	("_client", "get_object_retention"): "retention",
 	("_client", "delete_object"): "smoke_delete",
 	("_client", "put_object_retention"): "extend_locked",

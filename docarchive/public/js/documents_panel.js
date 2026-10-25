@@ -91,6 +91,9 @@ class DocumentsPanel {
 			this.data.can_extend && this.data.documents.some((doc) => doc.archive_status === "Archived")
 				? `<button class="btn btn-default btn-xs" data-action="extend-all">${esc(__("Extend all documents of this counterparty"))}</button>`
 				: "";
+		const exporter = this.data.can_export
+			? `<button class="btn btn-default btn-xs" data-action="export">${esc(__("Export"))}</button>`
+			: "";
 		return `<div class="docarchive-toolbar">
 			<input type="search" class="form-control input-xs docarchive-search" data-filter="search"
 				placeholder="${esc(__("Search title or number"))}" value="${esc(this.filters.search)}">
@@ -124,6 +127,7 @@ class DocumentsPanel {
 			<span class="docarchive-spacer"></span>
 			<button class="btn btn-default btn-xs hidden" data-action="bulk-archive"></button>
 			${extend}
+			${exporter}
 			${upload}
 		</div>`;
 	}
@@ -141,6 +145,7 @@ class DocumentsPanel {
 			$(event.currentTarget).text(sort_label(this.filters));
 		});
 		$toolbar.on("click", "[data-action=upload]", () => this.upload());
+		$toolbar.on("click", "[data-action=export]", () => docarchive.export_archive(this.party));
 		$toolbar.on("click", "[data-action=extend-all]", () =>
 			docarchive.extend_many(this.party, () => this.load()),
 		);

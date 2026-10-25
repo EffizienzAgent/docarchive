@@ -98,7 +98,11 @@ class LockedFakeS3:
 	def get_object(self, Bucket, Key, VersionId=None):
 		self.record("get_object", Bucket=Bucket, Key=Key, VersionId=VersionId)
 		version = self.latest(Bucket, Key, VersionId, "GetObject")
-		return {"Body": io.BytesIO(version["Body"]), "VersionId": version["VersionId"]}
+		return {
+			"Body": io.BytesIO(version["Body"]),
+			"VersionId": version["VersionId"],
+			"Metadata": version["Metadata"],
+		}
 
 	def get_object_retention(self, Bucket, Key, VersionId=None):
 		self.record("get_object_retention", Bucket=Bucket, Key=Key, VersionId=VersionId)

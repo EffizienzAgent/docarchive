@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'">
+<title>Archive Export</title>
+<style>
+:root {
+	--bg: #f6f8fa; --panel: #fff; --text: #1f2328; --muted: #59636e; --line: #d1d9e0;
+	--accent: #0969da; --accent-bg: #ddf4ff; --bad: #cf222e; --bad-bg: #ffebe9; --hold: #9a6700; --hold-bg: #fff8c5;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #0d1117; --panel: #151b23; --text: #e6edf3; --muted: #9198a1; --line: #3d444d;
+		--accent: #4493f8; --accent-bg: #121d2f; --bad: #f85149; --bad-bg: #25171c; --hold: #d29922; --hold-bg: #272115;
+	}
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); }
+header { padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+header h1 { font-size: 18px; margin: 0 0 4px; }
+.scope { color: var(--muted); font-size: 13px; }
+.banner { margin-top: 8px; padding: 8px 12px; border-radius: 6px; background: var(--bad-bg); color: var(--bad); }
+main { display: grid; grid-template-columns: minmax(280px, 400px) 1fr; height: calc(100vh - 70px); }
+aside { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+.filters { padding: 12px; display: grid; gap: 6px; border-bottom: 1px solid var(--line); }
+.filters input[type=search], .filters select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+.filters label { color: var(--muted); font-size: 13px; }
+.count { padding: 6px 12px; color: var(--muted); font-size: 13px; border-bottom: 1px solid var(--line); }
+.list { overflow: auto; flex: 1; }
+.item { padding: 8px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.item:hover { background: var(--bg); }
+.item.active { background: var(--accent-bg); }
+.item .t { font-weight: 500; overflow-wrap: anywhere; }
+.item .m { color: var(--muted); font-size: 12px; }
+.more { margin: 12px; }
+button, .btn { padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); font: inherit; cursor: pointer; text-decoration: none; display: inline-block; }
+button:disabled { opacity: .5; cursor: default; }
+.btn.primary { border-color: var(--accent); color: var(--accent); }
+section.detail { overflow: auto; padding: 16px; min-width: 0; }
+.nav { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.nav h2 { font-size: 17px; margin: 0; flex: 1; min-width: 200px; overflow-wrap: anywhere; }
+.pill { font-size: 12px; padding: 1px 8px; border-radius: 10px; margin-left: 6px; }
+.pill.hold { background: var(--hold-bg); color: var(--hold); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+table.meta { border-collapse: collapse; margin-bottom: 16px; }
+table.meta th { text-align: left; color: var(--muted); font-weight: 500; padding: 2px 16px 2px 0; vertical-align: top; }
+table.meta td { padding: 2px 0; overflow-wrap: anywhere; }
+.card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-bottom: 16px; }
+.card .head { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.card .head .name { flex: 1; font-weight: 500; overflow-wrap: anywhere; min-width: 160px; }
+.card .note { padding: 6px 12px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--line); }
+.card .body { padding: 12px; }
+.card iframe { width: 100%; height: 70vh; border: 0; background: #fff; }
+.card img { max-width: 100%; }
+.thread .msg { padding: 6px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.thread .msg.active { background: var(--accent-bg); }
+.thread .msg:last-child { border-bottom: 0; }
+.muted { color: var(--muted); }
+ul.plain { margin: 0; padding-left: 18px; }
+@media (max-width: 760px) {
+	main { grid-template-columns: 1fr; height: auto; }
+	aside { max-height: 50vh; border-right: 0; border-bottom: 1px solid var(--line); }
+}
+</style>
+</head>
+<body>
+<header>
+	<h1 id="title"></h1>
+	<div class="scope" id="scope"></div>
+	<div id="banner"></div>
+</header>
+<main>
+	<aside>
+		<div class="filters" id="filters"></div>
+		<div class="count" id="count"></div>
+		<div class="list" id="list"></div>
+	</aside>
+	<section class="detail" id="detail"></section>
+</main>
+<script>
+const DATA = /*DOCARCHIVE_DATA*/;
+const L = DATA.labels;
+const PAGE = 100;
+const docs = DATA.documents;
+const byId = new Map(docs.map((doc) => [doc.id, doc]));
+const state = { search: "", type: "", party: "", company: "", year: "", held: false, problems: false, shown: PAGE, current: null };
+
+function h(tag, attrs, ...children) {
+	const el = document.createElement(tag);
+	for (const [key, value] of Object.entries(attrs || {})) {
+		if (value === null || value === undefined || value === false) continue;
+		if (key.startsWith("on")) el.addEventListener(key.slice(2), value);
+		else el.setAttribute(key, value === true ? "" : value);
+	}
+	for (const child of children.flat()) {
+		if (child === null || child === undefined || child === false) continue;
+		el.append(child instanceof Node ? child : document.createTextNode(String(child)));
+	}
+	return el;
+}
+
+const fmt = (text, ...args) => args.reduce((out, arg, i) => out.replace(`{${i}}`, arg), text);
+const href = (path) => path.split("/").map(encodeURIComponent).join("/");
+const typeOf = (doc) => doc.type_label || doc.type;
+const party = (doc) => (doc.counterparty && (doc.counterparty.name || doc.counterparty.id)) || "";
+const ext = (file) => ((file.name || file.key || "").split(".").pop() || "").toLowerCase();
+
+function options(values, all) {
+	return [h("option", { value: "" }, all), ...values.map((value) => h("option", { value }, value))];
+}
+
+function unique(values) {
+	return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function renderHeader() {
+	const scope = DATA.scope;
+	document.title = `${L.title} ${scope.export}`;
+	document.getElementById("title").textContent = `${L.title} ${scope.export}`;
+	const filters = Object.entries(scope.filters).filter(([, value]) => value).map(([key, value]) => `${L[key] || key}: ${value}`);
+	const parts = [
+		scope.parts > 1 ? fmt(L.part, scope.part, scope.parts) : null,
+		`${L.exported_at}: ${scope.exported_at}`,
+		`${L.target}: ${scope.target}`,
+		...filters,
+	].filter(Boolean);
+	document.getElementById("scope").textContent = parts.join(" · ");
+	if (DATA.mismatches.length) {
+		document.getElementById("banner").append(h("div", { class: "banner" }, fmt(L.mismatches, DATA.mismatches.length)));
+	}
+}
+
+function renderFilters() {
+	const box = document.getElementById("filters");
+	const bind = (el, key, prop = "value") => {
+		el.addEventListener(prop === "checked" ? "change" : "input", () => {
+			state[key] = el[prop];
+			state.shown = PAGE;
+			renderList();
+		});
+		return el;
+	};
+	box.append(
+		bind(h("input", { type: "search", placeholder: L.search, "aria-label": L.search }), "search"),
+		bind(h("select", { "aria-label": L.type }, options(unique(docs.map(typeOf)), L.all_types)), "type"),
+		bind(h("select", { "aria-label": L.counterparty }, options(unique(docs.map(party)), L.all_counterparties)), "party"),
+		bind(h("select", { "aria-label": L.own_company }, options(unique(docs.map((d) => d.own_company)), L.all_companies)), "company"),
+		bind(h("select", { "aria-label": L.date }, options(unique(docs.map((d) => (d.date || "").slice(0, 4))).reverse(), L.all_years)), "year"),
+		h("label", {}, bind(h("input", { type: "checkbox" }), "held", "checked"), " ", L.only_held),
+		h("label", {}, bind(h("input", { type: "checkbox" }), "problems", "checked"), " ", L.only_problems),
+	);
+}
+
+function filtered() {
+	const term = state.search.trim().toLowerCase();
+	return docs.filter((doc) =>
+		(!term || [doc.title, doc.number, party(doc), doc.id].some((v) => (v || "").toLowerCase().includes(term))) &&
+		(!state.type || typeOf(doc) === state.type) &&
+		(!state.party || party(doc) === state.party) &&
+		(!state.company || doc.own_company === state.company) &&
+		(!state.year || (doc.date || "").startsWith(state.year)) &&
+		(!state.held || doc.legal_hold) &&
+		(!state.problems || !doc.verified),
+	);
+}
+
+function renderList() {
+	const rows = filtered();
+	const list = document.getElementById("list");
+	list.replaceChildren();
+	document.getElementById("count").textContent = `${Math.min(rows.length, state.shown)} ${L.of} ${rows.length} ${L.documents}`;
+	if (!rows.length) list.append(h("div", { class: "item muted" }, L.none));
+	for (const doc of rows.slice(0, state.shown)) {
+		list.append(
+			h("div", { class: `item${doc.id === state.current ? " active" : ""}`, onclick: () => show(doc.id) },
+				h("div", { class: "t" }, doc.title || doc.id,
+					doc.legal_hold ? h("span", { class: "pill hold" }, L.legal_hold) : null,
+					doc.verified ? null : h("span", { class: "pill bad" }, "!")),
+				h("div", { class: "m" }, [doc.date, typeOf(doc), party(doc)].filter(Boolean).join(" · ")),
+			),
+		);
+	}
+	if (rows.length > state.shown) {
+		list.append(h("button", { class: "more", onclick: () => { state.shown += PAGE; renderList(); } }, L.more));
+	}
+	return rows;
+}
+
+function preview(file) {
+	if (!file.path) return h("div", { class: "body muted" }, L.problem);
+	const kind = ext(file);
+	if (file.preview) {
+		return [
+			h("div", { class: "note" }, L.rendered_preview),
+			h("div", { class: "body" }, h("iframe", { src: href(file.preview), sandbox: "", title: file.name || file.key })),
+		];
+	}
+	if (kind === "pdf") return h("div", { class: "body" }, h("iframe", { src: href(file.path), title: file.name || file.key }));
+	if (["png", "jpg", "jpeg", "gif", "webp"].includes(kind)) return h("div", { class: "body" }, h("img", { src: href(file.path), alt: file.name || "" }));
+	if (["xml", "txt", "json"].includes(kind)) {
+		return h("div", { class: "body" }, h("iframe", { src: href(file.path), sandbox: "", title: file.name || file.key }));
+	}
+	return h("div", { class: "body muted" }, L.no_preview);
+}
+
+function fileCard(file) {
+	const actions = file.path
+		? [
+			h("a", { class: "btn primary", href: href(file.path), target: "_blank", rel: "noopener" }, L.open_original),
+			h("a", { class: "btn", href: href(file.path), download: file.name || "" }, L.download_original),
+		]
+		: [];
+	return h("div", { class: "card" },
+		h("div", { class: "head" },
+			h("span", { class: "name" }, file.title || file.name || file.key,
+				file.role ? h("span", { class: "muted" }, ` · ${file.role_label || file.role}`) : null,
+				file.verified ? null : h("span", { class: "pill bad" }, L.problem)),
+			actions),
+		preview(file));
+}
+
+function threadOf(doc) {
+	if (!doc.thread_key) return [];
+	return docs.filter((other) => other.thread_key === doc.thread_key).sort((a, b) => (a.date || "").localeCompare(b.date || "") || a.id.localeCompare(b.id));
+}
+
+function show(id) {
+	const doc = byId.get(id);
+	if (!doc) return;
+	state.current = id;
+	if (location.hash !== `#${encodeURIComponent(id)}`) history.replaceState(null, "", `#${encodeURIComponent(id)}`);
+	const rows = renderList();
+	const index = rows.findIndex((row) => row.id === id);
+	const step = (delta) => rows[index + delta] && show(rows[index + delta].id);
+	const detail = document.getElementById("detail");
+	const meta = [
+		[L.type, typeOf(doc)], [L.date, doc.date], [L.number, doc.number], [L.counterparty, party(doc)],
+		[L.own_company, doc.own_company], [L.retain_until, doc.retain_until], [L.lock_mode, doc.lock_mode],
+		[L.verified, doc.verified ? "✓" : "✗"],
+	].filter(([, value]) => value);
+	const thread = threadOf(doc);
+	detail.replaceChildren(...[
+		h("div", { class: "nav" },
+			h("button", { onclick: () => step(-1), disabled: index <= 0 }, `← ${L.previous}`),
+			h("h2", {}, doc.title || doc.id, doc.legal_hold ? h("span", { class: "pill hold" }, L.legal_hold) : null),
+			h("button", { onclick: () => step(1), disabled: index < 0 || index >= rows.length - 1 }, `${L.next} →`)),
+		h("table", { class: "meta" }, meta.map(([label, value]) => h("tr", {}, h("th", {}, label), h("td", {}, value)))),
+		thread.length > 1
+			? h("div", { class: "card thread" },
+				h("div", { class: "head" }, h("span", { class: "name" }, `${L.thread} (${thread.length})`)),
+				thread.map((msg) => h("div", { class: `msg${msg.id === id ? " active" : ""}`, onclick: () => show(msg.id) },
+					h("div", {}, msg.title || msg.id), h("div", { class: "muted" }, [msg.date, party(msg)].filter(Boolean).join(" · ")))))
+			: null,
+		doc.files.map(fileCard),
+		doc.history.length
+			? h("div", { class: "card" },
+				h("div", { class: "head" }, h("span", { class: "name" }, L.retention_trail)),
+				h("div", { class: "body" }, h("ul", { class: "plain" }, doc.history.map((entry) =>
+					h("li", {}, `${entry.extended_at || ""}: ${entry.previous_retain_until || ""} → ${entry.retain_until || ""}`)))))
+			: null,
+		h("div", { class: "card" },
+			h("div", { class: "head" }, h("span", { class: "name" }, L.metadata)),
+			h("div", { class: "body" }, h("ul", { class: "plain" }, doc.metadata.map((file) =>
+				h("li", {}, file.path ? h("a", { href: href(file.path), target: "_blank", rel: "noopener" }, file.key) : file.key,
+					file.verified ? null : h("span", { class: "pill bad" }, L.problem)))))),
+	].flat().filter(Boolean));
+	detail.scrollTop = 0;
+}
+
+document.addEventListener("keydown", (event) => {
+	if (event.target.matches("input, select") || !state.current) return;
+	const rows = filtered();
+	const index = rows.findIndex((row) => row.id === state.current);
+	if (event.key === "ArrowDown" || event.key === "j") rows[index + 1] && show(rows[index + 1].id);
+	if (event.key === "ArrowUp" || event.key === "k") rows[index - 1] && show(rows[index - 1].id);
+});
+
+renderHeader();
+renderFilters();
+const start = decodeURIComponent(location.hash.slice(1));
+const first = byId.has(start) ? start : docs[0] && docs[0].id;
+if (first) show(first); else renderList();
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@ frappe.listview_settings["Business Document"] = {
 	add_fields: ["archive_status", "legal_hold"],
 	onload(listview) {
 		docarchive.legal_hold_list_actions(listview);
+		docarchive.add_export_button(listview);
 		if (!frappe.model.can_write("Business Document")) return;
 		const refresh = () => listview.refresh();
 		listview.page.add_actions_menu_item(__("Archive now"), () => {
