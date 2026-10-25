@@ -58,6 +58,8 @@ jobs:
         id: node
         with:
           node-version: '24'
+      - name: JS tests
+        run: node --test 'docarchive/**/*.test.mjs'
       - name: Read pinned versions
         run: grep -E '^[A-Z0-9_]+=' .github/versions.env >> "$GITHUB_ENV"
       - uses: actions/cache@v6

@@ -1,12 +1,10 @@
-import re
-
 import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import add_days, add_years, getdate, today
 from frappe.utils.data import cast
 
-from docarchive import assignment, content, counterparty, settings
+from docarchive import assignment, content, counterparty, file_names, settings
 
 SOURCE_FIELDS = (
 	"source_system",
@@ -55,12 +53,10 @@ PROTECTED_FIELDS = (
 ATTACHMENT_PROTECTED = ("content_sha256", "object_key", "archive_size")
 CONTRACT_END = "Contract End Date"
 PRIVATE_PREFIX = "/private/files/"
-SEPARATORS = re.compile(r"[\s_-]+")
 
 
 def title_from_file_name(file_name):
-	stem, dot, extension = file_name.rpartition(".")
-	return SEPARATORS.sub(" ", stem if dot else extension).strip()
+	return file_names.date_from_file_name(file_name)[1]
 
 
 def own_file(doc, file_url=None):
@@ -103,14 +99,17 @@ def file_name(doc, file_url):
 	return row.file_name if row else file_url.rsplit("/", 1)[-1]
 
 
+def file_name_of(doc):
+	return file_name(doc, doc.file)
+
+
 def attachment_rows(doc):
 	return [(row.name, row.file, row.role, row.title or "") for row in doc.get("attachments") or []]
 
 
 def default_title(doc):
 	if doc.file:
-		row = own_file(doc)
-		return title_from_file_name(row.file_name if row else doc.file.rsplit("/", 1)[-1])
+		return title_from_file_name(file_name_of(doc))
 	return doc.document_number or doc.document_type
 
 
@@ -132,6 +131,10 @@ class BusinessDocument(Document):
 		if not (before and before.archive_started_at):
 			counterparty.check_read(self, before)
 		return super()._validate_links()
+
+	def before_validate(self):
+		if self.file and not self.document_date and not self.archive_started_at:
+			self.document_date = file_names.date_from_file_name(file_name_of(self))[0]
 
 	def validate(self):
 		before = self.get_doc_before_save()

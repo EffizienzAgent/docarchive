@@ -21,6 +21,7 @@ SAVEPOINT = "docarchive_save"
 LOCK_SECONDS = 1800
 PENDING, ARCHIVED, FAILED, SKIPPED = "Pending", "Archived", "Failed", "Skipped"
 MAIN_ROLE = "Main"
+DELETED = "Deleted"
 CANDIDATE_FIELDS = [
 	"name",
 	"document_type",
@@ -449,23 +450,36 @@ def extensions(target_names):
 	types = frappe.get_all(
 		"Business Document Type", filters={"retention_from": retention.CONTRACT_END}, pluck="name"
 	)
-	if not types:
-		return []
+	pending = frappe.get_all(
+		DOCUMENT,
+		filters={
+			"extension_until": ("is", "set"),
+			"archived_at": ("is", "set"),
+			"archive_status": ("!=", DELETED),
+		},
+		pluck="name",
+	)
 	names = frappe.get_all(
 		DOCUMENT,
 		filters={
-			"document_type": ("in", types),
+			"document_type": ("in", types or [""]),
 			"archived_at": ("is", "set"),
+			"archive_status": ("!=", DELETED),
 			"contract_end_date": ("is", "set"),
 		},
 		pluck="name",
 		order_by="creation",
 	)
+	names = list(dict.fromkeys([*pending, *names]))
 	result = []
 	for name in names:
 		try:
 			doc = frappe.get_doc(DOCUMENT, name)
-			until = retention.from_db(doc.extension_until) or retention.retain_until(doc, frozen_years(doc))
+			if any(copy.status == DELETED for copy in doc.archive_copies):
+				continue
+			until = retention.from_db(doc.extension_until) or contract_until(doc)
+			if not until:
+				continue
 			copies = archived_copies(doc, target_names)
 			if until > retention.from_db(doc.retain_until) or any(
 				retention.from_db(copy.retain_until) < until for copy in copies
@@ -474,6 +488,12 @@ def extensions(target_names):
 		except Exception as e:
 			frappe.log_error(title=f"docarchive: {name}", message=safe_error(e))
 	return result
+
+
+def contract_until(doc):
+	if doc.contract_end_date and retention.counts_from_contract_end(doc):
+		return retention.retain_until(doc, frozen_years(doc))
+	return None
 
 
 def archived_copies(doc, target_names):
@@ -488,7 +508,7 @@ def sidecar_key(doc) -> str:
 	return f"{doc.object_key}.meta.{(doc.retention_extensions or 0) + 2}.json"
 
 
-def prepare_extension(doc, until):
+def prepare_extension(doc, until, note=None):
 	if doc.extension_until:
 		return
 	history = json.loads(doc.retention_history or "[]")
@@ -496,8 +516,9 @@ def prepare_extension(doc, until):
 		"index": (doc.retention_extensions or 0) + 2,
 		"previous_retain_until": utc_iso(retention.from_db(doc.retain_until)),
 		"retain_until": utc_iso(until),
-		"contract_end_date": str(doc.contract_end_date),
+		"contract_end_date": str(doc.contract_end_date) if doc.contract_end_date else None,
 		"extended_at": utc_iso(frappe.utils.get_datetime(now_datetime())),
+		**(note or {}),
 	}
 	sidecar = json.loads(doc.archive_meta)
 	sidecar["retention"] = {
@@ -505,7 +526,7 @@ def prepare_extension(doc, until):
 		"start_date": str(retention.start_date(doc)),
 		"retain_until": utc_iso(until),
 	}
-	sidecar["document"]["contract_end_date"] = str(doc.contract_end_date)
+	sidecar["document"]["contract_end_date"] = str(doc.contract_end_date) if doc.contract_end_date else None
 	sidecar["extension"] = entry
 	sidecar["history"] = history
 	doc.extension_until = retention.to_db(until)
@@ -573,9 +594,10 @@ def extend_document(doc, until, by_name) -> bool:
 	if done:
 		history = json.loads(doc.retention_history or "[]")
 		history.append(json.loads(doc.extension_meta)["extension"])
+		kept = max(until, retention.from_db(doc.retain_until) or until)
 		doc.update(
 			{
-				"retain_until": retention.to_db(until),
+				"retain_until": retention.to_db(kept),
 				"retention_extensions": (doc.retention_extensions or 0) + 1,
 				"retention_history": json.dumps(history, sort_keys=True),
 				"extension_until": None,

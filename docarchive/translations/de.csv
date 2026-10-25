@@ -225,3 +225,79 @@ Structured Invoice (XML),Strukturierte Rechnung (XML)
 "The first file is the main file, the others become its attachments.","Die erste Datei ist die Hauptdatei, die anderen werden ihre Anlagen."
 Unknown attachment role {0}.,Unbekannte Rolle der Anlage {0}.
 Version ID,Versions-ID
+Open,Offen
+Complete,Vollständig
+Unchangeable until {0},Unveränderbar bis {0}
+Oldest first,Älteste zuerst
+Newest first,Neueste zuerst
+Search title or number,Titel oder Nummer suchen
+All types,Alle Dokumentarten
+All years,Alle Jahre
+All statuses,Alle Status
+No documents match the filters.,Keine Dokumente passen zu den Filtern.
+No documents yet. Drop files here.,Noch keine Dokumente – Dateien hierher ziehen
+Select all,Alle auswählen
+Select,Auswählen
+{0} missing,{0} fehlt
+Open file,Datei öffnen
+Copy link,Link kopieren
+{0} of {1} documents,{0} von {1} Dokumenten
+Only the newest {0} are shown.,Nur die neuesten {0} werden angezeigt.
+No file,Keine Datei
+Download,Herunterladen
+Assign documents,Dokumente zuordnen
+{0} of {1},{0} von {1}
+Save and next,Speichern & weiter
+Skip,Überspringen
+Back,Zurück
+You cannot change this document.,Sie können dieses Dokument nicht ändern.
+Still missing: {0},Es fehlt noch: {0}
+All documents processed.,Alle Dokumente bearbeitet.
+Nothing to assign.,Nichts zuzuordnen.
+Assign,Zuordnen
+Assign all,Alle zuordnen
+Add years,Jahre hinzufügen
+An extension of this document is still running. Please try again after the nightly run.,Für dieses Dokument läuft noch eine Verlängerung. Bitte nach dem nächtlichen Lauf erneut versuchen.
+At least N years from the retention start,Mindestens N Jahre ab Beginn der Aufbewahrung
+Choose between 1 and {0} years.,Bitte zwischen 1 und {0} Jahren wählen.
+Choose how to extend the retention.,"Bitte wählen, wie die Aufbewahrung verlängert wird."
+Current,Bisher
+Ends within (months),Endet innerhalb von (Monaten)
+Extend,Verlängern
+Extend all documents of this counterparty,Alle Dokumente dieser Gegenpartei verlängern
+Extend retention,Aufbewahrungsfrist verlängern
+Extension started.,Verlängerung gestartet.
+Failed Copies,Fehlgeschlagene Kopien
+Kept until: any year,Aufbewahrt bis: alle Jahre
+Kept until {0},Aufbewahrt bis {0}
+New,Neu
+Only archived documents can be extended.,Nur archivierte Dokumente können verlängert werden.
+Only document managers can extend the retention.,Nur die Dokumentenverwaltung kann die Aufbewahrung verlängern.
+Only failed copies,Nur fehlgeschlagene Kopien
+Preview,Vorschau
+Reason,Grund
+Sort by,Sortieren nach
+The extension is not finished on every target yet. The nightly run retries it.,Die Verlängerung ist noch nicht auf allen Speicherzielen fertig. Der nächtliche Lauf versucht es erneut.
+The new date must be later than the current retention ({0}).,Das neue Datum muss nach der bisherigen Aufbewahrung ({0}) liegen.
+The retention cannot be shortened afterwards.,Die Frist kann danach nicht mehr verkürzt werden.
+This document is being archived right now. Please try again later.,Dieses Dokument wird gerade archiviert. Bitte später erneut versuchen.
+Until a date,Bis zu einem Datum
+Year,Jahr
+Kept until {0}.,Aufbewahrt bis {0}.
+Extend {0} documents,{0} Dokumente verlängern
+"{0} documents will be extended, {1} are skipped.","{0} Dokumente werden verlängert, {1} werden übersprungen."
+Extended: {0},Verlängert: {0}
+Still running on some targets: {0},Auf einigen Speicherzielen noch offen: {0}
+Skipped: {0},Übersprungen: {0}
+Failed: {0},Fehlgeschlagen: {0}
+The retention is being extended to {0}.,Die Aufbewahrung wird auf {0} verlängert.
+Retention Overview,Aufbewahrung
+Retention ends in 90 days,Fristen enden in 90 Tagen
+Deleted,Gelöscht
+Show deleted,Gelöschte anzeigen
+Until and including,Bis einschließlich
+The new date can be at most {0} years from today.,Das neue Datum darf höchstens {0} Jahre in der Zukunft liegen.
+Deleted documents cannot be extended.,Gelöschte Dokumente können nicht verlängert werden.
+These storage targets hold a copy but are not enabled: {0},"Diese Speicherziele haben eine Kopie, sind aber nicht aktiv: {0}"
+"Someone else changed this document in the meantime. It was reloaded, please check it again.","Jemand anderes hat dieses Dokument inzwischen geändert. Es wurde neu geladen, bitte noch einmal prüfen."
+Add attachment,Anlage hinzufügen

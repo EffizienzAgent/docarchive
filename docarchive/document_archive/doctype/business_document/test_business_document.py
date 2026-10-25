@@ -326,6 +326,11 @@ class TestBusinessDocumentTitle(BusinessDocumentTestCase):
 		doc = make_business_document(file=make_file(file_name="Framework_contract-acme.pdf").file_url)
 		self.assertEqual(doc.title, "Framework contract acme")
 
+	def test_title_leaves_out_the_file_date(self):
+		name = frappe.generate_hash(length=8)
+		doc = make_business_document(file=make_file(file_name=f"2026-08-05 Rechnung {name}.pdf").file_url)
+		self.assertEqual(doc.title, f"Rechnung {name}")
+
 	def test_title_follows_new_file_until_edited(self):
 		doc = make_business_document(file=make_file(file_name="first_draft.pdf").file_url)
 		doc.file = make_file(file_name="second_draft.pdf").file_url

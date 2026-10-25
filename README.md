@@ -62,7 +62,7 @@ File deletion runs inside the File controller, before any `doc_events` hook. So 
 
 ### Counterparty panel
 
-The app's JS bundle offers a panel for any form: a list of the record's documents, an upload button (several files, drag and drop) and a dialog for type and date. With several files, the dialog can file them as one document: the first file becomes the main file, the others its attachments.
+The app's JS bundle offers a panel for any form: the record's documents with search, filters (type, year, status) and sorting, row actions (open, open file, copy link, archive now, also for several at once) and an upload with drag and drop. The upload dialog has one row per file with title, type and date. A date in the file name (`2026-08-05`, `2026_08_05`, `20260805` or `05.08.2026`) becomes the document date and is left out of the title. Uploads without a date take it from the file name on the server too. With several files, the dialog can file them as one document: the first row becomes the main file, the others its attachments.
 
 ```js
 frappe.ui.form.on("Customer", {
@@ -72,7 +72,11 @@ frappe.ui.form.on("Customer", {
 });
 ```
 
-`docarchive.render_documents($wrapper, { counterparty_type, counterparty })` and `docarchive.upload_documents({ counterparty_type, counterparty, on_saved })` are available for custom layouts.
+`docarchive.render_documents($wrapper, { counterparty_type, counterparty })` and `docarchive.upload_documents({ counterparty_type, counterparty, files, on_saved })` are available for custom layouts. Set `docarchive.file_url = (file_url) => url` to open files in your own viewer.
+
+### Triage
+
+`docarchive.triage(names, { start, on_close })` opens a dialog that walks through documents one by one: the fields and what is still missing on the left, and the file on the right (PDF and images inline, other types as a download). "Save and next" (Ctrl/Cmd+Enter), "Skip", "Back" and Alt+Left/Right move through the list; Esc closes. Each save is a normal `doc.save()` with permission checks, and validation errors stay inline. `docarchive.triage_all()` opens it on every document that still needs work. The Business Document list has "Assign" for selected documents and "Assign all".
 
 ### Dashboard helpers
 
@@ -191,6 +195,16 @@ The `.meta.json` holds the document data (ID, title, type, date, number, contrac
 After archiving starts, the contract end date can be set for the first time or moved later, never earlier. Each night, after archiving, the run recomputes `retain_until` for archived documents whose type counts from the contract end, using the retention years stored at archive start. When the new date is later than a copy's date, it extends the retention of the main file, every attachment and the `.meta.json` on that target with `PutObjectRetention`, in the same mode. Each copy records its own date. The document's `retain_until` moves only when every enabled target has the new date, and a failed target is retried the next night. A shorter date never leads to a request.
 
 Each extension also writes a sidecar `<key>.meta.<n>.json` (n = 2, 3, …) to every target, locked with the new date and the copy's mode. It holds the metadata with the new retention, the extension (previous and new date, contract end, time) and the earlier extensions, so the newest sidecar carries the whole trail. The original `.meta.json` is never rewritten: Object Lock versions are immutable, and a second version under the same key would hide the first. The sidecar content is frozen before the first write, so a retry writes the same bytes, and a contract end that moves again in the meantime leads to the next extension. Before extending, the run checks the SHA-256 of the exact object version it recorded.
+
+### Manual extension
+
+Document managers can extend the retention of archived documents by hand: "Extend retention" on the form (add N years or pick a date), "Extend retention" in the Business Document list and "Extend all documents of this counterparty" in the panel (at least N years from the retention start, so each document gets the later of its current date and start + N years, or a fixed date). Bulk extensions show a preview with the current and new date per document and the skipped ones, then run as a background job with progress and a summary.
+
+A picked date counts inclusively: the copies stay locked until the end of that day (00:00 UTC the next day). The server refuses any date that is not later than every archived copy's current date or more than 100 years ahead, refuses documents with a copy on a target that is no longer enabled and deleted documents, and never shortens; the document's `retain_until` never moves earlier. A manual extension uses the same path as the contract end extension above: `extend_locked` per copy, a locked `.meta.<n>.json` sidecar, per-target status, and the nightly run retries targets that failed. The extension entry also records who extended, when and why (optional reason). While one extension is still running on a document, a new one is refused. The endpoints in `docarchive.extension` are POST only and check the manager role and write access.
+
+### Retention overview
+
+The Business Document list and the counterparty panel show `retain_until`; the panel filters and sorts by it. The report "Retention Overview" lists archived documents with a chart by retain-until year and filters for type, own company, counterparty, lock mode, "ends within N months" and failed copies. The number card "Retention ends in 90 days" and `docarchive.extension.count_ending(days)` give hosts a count to show.
 
 ### Object Lock writes
 
