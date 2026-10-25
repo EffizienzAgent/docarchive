@@ -44,3 +44,20 @@ class TestMailAccounts(IntegrationTestCase):
 		imap = make_email_account(use_imap=1).name
 		row = make_mail_settings(imap, mode="Manual", outgoing_source="Sent Folder")
 		self.assertEqual(row.outgoing_source, "Sent Folder")
+
+	def test_deleting_account_keeps_its_originals(self):
+		from docarchive import mail
+		from docarchive.mail import archiving
+		from docarchive.tests.factories import eml, make_communication, make_own_company
+
+		make_settings(default_own_company=make_own_company().name)
+		make_mail_settings(self.account, mode="Manual")
+		loose = mail.capture(make_communication(self.account), eml(), "t")
+		archived = mail.capture(make_communication(self.account), eml(), "t")
+		archiving.archive(archived)
+		settings = frappe.get_single("Archive Settings")
+		settings.set("mail_accounts", [])
+		settings.save(ignore_permissions=True)
+		frappe.delete_doc("Email Account", self.account, ignore_permissions=True)
+		for name in (loose, archived):
+			self.assertEqual(frappe.db.get_value("Mail Original", name, "email_account"), self.account)

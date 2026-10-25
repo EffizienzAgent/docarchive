@@ -42,10 +42,9 @@
   },
   {
    "fieldname": "email_account",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Email Account",
-   "read_only": 1,
-   "options": "Email Account"
+   "read_only": 1
   },
   {
    "fieldname": "origin",
