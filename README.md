@@ -46,6 +46,20 @@ docarchive is a technical tool. It does not make you compliant with GoBD, the GD
 - [Roles and permissions](#roles): Document Manager, Archive Admin, Document Integration, and host roles.
 - [Host app hooks](#host-app-hooks) for assignment, counterparties, file access and e-invoice extractors, and [commands](#commands) for runs and checks.
 
+## Screenshots
+
+From the demo data of `bench --site <site> docarchive-demo` (see [Commands](#commands)).
+
+| | |
+|---|---|
+| <a href="docs/images/counterparty-panel.png"><img src="docs/images/counterparty-panel.png" alt="Counterparty panel: documents of a contact with filters, row actions and upload" width="420"></a><br>Counterparty panel: documents of a contact with filters, row actions and upload | <a href="docs/images/document-form.png"><img src="docs/images/document-form.png" alt="Business Document after archiving" width="420"></a><br>Business Document after archiving |
+| <a href="docs/images/triage.png"><img src="docs/images/triage.png" alt="Triage: documents with missing fields, one by one" width="420"></a><br>Triage: documents with missing fields, one by one | <a href="docs/images/archive-now.png"><img src="docs/images/archive-now.png" alt="Archive now: confirmation with retain-until date and lock mode" width="420"></a><br>Archive now: confirmation with retain-until date and lock mode |
+| <a href="docs/images/retention-overview.png"><img src="docs/images/retention-overview.png" alt="Retention Overview report" width="420"></a><br>Retention Overview report | <a href="docs/images/legal-hold.png"><img src="docs/images/legal-hold.png" alt="Setting a legal hold" width="420"></a><br>Setting a legal hold |
+| <a href="docs/images/mail-viewer.png"><img src="docs/images/mail-viewer.png" alt="Archived e-mail in the viewer" width="420"></a><br>Archived e-mail in the viewer | <a href="docs/images/thread.png"><img src="docs/images/thread.png" alt="Mail thread with a gap" width="420"></a><br>Mail thread with a gap |
+| <a href="docs/images/audit-log.png"><img src="docs/images/audit-log.png" alt="Archive Audit Log" width="420"></a><br>Archive Audit Log | <a href="docs/images/document-audit-log.png"><img src="docs/images/document-audit-log.png" alt="Audit log section on a document" width="420"></a><br>Audit log section on a document |
+| <a href="docs/images/archive-completeness.png"><img src="docs/images/archive-completeness.png" alt="Archive Completeness report with a number gap" width="420"></a><br>Archive Completeness report with a number gap | <a href="docs/images/export-viewer.png"><img src="docs/images/export-viewer.png" alt="Offline export viewer" width="420"></a><br>Offline export viewer |
+| <a href="docs/images/export-viewer-audit-log.png"><img src="docs/images/export-viewer-audit-log.png" alt="Audit log tab of the export viewer" width="420"></a><br>Audit log tab of the export viewer | <a href="docs/images/audit-entry.png"><img src="docs/images/audit-entry.png" alt="Audit entry of a nightly run" width="420"></a><br>Audit entry of a nightly run |
+
 ## How it works
 
 - **Business Document**: one record per document, with a private file, a type, a document date, a number, an own company and a counterparty. The counterparty is a Dynamic Link (`counterparty_type` + `counterparty`), so it can point to any doctype the host app allows.
@@ -480,7 +494,10 @@ bench --site <site> docarchive-run             # archive now (needs Enabled), ex
 bench --site <site> docarchive-smoke --target primary
 bench --site <site> docarchive-sync-mode --target primary   # after switching objects to COMPLIANCE
 bench --site <site> docarchive-extract --dry-run            # e-invoice data for existing documents
+bench --site <site> docarchive-demo                         # demo data on an empty developer site
 ```
+
+`docarchive-demo` only runs on a site with `developer_mode` and no Business Documents. It creates an own company, four counterparties (Contacts with the documents panel), invoices with a number gap, a contract, a bank statement that fails its checksum, two documents with missing fields, an overdue invoice and an e-mail thread with a gap. It then runs the nightly archive, sets a legal hold, extends a retention and builds an export. Storage is an in-memory Object Lock bucket for the duration of the command, so it needs no S3 credentials; the database keeps the results, the objects are gone afterwards. Because the storage targets lead nowhere afterwards, the command turns off the site's scheduler. `scripts/screenshots.py` takes the screenshots above from such a site.
 
 `docarchive-smoke` works without Enabled. It uploads a tiny `_smoke/` object with a 1-day GOVERNANCE lock, reads it back and checks its retention. Then it tries to delete that version with the target's credentials, once normally and once with `BypassGovernanceRetention`. Both must be refused with AccessDenied (or the provider's object-lock error), and a versioned HEAD must still find the object. It exits with status 1 if any check fails. Each run leaves one small object that expires after a day.
 
