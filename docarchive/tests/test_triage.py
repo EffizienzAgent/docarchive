@@ -73,16 +73,14 @@ class TestTriage(IntegrationTestCase):
 			result = triage.save_item(self.doc.name, frappe.as_json({"document_date": None}))
 		self.assertEqual(str(result["item"]["document_date"]), "2026-08-05")
 
-	def test_missing_date_is_an_inline_error(self):
+	def test_cleared_date_stays_empty_and_is_missing(self):
 		doc = make_business_document(
 			file=make_file(file_name="Rechnung.pdf").file_url, **party_fields(self.party)
 		)
 		with self.set_user(self.manager("triage-no-date@example.com")):
 			result = triage.save_item(doc.name, frappe.as_json({"document_date": None}))
-		self.assertIn("Document Date", result["error"])
-		self.assertEqual(
-			str(frappe.db.get_value("Business Document", doc.name, "document_date")), "2026-03-15"
-		)
+		self.assertIn("Document Date", result["item"]["missing"])
+		self.assertIsNone(frappe.db.get_value("Business Document", doc.name, "document_date"))
 
 	def test_only_known_fields_are_written(self):
 		with self.set_user(self.manager("triage-fields@example.com")):

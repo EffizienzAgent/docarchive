@@ -25,6 +25,9 @@ DELETED = "Deleted"
 CANDIDATE_FIELDS = [
 	"name",
 	"document_type",
+	"document_date",
+	"own_company",
+	"einvoice_needs_review",
 	"file",
 	"counterparty",
 	"document_number",
@@ -92,8 +95,8 @@ def reassign():
 			"document_type": ("in", types),
 			"archive_started_at": ("is", "not set"),
 			"counterparty": ("is", "not set"),
-			"source_system": ("is", "set"),
 		},
+		or_filters={"source_system": ("is", "set"), "einvoice_data": ("is", "set")},
 		pluck="name",
 	):
 		doc = frappe.get_doc(DOCUMENT, name)
@@ -495,6 +498,7 @@ def meta(doc, years, until) -> dict:
 			"own_company": doc.own_company,
 		},
 		"counterparty": counterparty(doc),
+		"einvoice": json.loads(doc.einvoice_data) if doc.get("einvoice_data") else None,
 		"file": main,
 		"files": [main, *attachments],
 		"source": {

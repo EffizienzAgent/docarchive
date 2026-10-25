@@ -4,7 +4,7 @@ from frappe.model.document import Document
 from frappe.utils import add_days, add_years, getdate, today
 from frappe.utils.data import cast
 
-from docarchive import assignment, content, counterparty, file_names, settings
+from docarchive import assignment, content, counterparty, einvoice, file_names, settings
 
 SOURCE_FIELDS = (
 	"source_system",
@@ -47,6 +47,9 @@ PROTECTED_FIELDS = (
 	"extension_until",
 	"retention_history",
 	"extension_meta",
+	"einvoice_data",
+	"einvoice_needs_review",
+	"einvoice_checked",
 	"legal_hold",
 	"legal_hold_reason",
 	"legal_hold_log",
@@ -114,6 +117,9 @@ def attachment_rows(doc):
 
 
 def default_title(doc):
+	from_einvoice = einvoice.title(doc)
+	if from_einvoice:
+		return from_einvoice
 	if doc.file:
 		return title_from_file_name(file_name_of(doc))
 	return doc.document_number or doc.document_type
@@ -127,6 +133,9 @@ def missing_fields(doc) -> list[str]:
 	rules = frappe.get_cached_doc("Business Document Type", doc.document_type)
 	checks = [
 		("File", not doc.file),
+		("Document Date", not doc.document_date),
+		("Own Company", not doc.own_company),
+		("Confirmation", doc.get("einvoice_needs_review")),
 		("Counterparty", rules.counterparty_required and not doc.counterparty),
 		("Document Number", rules.number_required and not doc.document_number),
 		("Contract End Date", rules.contract_end_required and not doc.contract_end_date),
@@ -142,10 +151,6 @@ class BusinessDocument(Document):
 			counterparty.check_read(self, before)
 		return super()._validate_links()
 
-	def before_validate(self):
-		if self.file and not self.document_date and not self.archive_started_at:
-			self.document_date = file_names.date_from_file_name(file_name_of(self))[0]
-
 	def validate(self):
 		before = self.get_doc_before_save()
 		if before and is_deleting(before) and not self.flags.archive_write:
@@ -154,10 +159,15 @@ class BusinessDocument(Document):
 		if before and before.archive_started_at:
 			self.enforce_lock(before)
 		else:
-			assignment.assign(self)
-			self.resolve_own_company()
 			self.validate_file(before)
 			self.validate_attachments(before)
+			einvoice.confirm(self, before)
+			einvoice.update(self, before, self.einvoice_files())
+			if self.file and not self.document_date:
+				self.document_date = file_names.date_from_file_name(file_name_of(self))[0]
+			assignment.assign(self)
+			self.resolve_own_company()
+			einvoice.record_conflicts(self)
 		counterparty.validate(self)
 		self.validate_dates()
 		self.validate_contract_end()
@@ -211,6 +221,8 @@ class BusinessDocument(Document):
 			frappe.throw(_("Attachments cannot be changed once archiving has started."))
 
 	def resolve_own_company(self):
+		if not (self.own_company or self.document_date):
+			return
 		self.own_company = settings.own_company_for(self.document_date, self.own_company)
 		if not self.own_company:
 			frappe.throw(
@@ -257,6 +269,13 @@ class BusinessDocument(Document):
 			seen.add(row.content_sha256)
 			row.title = row.title or title_from_file_name(file_name(self, row.file))
 
+	def einvoice_files(self):
+		main = [(file_name(self, self.file), self.file, "main")] if self.file else []
+		rows = [(file_name(self, row.file), row.file, f"attachment {row.idx}") for row in self.attachments]
+		for name, file_url, source in main + rows:
+			if extension(name) in einvoice.EXTENSIONS:
+				yield name, content.read_bytes(file_url), source
+
 	def attach_files(self):
 		for row in self.get("attachments") or []:
 			found = own_file(self, row.file)
@@ -272,6 +291,8 @@ class BusinessDocument(Document):
 				)
 
 	def validate_dates(self):
+		if not self.document_date:
+			return
 		limits = settings.date_limits()
 		if getdate(self.document_date) > getdate(add_days(today(), limits.future_days)):
 			frappe.throw(
@@ -294,7 +315,7 @@ class BusinessDocument(Document):
 			!= CONTRACT_END
 		):
 			frappe.throw(_("Only contracts have a contract end date."))
-		if getdate(self.contract_end_date) < getdate(self.document_date):
+		if self.document_date and getdate(self.contract_end_date) < getdate(self.document_date):
 			frappe.throw(_("The contract end date cannot be before the document date."))
 
 	def set_title(self, before):

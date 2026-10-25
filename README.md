@@ -63,8 +63,9 @@ Add these to your app's `hooks.py`:
 | `docarchive_assign` | `doc` (Business Document, in `validate`, before archiving starts) | Fill `own_company`, `counterparty_type` and `counterparty`, e.g. from `source_system`, `source_account`, `source_party_type` and `source_party_id` (set by server code with `flags.archive_write`). Values the user set are kept. Do not save other documents here. |
 | `docarchive_counterparty_doctypes` | – | List of doctypes allowed as counterparty. Empty: any doctype that is not a child table or a single. |
 | `docarchive_read_file` | `file_url` | Return the raw bytes of a file, or `None`. Use this when files live outside the site folder (e.g. in object storage). The last hook wins. |
+| `docarchive_einvoice_extractors` | `data`, `file_name` | Return e-invoice metadata or `None`. See [E-invoices](#e-invoices). |
 
-Own company resolution: an explicit value, then the `docarchive_assign` hooks, then the successor company by date, then the default company from Archive Settings.
+Own company resolution: an explicit value, then the `docarchive_assign` hooks, then the successor company by date, then the default company from Archive Settings. While a document has no date, the successor and default companies are not applied: own company stays empty and is listed as missing until the date is set.
 
 File deletion runs inside the File controller, before any `doc_events` hook. So the delete guard also has to run there:
 
@@ -74,7 +75,7 @@ File deletion runs inside the File controller, before any `doc_events` hook. So 
 
 ### Counterparty panel
 
-The app's JS bundle offers a panel for any form: the record's documents with search, filters (type, year, status) and sorting, row actions (open, open file, copy link, archive now, also for several at once) and an upload with drag and drop. The upload dialog has one row per file with title, type and date. A date in the file name (`2026-08-05`, `2026_08_05`, `20260805` or `05.08.2026`) becomes the document date and is left out of the title. Uploads without a date take it from the file name on the server too. With several files, the dialog can file them as one document: the first row becomes the main file, the others its attachments.
+The app's JS bundle offers a panel for any form: the record's documents with search, filters (type, year, status) and sorting, row actions (open, open file, copy link, archive now, also for several at once) and an upload with drag and drop. The upload dialog has one row per file with title, type and date. A date in the file name (`2026-08-05`, `2026_08_05`, `20260805` or `05.08.2026`) becomes the document date and is left out of the title. Uploads without a date take it from an e-invoice or the file name on the server too; otherwise the document stays without a date and is listed as missing it. With several files, the dialog can file them as one document: the first row becomes the main file, the others its attachments.
 
 ```js
 frappe.ui.form.on("Customer", {
@@ -92,10 +93,36 @@ frappe.ui.form.on("Customer", {
 
 ### Dashboard helpers
 
-- `docarchive.queries.documents_to_assign()`: documents that are not archived and still lack a file or a field their type requires, or whose archiving failed. Newest first, each with a `missing` list.
+- `docarchive.queries.documents_to_assign()`: documents that are not archived and still lack a file, a date or a field their type requires, or whose archiving failed. Newest first, each with a `missing` list.
 - `docarchive.queries.count_documents_to_assign()` (whitelisted): the number of those documents.
 - `docarchive.expiry.due_count()` (whitelisted): the number of documents due for deletion (the rows of **Expired Documents**). The standard number card **Documents Due for Deletion** shows it.
 - The document list (`counterparty_documents`) returns `legal_hold`, so panels can show the hold. Deleted documents are left out.
+
+## E-invoices
+
+docarchive recognizes e-invoices among a document's files (main file first, then the attachments):
+
+- XRechnung / EN 16931 XML in **CII** (UN/CEFACT Cross Industry Invoice) or **UBL** (Invoice and CreditNote) syntax,
+- **ZUGFeRD / Factur-X** PDFs: the embedded XML (`factur-x.xml`, `zugferd-invoice.xml`, `xrechnung.xml` or another embedded `.xml`) is read from the PDF's embedded files. The PDF is not changed.
+
+**What is archived**: the files as they are. A ZUGFeRD PDF is archived whole, with its embedded XML, exactly as before. With **Archive Settings → Store E-Invoice XML as Attachment** (off by default), the embedded XML is also stored as an attachment with the role *Structured Invoice (XML)*, so it is archived as its own object next to the PDF.
+
+**What is extracted** (metadata only, no line items): invoice number, issue date, due date, type code and whether it is an invoice or a credit note; seller and buyer name, VAT IDs, tax numbers and address; currency; net, tax and gross totals and the amount due; the buyer reference (Leitweg-ID); the syntax and profile. The data is stored in `einvoice_data`, shown in the **E-Invoice** section of the form and written to the `.meta.json` under `einvoice`. It is frozen once archiving starts. The `.meta.json` is a WORM object, so the extracted data (including the parties' names, addresses and IDs) becomes permanent there for the whole retention period.
+
+**How it is used**, only while archiving has not started and only when the files change:
+
+- Empty fields are prefilled: document date, number, title, own company and type. Add your VAT IDs to **Own Company → VAT IDs**: if the seller's VAT ID matches, the document is an **Outgoing Invoice** of that company, if the buyer's matches, an **Incoming Invoice** (by the seeded type slugs `outgoing-invoice` and `incoming-invoice`). Tax numbers are not used for this, and when own VAT IDs appear on both sides nothing is filled.
+- Own company and type taken from the XML are only suggestions, since anyone can send a crafted XML. The document gets **E-Invoice Needs Confirmation** and lists "Confirmation" as missing, so it is never archived automatically. A person confirms by saving it in the form or the triage with both fields set. Type and own company sent by the upload API are trusted as before.
+- Values a user or the API set are never overwritten. When they differ from the XML, the form shows it, e.g. "Document Date in the XML differs: 10.03.2026". The upload API only needs `document_type` and `document_date` when the e-invoice does not provide them.
+- The counterparty hint goes to your `docarchive_assign` hook: call `docarchive.einvoice.counterparty_hint(doc)`. It returns the other party (the buyer of an outgoing, the seller of an incoming invoice) as `{"vat_id", "tax_number", "name", "address"}`. Match by VAT ID first, then by tax number, then by name. Documents with e-invoice data but no counterparty are run through the hooks again before each nightly run.
+
+**Existing documents**: `bench --site <site> docarchive-extract [--dry-run]` reads the e-invoice data of documents whose archiving has not started and that have none yet. It fills only empty fields (and the title while it is still the automatic one) and records conflicts. A document without an e-invoice is marked as checked without changing its `modified` date, so it is not read again. `--dry-run` lists what it would fill and writes nothing. It exits with status 1 if a document fails.
+
+**Your own parser**: register callables under `docarchive_einvoice_extractors` in `hooks.py`. Each gets `(data: bytes, file_name: str)` and returns a dict in the format above (see `docarchive/einvoice_parser.py`) or `None`. The result is validated: dates must be ISO dates, texts are cut to 140 characters, unknown keys are dropped, and an optional `document_type` must be `outgoing-invoice` or `incoming-invoice`. The last hook is tried first, the built-in parser last. An ERPNext site can plug in a dedicated e-invoice app this way. To store the XML of a PDF as an attachment, return it as `xml` together with `embedded_file`.
+
+**Safety**: XML is parsed with `defusedxml` (no DTDs, no entities, no network) with explicit namespaces. XML larger than 10 MB, also inside a PDF, is skipped, and at most 5 embedded XML files of a PDF are tried, known file names first. Files that cannot be read are treated as plain documents; saving never fails because of them.
+
+**GoBD note**: for a hybrid invoice such as ZUGFeRD, the structured XML is the authoritative original, not the PDF view. Archive the file you received unchanged; docarchive does that. The extracted metadata is a convenience for filing and search. docarchive does not validate e-invoices against EN 16931 or XRechnung, does not check that the PDF view matches the XML, and makes no compliance promise (see [No compliance promise](#no-compliance-promise)).
 
 ## Upload API
 
@@ -114,8 +141,8 @@ Send the file either as multipart form data (field `file`) or as JSON / form fie
 |---|---|---|
 | `file` or `content_base64` + `file_name` | yes | The main file. The file name must end in an allowed file type (Archive Settings → Allowed File Types). The size limit is Frappe's maximum file size. |
 | `attachments[]` (multipart) or `attachments` (JSON) | no | Up to 20 further files with the same rules. Multipart: repeat the file field `attachments[]`, and optionally `attachment_roles[]` in the same order. JSON: a list of `{"file_name", "content_base64", "role", "title"}`. Roles: `Attachment` (default), `Structured Invoice (XML)`, `Proof of Service`, or their slugs (`structured-invoice-xml`). |
-| `document_type` | yes | The slug of a Business Document Type, e.g. `outgoing-invoice`. |
-| `document_date` | yes | `YYYY-MM-DD`: invoice date, signing date or statement date. |
+| `document_type` | yes, unless an e-invoice gives it | The slug of a Business Document Type, e.g. `outgoing-invoice`. |
+| `document_date` | yes, unless an e-invoice gives it | `YYYY-MM-DD`: invoice date, signing date or statement date. |
 | `document_number` | if the type requires it | Invoice or contract number. |
 | `contract_end_date` | if the type requires it | `YYYY-MM-DD`, only for types whose retention counts from the contract end. |
 | `title` | no | Defaults to the file name. |
@@ -125,7 +152,7 @@ Send the file either as multipart form data (field `file`) or as JSON / form fie
 | `source_key` | no | A stable ID of the document in the source system, e.g. `billing:invoice:42`. Makes retries safe. |
 | `legal_hold` | no | `true` or `false` (default). Sets **Set Legal Hold When Archiving**: every archived object is uploaded with a legal hold. |
 
-A type with **Counterparty Required** needs at least one of `source_party_id`, `source_party_name` and `source_party_email`. A counterparty that cannot be resolved does not fail the upload; the document then appears in `documents_to_assign()`.
+A type with **Counterparty Required** needs at least one of `source_party_id`, `source_party_name` and `source_party_email`, or an e-invoice whose other party is known. A counterparty that cannot be resolved does not fail the upload; the document then appears in `documents_to_assign()`.
 
 Retries are safe:
 
@@ -161,7 +188,7 @@ Response (HTTP 200):
 }}
 ```
 
-`status` is `created`, `exists`, `updated` or `replaced`. `missing` lists what the document still needs before it can be archived (`File`, `Counterparty`, `Document Number`, `Contract End Date`).
+`status` is `created`, `exists`, `updated` or `replaced`. `missing` lists what the document still needs before it can be archived (`File`, `Document Date`, `Counterparty`, `Document Number`, `Contract End Date`).
 
 Errors come back as JSON with an HTTP status: 400 for an invalid request (unknown type, missing or invalid date, missing required field, file type, size, empty or damaged file), 403 without the role, 417 for other validation errors, 429 when rate limited, and 5xx for storage or internal errors (retry those):
 
@@ -177,7 +204,7 @@ In n8n, use an HTTP Request node with method POST, a "Header Auth" credential (`
 
 Every night at 02:30 (server time) the scheduler queues `docarchive.run.nightly` on the `long` queue. It does nothing unless **Archive Settings → Enabled** is set and every enabled storage target is fully configured.
 
-A document is archived when its type has **Archive** set, nothing is missing (file, and the counterparty, number or contract end date its type requires), it has not changed for **Minimum Age (Hours)** (default 24), and it is not archived yet. Documents whose archiving already started are retried every night, whatever their age. Before archiving, documents with source fields but no counterparty run through the `docarchive_assign` hooks again.
+A document is archived when its type has **Archive** set, nothing is missing (file, document date, and the counterparty, number or contract end date its type requires), it has not changed for **Minimum Age (Hours)** (default 24), and it is not archived yet. Documents whose archiving already started are retried every night, whatever their age. Before archiving, documents with source fields but no counterparty run through the `docarchive_assign` hooks again.
 
 For each document the run:
 
@@ -276,6 +303,7 @@ bench --site <site> docarchive-run --dry-run   # list what would be archived, wr
 bench --site <site> docarchive-run             # archive now (needs Enabled), exit 1 on failures
 bench --site <site> docarchive-smoke --target primary
 bench --site <site> docarchive-sync-mode --target primary   # after switching objects to COMPLIANCE
+bench --site <site> docarchive-extract --dry-run            # e-invoice data for existing documents
 ```
 
 `docarchive-smoke` works without Enabled. It uploads a tiny `_smoke/` object with a 1-day GOVERNANCE lock, reads it back and checks its retention. Then it tries to delete that version with the target's credentials, once normally and once with `BypassGovernanceRetention`. Both must be refused with AccessDenied (or the provider's object-lock error), and a versioned HEAD must still find the object. It exits with status 1 if any check fails. Each run leaves one small object that expires after a day.

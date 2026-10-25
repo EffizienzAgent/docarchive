@@ -1,8 +1,8 @@
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import today
 
 from docarchive import documents
+from docarchive.document_archive.doctype.business_document.business_document import missing_fields
 from docarchive.tests.factories import (
 	fields_target,
 	make_business_document,
@@ -14,6 +14,7 @@ from docarchive.tests.factories import (
 	make_party,
 	make_settings,
 	party_fields,
+	unique,
 )
 
 
@@ -51,12 +52,21 @@ class TestCounterpartyDocuments(IntegrationTestCase):
 		with self.set_user("docs-outsider@example.com"):
 			self.assertEqual(documents.counterparty_documents("Contact", self.party.name), [])
 
-	def test_upload_defaults_to_setting_and_today(self):
+	def test_upload_defaults_to_setting_without_a_date(self):
 		make_settings(default_own_company=make_own_company().name, default_upload_type=self.type)
 		with self.set_user(make_manager("docs-defaults@example.com")):
-			self.assertEqual(
-				documents.upload_defaults(), {"document_type": self.type, "document_date": today()}
+			self.assertEqual(documents.upload_defaults(), {"document_type": self.type})
+
+	def test_dialog_date_from_file_name_or_left_empty(self):
+		with self.set_user(self.manager("docs-dates@example.com")):
+			files = [make_file(file_name=f"{unique('scan')}_2026-02-03.pdf"), make_file()]
+			names = documents.create_documents(
+				"Contact", self.party.name, frappe.as_json([f.file_url for f in files]), self.type
 			)
+		dated, empty = (frappe.get_doc("Business Document", name) for name in names)
+		self.assertEqual(str(dated.document_date), "2026-02-03")
+		self.assertIsNone(empty.document_date)
+		self.assertIn("Document Date", missing_fields(empty))
 
 	def test_upload_defaults_to_last_used_type(self):
 		other = make_document_type().name
@@ -210,11 +220,3 @@ class TestCounterpartyDocuments(IntegrationTestCase):
 		doc = frappe.get_doc("Business Document", name)
 		self.assertEqual(str(doc.document_date), "2026-08-05")
 		self.assertNotIn("2026", doc.title)
-
-	def test_create_documents_without_any_date_fails(self):
-		with self.set_user(self.manager("docs-no-date@example.com")):
-			upload = make_file(file_name="Rechnung Acme.pdf")
-			with self.assertRaises(frappe.MandatoryError):
-				documents.create_documents(
-					"Contact", self.party.name, frappe.as_json([upload.file_url]), self.type
-				)
