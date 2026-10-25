@@ -608,6 +608,16 @@ class TestBusinessDocumentCorrespondence(BusinessDocumentTestCase):
 		)
 		self.assertTrue(doc.content_sha256)
 
+	def test_eml_allowed_for_server_created_mail_without_communication(self):
+		file = make_file(content=EML, file_name="m.eml")
+		doc = make_business_document(archive_write=True, file=file.file_url, source_system="email")
+		self.assertTrue(doc.content_sha256)
+
+	def test_eml_refused_when_user_claims_email_source(self):
+		file = make_file(content=EML, file_name="m.eml")
+		with self.assertRaises(frappe.ValidationError):
+			make_business_document(file=file.file_url, source_system="email")
+
 	def test_eml_refused_for_other_sources(self):
 		file = make_file(content=EML, file_name="m.eml")
 		with self.assertRaises(frappe.ValidationError):

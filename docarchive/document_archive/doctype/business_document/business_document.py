@@ -199,7 +199,7 @@ class BusinessDocument(Document):
 		if not row.is_private:
 			frappe.throw(_("Documents must be uploaded as private files."))
 		allowed = settings.allowed_extensions()
-		if self.source_doctype == "Communication":
+		if self.source_system == "email" or self.source_doctype == "Communication":
 			allowed = {*allowed, "eml"}
 		if not {extension(row.file_name), extension(self.file)} <= allowed:
 			frappe.throw(_("Only these file types can be filed: {0}").format(", ".join(sorted(allowed))))

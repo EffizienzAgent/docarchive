@@ -262,3 +262,6 @@ The captured original of this e-mail is missing.,Das erfasste Original dieser E-
 This attachment does not exist.,Dieser Anhang existiert nicht.
 This document is not an archived e-mail.,Dieses Dokument ist keine archivierte E-Mail.
 The e-mail file of this document is missing.,Die E-Mail-Datei dieses Dokuments fehlt.
+Please upload the e-mail as a private .eml file.,Bitte lade die E-Mail als private .eml-Datei hoch.
+The direction must be Incoming or Outgoing.,Die Richtung muss Eingehend oder Ausgehend sein.
+This e-mail is not the missing one: its Message-ID is {0}.,Diese E-Mail ist nicht die fehlende: Ihre Message-ID ist {0}.

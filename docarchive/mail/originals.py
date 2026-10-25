@@ -1,5 +1,9 @@
+from datetime import UTC, timezone
+from email.utils import parsedate_to_datetime
+
 import frappe
 from frappe.email.doctype.email_queue.email_queue import SendMailContext
+from frappe.utils import convert_utc_to_system_timezone, now_datetime
 
 from docarchive import content
 from docarchive.keys import slug
@@ -10,6 +14,7 @@ AUTO_SAVEPOINT = "docarchive_mail_auto_archive"
 SEND_SAVEPOINT = "docarchive_mail_capture_sent"
 MAX_LENGTH = 500
 SENT_FOLDER = "Sent Folder"
+UPLOAD_ORIGIN = "manual-upload"
 
 
 def capture(communication, raw: bytes | str, origin: str) -> str | None:
@@ -126,7 +131,7 @@ def store_file(original, raw: bytes) -> str:
 	file_doc = frappe.get_doc(
 		{
 			"doctype": "File",
-			"file_name": slug(original.message_id or original.communication) + ".eml",
+			"file_name": slug(original.message_id or original.communication or original.name) + ".eml",
 			"content": raw,
 			"is_private": 1,
 			"attached_to_doctype": "Mail Original",
@@ -140,17 +145,43 @@ def _capture(communication, raw, origin):
 	row = accounts.account_settings(communication.email_account)
 	if not row:
 		return None
-	digest = content.sha256(raw)
 	parsed = headers.parse(raw)
+	return _insert(
+		raw,
+		parsed,
+		communication=communication.name,
+		email_account=communication.email_account,
+		origin=origin,
+		direction="Outgoing" if communication.sent_or_received == "Sent" else "Incoming",
+		mail_at=communication.communication_date,
+		internal=int(headers.is_internal(parsed, accounts.internal_domains(row))),
+	)
+
+
+def create_upload(raw: bytes, parsed, direction: str) -> str:
+	return _insert(
+		raw, parsed, origin=UPLOAD_ORIGIN, direction=direction, mail_at=mail_time(parsed), internal=0
+	)
+
+
+def mail_time(parsed):
+	try:
+		stamp = parsedate_to_datetime(parsed.date_header)
+	except TypeError, ValueError:
+		return now_datetime()
+	if stamp.tzinfo is None:
+		return stamp
+	utc = stamp.astimezone(UTC).replace(tzinfo=None)
+	return convert_utc_to_system_timezone(utc).replace(tzinfo=None)
+
+
+def _insert(raw, parsed, **fields):
+	digest = content.sha256(raw)
 	original = frappe.get_doc(
 		{
 			"doctype": "Mail Original",
-			"communication": communication.name,
-			"email_account": communication.email_account,
-			"origin": origin,
 			"sha256": digest,
 			"size": len(raw),
-			"direction": "Outgoing" if communication.sent_or_received == "Sent" else "Incoming",
 			"message_id": parsed.message_id[:MAX_LENGTH],
 			"in_reply_to": parsed.in_reply_to[:MAX_LENGTH],
 			"mail_references": " ".join(parsed.references),
@@ -160,9 +191,8 @@ def _capture(communication, raw, origin):
 			"cc": parsed.cc,
 			"subject": parsed.subject,
 			"date_header": parsed.date_header,
-			"mail_at": communication.communication_date,
 			"automated": int(parsed.automated),
-			"internal": int(headers.is_internal(parsed, accounts.internal_domains(row))),
+			**fields,
 		}
 	).insert(ignore_permissions=True)
 	original.db_set("file", store_file(original, raw))

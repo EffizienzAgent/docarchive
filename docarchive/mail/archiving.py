@@ -4,23 +4,24 @@ from frappe.utils import getdate
 
 from docarchive import content, counterparty, settings
 from docarchive.document_types import CORRESPONDENCE, INTERNAL_CORRESPONDENCE
-from docarchive.mail import accounts
+from docarchive.mail import accounts, headers
 
 DOCUMENT = "Business Document"
 ORIGINAL = "Mail Original"
 COMMUNICATION = "Communication"
+DIRECTIONS = ("Incoming", "Outgoing")
 SAVEPOINT = "docarchive_mail_archive"
 SEND_NOTE = "Copies to other recipients differ only in tracking and unsubscribe links."
 TITLE_LENGTH = 140
 EMAIL_LENGTH = 140
 
 
-def archive(original_name: str) -> str:
+def archive(original_name: str, own_company: str | None = None) -> str:
 	original = frappe.get_doc(ORIGINAL, original_name)
 	if original.business_document:
 		return original.business_document
 	row = accounts.account_row(original.email_account) or frappe._dict()
-	own_company = settings.own_company_for(original.mail_at, row.own_company)
+	own_company = settings.own_company_for(original.mail_at, own_company or row.own_company)
 	name = _existing(original, own_company) or _create(original, own_company)
 	original.db_set("business_document", name, update_modified=False)
 	return name
@@ -142,6 +143,33 @@ def archive_communications(names) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+def archive_upload(
+	file_url: str, direction: str, gap_message_id: str | None = None, own_company: str | None = None
+) -> str:
+	from docarchive.mail import originals
+
+	frappe.has_permission(DOCUMENT, "create", throw=True)
+	if direction not in DIRECTIONS:
+		frappe.throw(_("The direction must be Incoming or Outgoing."))
+	file_name = _upload_name(file_url)
+	raw = content.read_bytes(file_url)
+	if raw is None:
+		frappe.throw(_("File {0} does not exist.").format(file_url))
+	parsed = headers.parse(raw)
+	if gap_message_id and parsed.message_id != gap_message_id:
+		frappe.throw(
+			_("This e-mail is not the missing one: its Message-ID is {0}.").format(parsed.message_id or "-")
+		)
+	company = settings.own_company_for(originals.mail_time(parsed), own_company)
+	name = _existing_document(parsed.message_id, content.sha256(raw), company)
+	if not name:
+		original = originals.create_upload(raw, parsed, direction)
+		name = archive(original, company)
+	frappe.delete_doc("File", file_name, ignore_permissions=True)
+	return name
+
+
+@frappe.whitelist(methods=["POST"])
 def discard(names) -> dict:
 	names = _names(names)
 	for name in names:
@@ -170,12 +198,32 @@ def _discard_refusal(name):
 	return None
 
 
+def _upload_name(file_url):
+	name = frappe.db.get_value(
+		"File",
+		{
+			"file_url": file_url,
+			"owner": frappe.session.user,
+			"is_private": 1,
+			"attached_to_doctype": ("is", "not set"),
+		},
+		"name",
+	)
+	if not name or not file_url.lower().endswith(".eml"):
+		frappe.throw(_("Please upload the e-mail as a private .eml file."))
+	return name
+
+
 def _existing(original, own_company):
+	return _existing_document(original.message_id, original.sha256, own_company)
+
+
+def _existing_document(message_id, sha256, own_company):
 	filters = {"own_company": own_company}
-	if original.message_id:
-		filters["mail_message_id"] = original.message_id
+	if message_id:
+		filters["mail_message_id"] = message_id
 	else:
-		filters.update(content_sha256=original.sha256, source_doctype=COMMUNICATION)
+		filters.update(content_sha256=sha256, source_system="email")
 	return frappe.db.get_value(DOCUMENT, filters)
 
 
@@ -189,7 +237,7 @@ def _create(original, own_company):
 			"title": (original.subject or _("(no subject)"))[:TITLE_LENGTH],
 			"source_system": "email",
 			"source_account": original.email_account,
-			"source_doctype": COMMUNICATION,
+			"source_doctype": COMMUNICATION if original.email_account else None,
 			"source_name": original.communication,
 			"source_party_email": _party_email(original),
 			"correspondence_channel": "E-mail",
