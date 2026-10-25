@@ -429,9 +429,13 @@ def brand() -> dict:
 		"name": (config.get("export_brand_name") or "").strip() or None,
 		"logo": logo_uri(config.get("export_brand_logo")),
 		"color": color if valid_color(color) else None,
-		"credit": config.get("export_show_credit") in (None, "")
-		or bool(cint(config.get("export_show_credit"))),
+		"credit": _credit(),
 	}
+
+
+def _credit() -> bool:
+	value = settings.stored("export_show_credit")
+	return value in (None, "") or bool(cint(value))
 
 
 def viewer(data, brand=None) -> str:
