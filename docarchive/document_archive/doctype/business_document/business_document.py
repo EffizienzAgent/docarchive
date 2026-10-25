@@ -42,6 +42,7 @@ PROTECTED_FIELDS = (
 	"retention_mode",
 	"retain_until",
 	"archive_copies",
+	"attachment_copies",
 	"archive_meta",
 	"retention_extensions",
 	"extension_until",
@@ -51,6 +52,7 @@ PROTECTED_FIELDS = (
 	"replaces",
 	*SOURCE_FIELDS,
 )
+ATTACHMENT_PROTECTED = ("content_sha256", "object_key", "archive_size")
 CONTRACT_END = "Contract End Date"
 PRIVATE_PREFIX = "/private/files/"
 SEPARATORS = re.compile(r"[\s_-]+")
@@ -61,14 +63,23 @@ def title_from_file_name(file_name):
 	return SEPARATORS.sub(" ", stem if dot else extension).strip()
 
 
-def own_file(doc):
+def own_file(doc, file_url=None):
+	file_url = file_url or doc.file
 	rows = frappe.get_all(
 		"File",
-		filters={"file_url": doc.file},
-		fields=["file_name", "file_url", "owner", "is_private", "attached_to_doctype", "attached_to_name"],
+		filters={"file_url": file_url},
+		fields=[
+			"name",
+			"file_name",
+			"file_url",
+			"owner",
+			"is_private",
+			"attached_to_doctype",
+			"attached_to_name",
+		],
 		order_by="creation desc",
 	)
-	rows = [row for row in rows if row.file_url == doc.file]
+	rows = [row for row in rows if row.file_url == file_url]
 	for row in rows:
 		if row.attached_to_doctype == doc.doctype and row.attached_to_name == doc.name:
 			return row
@@ -85,6 +96,15 @@ def own_file(doc):
 def extension(name):
 	stem, dot, ext = (name or "").rpartition(".")
 	return ext.lower() if dot and stem else ""
+
+
+def file_name(doc, file_url):
+	row = own_file(doc, file_url)
+	return row.file_name if row else file_url.rsplit("/", 1)[-1]
+
+
+def attachment_rows(doc):
+	return [(row.name, row.file, row.role, row.title or "") for row in doc.get("attachments") or []]
 
 
 def default_title(doc):
@@ -122,10 +142,14 @@ class BusinessDocument(Document):
 			assignment.assign(self)
 			self.resolve_own_company()
 			self.validate_file(before)
+			self.validate_attachments(before)
 		counterparty.validate(self)
 		self.validate_dates()
 		self.validate_contract_end()
 		self.set_title(before)
+
+	def on_update(self):
+		self.attach_files()
 
 	def on_trash(self):
 		if self.archive_started_at:
@@ -146,6 +170,11 @@ class BusinessDocument(Document):
 			return
 		for field in PROTECTED_FIELDS:
 			self.set(field, before.get(field) if before else self.meta.get_field(field).default)
+		old = {row.name: row for row in (before.get("attachments") if before else [])}
+		for row in self.get("attachments") or []:
+			prior = old.get(row.name)
+			for field in ATTACHMENT_PROTECTED:
+				row.set(field, prior.get(field) if prior else None)
 
 	def changed(self, before, field):
 		fieldtype = self.meta.get_field(field).fieldtype
@@ -163,6 +192,8 @@ class BusinessDocument(Document):
 						_(self.meta.get_label(field))
 					)
 				)
+		if attachment_rows(self) != attachment_rows(before):
+			frappe.throw(_("Attachments cannot be changed once archiving has started."))
 
 	def resolve_own_company(self):
 		self.own_company = settings.own_company_for(self.document_date, self.own_company)
@@ -179,20 +210,51 @@ class BusinessDocument(Document):
 			return
 		if before and before.file == self.file:
 			return
-		if not self.file.startswith(PRIVATE_PREFIX):
+		self.content_sha256 = self.checked_sha256(self.file)
+
+	def checked_sha256(self, file_url):
+		if not file_url.startswith(PRIVATE_PREFIX):
 			frappe.throw(_("Documents must be uploaded as private files."))
-		row = own_file(self)
+		row = own_file(self, file_url)
 		if not row:
 			frappe.throw(_("Please upload the file directly to this document."))
 		if not row.is_private:
 			frappe.throw(_("Documents must be uploaded as private files."))
 		allowed = settings.allowed_extensions()
-		if not {extension(row.file_name), extension(self.file)} <= allowed:
+		if not {extension(row.file_name), extension(file_url)} <= allowed:
 			frappe.throw(_("Only these file types can be filed: {0}").format(", ".join(sorted(allowed))))
-		data = content.read_bytes(self.file)
+		data = content.read_bytes(file_url)
 		if data is None:
-			frappe.throw(_("File {0} does not exist.").format(self.file))
-		self.content_sha256 = content.sha256(data)
+			frappe.throw(_("File {0} does not exist.").format(file_url))
+		return content.sha256(data)
+
+	def validate_attachments(self, before):
+		old = {row.name: row for row in (before.get("attachments") if before else [])}
+		seen = {self.content_sha256} if self.file else set()
+		for row in self.get("attachments") or []:
+			if not row.file:
+				frappe.throw(_("Attachment {0} has no file.").format(row.idx))
+			prior = old.get(row.name)
+			if not (prior and prior.file == row.file and row.content_sha256):
+				row.content_sha256 = self.checked_sha256(row.file)
+			if row.content_sha256 in seen:
+				frappe.throw(_("Attachment {0} is already part of this document.").format(row.idx))
+			seen.add(row.content_sha256)
+			row.title = row.title or title_from_file_name(file_name(self, row.file))
+
+	def attach_files(self):
+		for row in self.get("attachments") or []:
+			found = own_file(self, row.file)
+			if found and (found.attached_to_doctype, found.attached_to_name) != (self.doctype, self.name):
+				frappe.db.set_value(
+					"File",
+					found.name,
+					{
+						"attached_to_doctype": self.doctype,
+						"attached_to_name": self.name,
+						"attached_to_field": "attachments",
+					},
+				)
 
 	def validate_dates(self):
 		limits = settings.date_limits()

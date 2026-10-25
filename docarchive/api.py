@@ -8,7 +8,7 @@ from frappe.core.api.file import get_max_file_size
 from frappe.rate_limiter import rate_limit
 from pypdf.errors import PyPdfError
 
-from docarchive import content, settings
+from docarchive import content, keys, settings
 from docarchive.document_archive.doctype.business_document.business_document import (
 	extension,
 	missing_fields,
@@ -16,9 +16,12 @@ from docarchive.document_archive.doctype.business_document.business_document imp
 from docarchive.permissions import INTEGRATION_ROLE
 
 DOCUMENT = "Business Document"
+ATTACHMENT = "Business Document Attachment"
+DEFAULT_ROLE = "Attachment"
 ALLOWED_ROLES = (INTEGRATION_ROLE, "System Manager")
 PARTY_HINTS = ("source_party_id", "source_party_name", "source_party_email")
 SAVEPOINT = "docarchive_upload"
+MAX_ATTACHMENTS = 20
 
 
 class UploadError(frappe.ValidationError):
@@ -47,6 +50,7 @@ def upload_document(
 	source_party_name: str | None = None,
 	source_party_email: str | None = None,
 	source_key: str | None = None,
+	attachments: list | str | None = None,
 ) -> dict:
 	frappe.only_for(ALLOWED_ROLES)
 	doc_type = document_type_for(document_type)
@@ -66,6 +70,7 @@ def upload_document(
 	}
 	check_required(doc_type, fields)
 	name, data = read_upload(file_name, content_base64)
+	extra = read_attachments(attachments)
 	sha = content.sha256(data)
 	source_key = clean(source_key)
 
@@ -77,7 +82,7 @@ def upload_document(
 			return existing
 		current = (source_versions(source_key, scope) or [None])[-1]
 		try:
-			doc = create(fields, name, data, None if current else source_key, current and current.name)
+			doc = create(fields, name, data, None if current else source_key, current and current.name, extra)
 		except frappe.UniqueValidationError:
 			frappe.db.rollback(save_point=SAVEPOINT)
 			frappe.message_log.clear()
@@ -162,6 +167,11 @@ def read_upload(file_name, content_base64):
 			fail(_("content_base64 is not valid Base64."))
 	else:
 		fail(_("No file was sent. Send it as multipart field file or as content_base64."))
+	check_file(name, data)
+	return name, data
+
+
+def check_file(name, data):
 	if not name or "/" in name or "\\" in name:
 		fail(_("The file needs a file name without slashes."))
 	allowed = settings.allowed_extensions()
@@ -171,7 +181,49 @@ def read_upload(file_name, content_base64):
 		fail(_("The file is empty."))
 	if len(data) > get_max_file_size():
 		fail(_("The file is larger than {0} MB.").format(get_max_file_size() // (1024 * 1024)))
-	return name, data
+
+
+def role_for(value):
+	value = clean(value)
+	if not value:
+		return DEFAULT_ROLE
+	for role in attachment_roles():
+		if value in (role, keys.slug(role)):
+			return role
+	fail(_("Unknown attachment role {0}.").format(value))
+
+
+def attachment_roles() -> list[str]:
+	return frappe.get_meta(ATTACHMENT).get_field("role").options.split("\n")
+
+
+def read_attachments(attachments):
+	request = frappe.request
+	uploads = []
+	if request and request.files:
+		uploads = request.files.getlist("attachments[]") + request.files.getlist("attachments")
+	roles = request.form.getlist("attachment_roles[]") if request and request.form else []
+	result = []
+	for number, upload in enumerate(uploads):
+		data = upload.stream.read(get_max_file_size() + 1)
+		role = roles[number] if number < len(roles) else None
+		result.append({"file_name": clean(upload.filename), "data": data, "role": role, "title": None})
+	items = frappe.parse_json(attachments) if isinstance(attachments, str) else attachments
+	for item in items or []:
+		if not isinstance(item, dict):
+			fail(_("Each attachment needs file_name and content_base64."))
+		try:
+			data = base64.b64decode(item.get("content_base64") or "", validate=True)
+		except binascii.Error, ValueError:
+			fail(_("content_base64 is not valid Base64."))
+		result.append({**item, "file_name": clean(item.get("file_name")), "data": data})
+	if len(result) > MAX_ATTACHMENTS:
+		fail(_("At most {0} attachments can be sent.").format(MAX_ATTACHMENTS))
+	for item in result:
+		check_file(item["file_name"], item["data"])
+		item["role"] = role_for(item.get("role"))
+		item["title"] = clean(item.get("title"))
+	return result
 
 
 def source_versions(source_key, scope):
@@ -187,13 +239,25 @@ def source_versions(source_key, scope):
 	return versions
 
 
-def create(fields, file_name, data, source_key, replaces):
+def private_file(file_name, data):
 	try:
-		file = frappe.get_doc(
+		return frappe.get_doc(
 			{"doctype": "File", "file_name": file_name, "content": data, "is_private": 1}
 		).insert(ignore_permissions=True)
 	except PyPdfError:
 		fail(_("The file is damaged or does not match its file type."))
+
+
+def create(fields, file_name, data, source_key, replaces, attachments=()):
+	file = private_file(file_name, data)
+	rows = [
+		{
+			"file": private_file(item["file_name"], item["data"]).file_url,
+			"role": item["role"],
+			"title": item["title"],
+		}
+		for item in attachments
+	]
 	doc = frappe.get_doc(
 		{
 			"doctype": DOCUMENT,
@@ -201,6 +265,7 @@ def create(fields, file_name, data, source_key, replaces):
 			"file": file.file_url,
 			"source_key": source_key,
 			"replaces": replaces,
+			"attachments": rows,
 		}
 	)
 	doc.flags.archive_write = True
@@ -222,6 +287,10 @@ def response(name, status):
 		"counterparty_type": doc.counterparty_type,
 		"counterparty": doc.counterparty,
 		"content_sha256": doc.content_sha256,
+		"attachments": [
+			{"role": row.role, "title": row.title, "content_sha256": row.content_sha256}
+			for row in doc.attachments
+		],
 		"archive_status": doc.archive_status,
 		"missing": missing_fields(doc),
 	}

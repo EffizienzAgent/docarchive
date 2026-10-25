@@ -56,6 +56,13 @@ function ask_type_and_date(party, file_urls, on_saved) {
 					reqd: 1,
 					default: defaults.document_date,
 				},
+				{
+					fieldname: "combine",
+					fieldtype: "Check",
+					label: __("One document with attachments"),
+					description: __("The first file is the main file, the others become its attachments."),
+					hidden: file_urls.length < 2,
+				},
 			],
 			primary_action_label: __("Save"),
 			primary_action(values) {

@@ -15,10 +15,11 @@ docarchive is a technical tool. It does not make you compliant with GoBD, the GD
 ## How it works
 
 - **Business Document**: one record per document, with a private file, a type, a document date, a number, an own company and a counterparty. The counterparty is a Dynamic Link (`counterparty_type` + `counterparty`), so it can point to any doctype the host app allows.
+- **Attachments**: a document has one main file (`file`, used for the preview and the title) and optional **Attachments**: further files such as annexes, the XML of an e-invoice or a proof of service. Each row has a file, a role (Attachment, Structured Invoice (XML), Proof of Service), a title (defaults to the file name) and its SHA-256. Attachments follow the same rules as the main file: private, uploaded to this document by the same user (exact URL and owner), an allowed file type, and no file twice in one document. They are archived, locked, extended and checked together with the main file. Once archiving starts, the attachment list is locked: no row can be added, removed, reordered or changed. An addendum becomes a new document, e.g. with `replaces` set by the upload API.
 - **Checksums**: when a file is attached, the app computes `content_sha256` from the raw file bytes. The archive run compares this value with the bytes it reads back from storage.
 - **Object Lock**: each archived object gets its own retention mode (GOVERNANCE or COMPLIANCE) and retain-until date. The app never deletes from an archive bucket; the only delete call is the smoke check, which tries to delete its own `_smoke/` test object and expects a refusal. Object Lock only lets retention grow, never shrink.
 - **Retention**: the retention period ends on January 1 after the document year plus the retention years. For contracts it can count from the contract end date instead. Years come from a rule per own company and document type in Archive Settings, or from the type's default. The seeded types (Outgoing Invoice, Incoming Invoice, Contract, Bank Statement) ship with editable defaults. Check them for your jurisdiction.
-- **Locking**: once archiving starts (`archive_started_at`), the fields that make up the object key and the source fields can no longer change: own company, type, date, number, counterparty, file and `source_*`. The contract end date can still move later (which extends retention), but never earlier, and it cannot be cleared. Deleting the document is refused. Its file cannot be deleted, moved, made public or detached. Other File rows that share the archived object (the same `file_url` through deduplication, the same `content_hash`, or a `thumbnail_url` pointing at it) cannot change their URL, hash, thumbnail or privacy either. A counterparty linked from an archived document cannot be renamed or merged.
+- **Locking**: once archiving starts (`archive_started_at`), the fields that make up the object key and the source fields can no longer change: own company, type, date, number, counterparty, file, the attachments and `source_*`. The contract end date can still move later (which extends retention), but never earlier, and it cannot be cleared. Deleting the document is refused. Its file cannot be deleted, moved, made public or detached. Other File rows that share the archived object (the same `file_url` through deduplication, the same `content_hash`, or a `thumbnail_url` pointing at it) cannot change their URL, hash, thumbnail or privacy either. A counterparty linked from an archived document cannot be renamed or merged.
 - **Server-only fields**: the checksum, the archive status, keys and retention fields, and the `source_*` fields are restored on every save, unless server code sets `doc.flags.archive_write`.
 - **Plausible dates**: a document date may be at most **Max. Days in the Future** (default 31) after today, and a contract end at most **Max. Contract Years** (default 50) after the document date.
 - **File types**: only the extensions listed in Archive Settings → Allowed File Types can be filed (default: pdf, png, jpg, jpeg, tif, tiff, xml). Both the file name and the file URL must match.
@@ -61,7 +62,7 @@ File deletion runs inside the File controller, before any `doc_events` hook. So 
 
 ### Counterparty panel
 
-The app's JS bundle offers a panel for any form: a list of the record's documents, an upload button (several files, drag and drop) and a dialog for type and date.
+The app's JS bundle offers a panel for any form: a list of the record's documents, an upload button (several files, drag and drop) and a dialog for type and date. With several files, the dialog can file them as one document: the first file becomes the main file, the others its attachments.
 
 ```js
 frappe.ui.form.on("Customer", {
@@ -93,7 +94,8 @@ Send the file either as multipart form data (field `file`) or as JSON / form fie
 
 | Field | Required | Meaning |
 |---|---|---|
-| `file` or `content_base64` + `file_name` | yes | The document. The file name must end in an allowed file type (Archive Settings → Allowed File Types). The size limit is Frappe's maximum file size. |
+| `file` or `content_base64` + `file_name` | yes | The main file. The file name must end in an allowed file type (Archive Settings → Allowed File Types). The size limit is Frappe's maximum file size. |
+| `attachments[]` (multipart) or `attachments` (JSON) | no | Up to 20 further files with the same rules. Multipart: repeat the file field `attachments[]`, and optionally `attachment_roles[]` in the same order. JSON: a list of `{"file_name", "content_base64", "role", "title"}`. Roles: `Attachment` (default), `Structured Invoice (XML)`, `Proof of Service`, or their slugs (`structured-invoice-xml`). |
 | `document_type` | yes | The slug of a Business Document Type, e.g. `outgoing-invoice`. |
 | `document_date` | yes | `YYYY-MM-DD`: invoice date, signing date or statement date. |
 | `document_number` | if the type requires it | Invoice or contract number. |
@@ -109,7 +111,7 @@ A type with **Counterparty Required** needs at least one of `source_party_id`, `
 Retries are safe:
 
 - The same `source_key` with the same content returns the existing document (`"status": "exists"`, only `name` and `status`). A `source_key` belongs to its `source_system` and `source_account`; reusing it from another source is refused. Two parallel requests with the same new `source_key` create one document.
-- The same content for the same document type returns the existing document, with or without a `source_key`.
+- The same content for the same document type returns the existing document, with or without a `source_key`. Only the main file counts here; attachments sent with a known main file are ignored.
 - A different file under a known `source_key` creates a new document whose `replaces` points to the latest version (`"status": "replaced"`). Existing documents are never changed, archived or not.
 
 Example:
@@ -123,7 +125,8 @@ curl -X POST "https://<site>/api/v2/method/docarchive.api.upload_document" \
   -F document_number=INV-2026-017 \
   -F source_system=Billing -F source_account=1 \
   -F source_party_type=client -F source_party_id=42 \
-  -F source_key=billing:1:invoice:42
+  -F source_key=billing:1:invoice:42 \
+  -F "attachments[]=@timesheet.pdf" -F "attachment_roles[]=proof-of-service"
 ```
 
 Response (HTTP 200):
@@ -133,7 +136,8 @@ Response (HTTP 200):
   "name": "DOC-2026-00017", "status": "created", "replaces": null,
   "document_type": "Outgoing Invoice", "own_company": "acme-gmbh",
   "counterparty_type": "Customer", "counterparty": "CUST-0042",
-  "content_sha256": "9f2c…", "archive_status": "Pending", "missing": []
+  "content_sha256": "9f2c…", "attachments": [{"role": "Proof of Service", "title": "timesheet", "content_sha256": "41d0…"}],
+  "archive_status": "Pending", "missing": []
 }}
 ```
 
@@ -160,21 +164,22 @@ For each document the run:
 1. gets the bytes and the file extension from `docarchive.content.content_for(doc)` and checks that they still match `content_sha256`,
 2. computes the retention (see below) and checks it against every target's lock mode, before anything is written,
 3. sets `archive_started_at`, the object keys, the checksum, `retain_until` and the metadata, and commits. From now on the document is locked,
-4. writes the file and its `.meta.json` to every enabled target and records each object's version ID. It then reads that version back and checks its lock mode, retain-until date and SHA-256 (for both objects),
-5. sets **Archived** when every enabled target holds both objects. Otherwise it sets **Failed** with the error per target; the next run retries only the failed targets.
+4. writes the main file, each attachment and then the `.meta.json` to every enabled target and records each object's version ID. It then reads that version back and checks its lock mode, retain-until date and SHA-256 (for every object),
+5. sets **Archived** when every enabled target holds all objects. Otherwise it sets **Failed** with the error per target; the next run retries only the failed targets.
 
-Each target has its own row under **Archive Copies** with its status, lock mode, retain-until date, the version IDs of both objects and the error. A target added later gets its copy on the next run, also for documents that are already archived. A document is processed by one run at a time (a lock per document), so the nightly run and "Archive now" cannot write twice. Before writing, the run sends a HEAD request: an object with the same key, the same SHA-256 and the expected lock counts as done. The same key with a different SHA-256, a weaker lock or a version other than the recorded one is a hard error that goes to the Error Log. Nothing is ever overwritten.
+Each target has its own row under **Archive Copies** with its status, lock mode, retain-until date, the version IDs of the main file and the `.meta.json`, and the error. The version ID of each attachment on each target is under **Attachment Copies**. A target added later gets its copy on the next run, also for documents that are already archived. A document is processed by one run at a time (a lock per document), so the nightly run and "Archive now" cannot write twice. Before writing, the run sends a HEAD request: an object with the same key, the same SHA-256 and the expected lock counts as done. The same key with a different SHA-256, a weaker lock or a version other than the recorded one is a hard error that goes to the Error Log. Nothing is ever overwritten.
 
 ### Object keys
 
 ```
 <own-company>/<year>/<type-slug>/<counterparty-id>/<date>_<number>_<document-id>.<ext>
+<same key without extension>__att-<n>-<title>.<ext>
 <same key>.meta.json
 ```
 
-For example `acme-gmbh/2026/outgoing-invoice/cust-0042/2026-03-15_inv-2026-017_doc-2026-00017.pdf`. Each segment is lowercased and transliterated, and every character other than `a-z` and `0-9` becomes a hyphen. A document without a counterparty goes to `ohne-gegenpartei`, one without a number gets `ohne-nummer`. The key only uses fields that are locked once archiving starts, so a retry always computes the same key.
+For example `acme-gmbh/2026/outgoing-invoice/cust-0042/2026-03-15_inv-2026-017_doc-2026-00017.pdf`. Each segment is lowercased and transliterated, and every character other than `a-z` and `0-9` becomes a hyphen. A document without a counterparty goes to `ohne-gegenpartei`, one without a number gets `ohne-nummer`. An attachment goes next to the main file, numbered in table order and named after its title (or its role), e.g. `…_doc-2026-00017__att-1-timesheet-march.pdf`. The key only uses fields that are locked once archiving starts, and attachment keys are stored at archive start, so a retry always writes the same keys.
 
-The `.meta.json` holds the document data (ID, title, type, date, number, contract end, own company), the counterparty, the file name, SHA-256 and size, the source fields (including the optional source record `source_doctype` / `source_name`), and the retention (counts from, start date, years, retain-until date, mode). It is frozen at archive start (`archive_meta`), so retries write the same bytes.
+The `.meta.json` holds the document data (ID, title, type, date, number, contract end, own company), the counterparty, the main file (`file`), every file in `files` (main file and attachments, each with key, name, role, SHA-256 and size, so the set is provable), the source fields (including the optional source record `source_doctype` / `source_name`), and the retention (counts from, start date, years, retain-until date, mode). It is frozen at archive start (`archive_meta`), so retries write the same bytes.
 
 ### Retention
 
@@ -182,15 +187,17 @@ The `.meta.json` holds the document data (ID, title, type, date, number, contrac
 
 ### Contract end and retention extension
 
-After archiving starts, the contract end date can be set for the first time or moved later, never earlier. Each night, after archiving, the run recomputes `retain_until` for archived documents whose type counts from the contract end, using the retention years stored at archive start. When the new date is later than a copy's date, it extends the retention of the file and its `.meta.json` on that target with `PutObjectRetention`, in the same mode. Each copy records its own date. The document's `retain_until` moves only when every enabled target has the new date, and a failed target is retried the next night. A shorter date never leads to a request.
+After archiving starts, the contract end date can be set for the first time or moved later, never earlier. Each night, after archiving, the run recomputes `retain_until` for archived documents whose type counts from the contract end, using the retention years stored at archive start. When the new date is later than a copy's date, it extends the retention of the main file, every attachment and the `.meta.json` on that target with `PutObjectRetention`, in the same mode. Each copy records its own date. The document's `retain_until` moves only when every enabled target has the new date, and a failed target is retried the next night. A shorter date never leads to a request.
 
 Each extension also writes a sidecar `<key>.meta.<n>.json` (n = 2, 3, …) to every target, locked with the new date and the copy's mode. It holds the metadata with the new retention, the extension (previous and new date, contract end, time) and the earlier extensions, so the newest sidecar carries the whole trail. The original `.meta.json` is never rewritten: Object Lock versions are immutable, and a second version under the same key would hide the first. The sidecar content is frozen before the first write, so a retry writes the same bytes, and a contract end that moves again in the meantime leads to the next extension. Before extending, the run checks the SHA-256 of the exact object version it recorded.
 
 ### Object Lock writes
 
+`docarchive.run.locked_objects(doc, copy)` lists every locked object version of a copy as `(key, version_id, sha256)`: the main file, each attachment and the `.meta.json` (extension sidecars are recorded separately). Code that acts on all objects of a document, such as the retention extension and the mode sync, goes through it.
+
 `docarchive.store.put_locked(target, key, body, mode, retain_until)` is the only code that calls `PutObject`. Before any request it checks that the mode is `GOVERNANCE` or `COMPLIANCE` and that `retain_until` is a timezone-aware datetime in the future. It always sends `ObjectLockMode`, `ObjectLockRetainUntilDate`, `ContentMD5` and the SHA-256 as object metadata. `docarchive.store.extend_locked` is the only code that calls `PutObjectRetention`; see the retention extension above. A test parses the app's source: each S3 client method may be used in exactly one function of `store.py`, copy, multipart, presigned URL, legal hold and policy calls are banned, `BypassGovernanceRetention` is only allowed in the smoke check, and only `store.py` may import boto3, botocore or `s3storage.client`.
 
-The lock mode comes from the storage target and is recorded per copy. Switch a target to COMPLIANCE once your trial is done. New documents then use COMPLIANCE. Existing objects are switched outside the app with an admin key (see [docs/hetzner-example.md](docs/hetzner-example.md)). Then run `bench --site <site> docarchive-sync-mode --target <name>`: it reads the retention of both recorded object versions of every archived copy on that target. It only records an upgrade from GOVERNANCE to COMPLIANCE when both objects report COMPLIANCE, never a downgrade. Documents with any other difference are listed as mismatched, errors are listed per document, and the command exits with status 1 if there are any.
+The lock mode comes from the storage target and is recorded per copy. Switch a target to COMPLIANCE once your trial is done. New documents then use COMPLIANCE. Existing objects are switched outside the app with an admin key (see [docs/hetzner-example.md](docs/hetzner-example.md)). Then run `bench --site <site> docarchive-sync-mode --target <name>`: it reads the retention of every recorded object version (main file, attachments, `.meta.json`) of every archived copy on that target. It only records an upgrade from GOVERNANCE to COMPLIANCE when all of them report COMPLIANCE, never a downgrade. Documents with any other difference are listed as mismatched, errors are listed per document, and the command exits with status 1 if there are any.
 
 ### Archive now
 

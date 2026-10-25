@@ -36,9 +36,16 @@ def upload_defaults() -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def create_documents(
-	counterparty_type: str, counterparty: str, file_urls, document_type: str, document_date: str
+	counterparty_type: str,
+	counterparty: str,
+	file_urls,
+	document_type: str,
+	document_date: str,
+	combine: bool = False,
 ) -> list:
 	frappe.has_permission(counterparty_type, "read", counterparty, throw=True)
+	file_urls = frappe.parse_json(file_urls)
+	groups = [file_urls] if frappe.utils.cint(combine) and file_urls else [[url] for url in file_urls]
 	return [
 		frappe.get_doc(
 			{
@@ -47,12 +54,13 @@ def create_documents(
 				"counterparty": counterparty,
 				"document_type": document_type,
 				"document_date": document_date,
-				"file": file_url,
+				"file": main,
+				"attachments": [{"file": url} for url in rest],
 			}
 		)
 		.insert()
 		.name
-		for file_url in frappe.parse_json(file_urls)
+		for main, *rest in groups
 	]
 
 
