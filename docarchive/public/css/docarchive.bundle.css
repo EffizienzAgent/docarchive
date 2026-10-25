@@ -116,6 +116,7 @@
 .docarchive-triage-file {
 	font-weight: 600;
 	word-break: break-all;
+}
 
 .docarchive-toggle {
 	display: inline-flex;

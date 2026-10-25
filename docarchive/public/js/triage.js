@@ -1,4 +1,11 @@
-import { Queue, initial_date, key_action, preview_kind } from "./triage_core";
+import {
+	Queue,
+	changed_values,
+	initial_date,
+	key_action,
+	local_file_url,
+	preview_kind,
+} from "./triage_core";
 
 frappe.provide("docarchive");
 
@@ -20,10 +27,11 @@ function preview_html(item) {
 	if (!item.file) return `<div class="docarchive-triage-empty text-muted">${esc(__("No file"))}</div>`;
 	if (kind === "pdf") return `<iframe class="docarchive-triage-frame" src="${esc(item.file)}" title="${name}"></iframe>`;
 	if (kind === "image") return `<img class="docarchive-triage-image" src="${esc(item.file)}" alt="${name}">`;
-	return `<div class="docarchive-triage-empty">
-		<p>${name}</p>
-		<a class="btn btn-default btn-sm" href="${esc(item.file)}" download>${esc(__("Download"))}</a>
-	</div>`;
+	const href = local_file_url(item.file);
+	const download = href
+		? `<a class="btn btn-default btn-sm" href="${esc(href)}" download>${esc(__("Download"))}</a>`
+		: "";
+	return `<div class="docarchive-triage-empty"><p>${name}</p>${download}</div>`;
 }
 
 function prefetch(item) {
@@ -206,10 +214,18 @@ class Triage {
 		this.saving = true;
 		const name = this.queue.current;
 		try {
+			const values = changed_values(pick(this.item), pick(this.dialog.get_values(true)));
+			if (!Object.keys(values).length) return this.move(1);
 			const result = await frappe.xcall(`${METHOD}.save_item`, {
 				name,
-				values: pick(this.dialog.get_values(true)),
+				values,
+				modified: this.item.modified,
 			});
+			if (result.error && result.item) {
+				this.items.set(name, Promise.resolve(result.item));
+				this.item = result.item;
+				await this.render(result.item);
+			}
 			if (result.error) return this.show_error(result.error);
 			this.saved += 1;
 			this.items.set(name, Promise.resolve(result.item));

@@ -72,3 +72,13 @@ export function preview_kind(file_url) {
 }
 
 export const initial_date = (item) => item.document_date || item.suggested_date || null;
+
+const empty = (value) => value === undefined || value === null || value === "";
+
+export function changed_values(original, current) {
+	return Object.fromEntries(
+		Object.entries(current).filter(([field, value]) =>
+			empty(value) ? !empty(original[field]) : String(value) !== String(original[field] ?? ""),
+		),
+	);
+}

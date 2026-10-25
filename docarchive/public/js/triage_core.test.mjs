@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Queue, initial_date, key_action, local_file_url, preview_kind } from "./triage_core.js";
+import { Queue, changed_values, initial_date, key_action, local_file_url, preview_kind } from "./triage_core.js";
 
 test("keyboard shortcuts", () => {
 	assert.equal(key_action({ key: "Enter", ctrlKey: true }), "save_next");
@@ -49,4 +49,16 @@ test("the date falls back to the file name", () => {
 	assert.equal(initial_date({ document_date: "2026-01-02", suggested_date: "2026-08-05" }), "2026-01-02");
 	assert.equal(initial_date({ document_date: null, suggested_date: "2026-08-05" }), "2026-08-05");
 	assert.equal(initial_date({}), null);
+});
+
+test("only changed fields are sent", () => {
+	const original = { title: "A", document_number: null, document_date: "2026-01-02", counterparty: "ORG-1" };
+	assert.deepEqual(
+		changed_values(original, { title: "A", document_number: "", document_date: "2026-01-02", counterparty: "ORG-1" }),
+		{},
+	);
+	assert.deepEqual(
+		changed_values(original, { title: "B", document_number: "RE-1", document_date: "2026-01-02", counterparty: null }),
+		{ title: "B", document_number: "RE-1", counterparty: null },
+	);
 });
