@@ -276,12 +276,8 @@ Retention Overview,Aufbewahrung
 Retention ends in 90 days,Fristen enden in 90 Tagen
 Deleted,Gelöscht
 Show deleted,Gelöschte anzeigen
-<<<<<<< HEAD
-Someone else changed this document in the meantime. It was reloaded, please check it again.,"Jemand anderes hat dieses Dokument inzwischen geändert. Es wurde neu geladen, bitte noch einmal prüfen."
 Until and including,Bis einschließlich
 The new date can be at most {0} years from today.,Das neue Datum darf höchstens {0} Jahre in der Zukunft liegen.
 Deleted documents cannot be extended.,Gelöschte Dokumente können nicht verlängert werden.
 These storage targets hold a copy but are not enabled: {0},"Diese Speicherziele haben eine Kopie, sind aber nicht aktiv: {0}"
-=======
 "Someone else changed this document in the meantime. It was reloaded, please check it again.","Jemand anderes hat dieses Dokument inzwischen geändert. Es wurde neu geladen, bitte noch einmal prüfen."
->>>>>>> feat/triage
