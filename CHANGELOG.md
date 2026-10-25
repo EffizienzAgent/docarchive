@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.7.0](https://github.com/EffizienzAgent/docarchive/compare/v0.6.0...v0.7.0) (2026-10-25)
+
+
+### Features
+
+* archive business correspondence ([7075810](https://github.com/EffizienzAgent/docarchive/commit/70758105be705a167865bbcfbad1a29a317cbf9c))
+
+
+### Bug Fixes
+
+* check create permission on the final mail document before inserting ([20dfb63](https://github.com/EffizienzAgent/docarchive/commit/20dfb6344f1e913549b1ee00761fbfa74c6eedd8))
+* expire unarchived mail originals of every account, keep days at least 1 ([840794f](https://github.com/EffizienzAgent/docarchive/commit/840794f381e4f0bb9508f979ca623017717f899b))
+* keep mail originals as plain account names so email accounts can be deleted ([2536225](https://github.com/EffizienzAgent/docarchive/commit/25362251ee5109f0ffc2efe443fe9ddb60314db0))
+* mail cleanup only removes documents whose type needs a counterparty ([33ed592](https://github.com/EffizienzAgent/docarchive/commit/33ed592a7d4b8b6b4ab3e3ae4c9726d944376a9c))
+* seed mail document types once through a patch, never fail migrate ([840ad72](https://github.com/EffizienzAgent/docarchive/commit/840ad729bbde815199a9099297f747722127b29d))
+* show thread gaps archived under another thread as archived ([9cd262f](https://github.com/EffizienzAgent/docarchive/commit/9cd262f905146a59a2e6d582c3211ae51cfba83d))
+* take mail meta from the original whose bytes were archived ([7753fef](https://github.com/EffizienzAgent/docarchive/commit/7753fef09f0db2888b84186a473967fdf1bd375f))
+* viewer shows the origin of the archived original ([9b558be](https://github.com/EffizienzAgent/docarchive/commit/9b558be27852447ef00172928b04e27c3f7876f5))
+
+
+### Documentation
+
+* describe original fill-in, keep days rules and mail type seeding ([a1eff4c](https://github.com/EffizienzAgent/docarchive/commit/a1eff4c7582932415c706b6dcd772642dc0789ec))
+
 ## [0.6.0](https://github.com/EffizienzAgent/docarchive/compare/v0.5.0...v0.6.0) (2026-10-25)
 
 
