@@ -459,3 +459,42 @@ class TestUploadAttachments(IntegrationTestCase):
 			with self.subTest(case), self.assertRaises(api.UploadError):
 				self.upload(file_name="invoice.pdf", content_base64=main, attachments=attachments)
 		self.assertFalse(frappe.db.exists("File", {"file_name": "page.html", "owner": frappe.session.user}))
+
+	def json_upload(self, main, *bodies, **fields):
+		return self.upload(
+			file_name="invoice.pdf",
+			content_base64=base64.b64encode(main).decode(),
+			attachments=[
+				{"file_name": f"annex-{n}.pdf", "content_base64": base64.b64encode(body).decode()}
+				for n, body in enumerate(bodies)
+			],
+			**fields,
+		)
+
+	def shas(self, name):
+		frappe.set_user("Administrator")
+		shas = [row.content_sha256 for row in frappe.get_doc(DOCUMENT, name).attachments]
+		frappe.set_user("docarchive-attachments@example.com")
+		return shas
+
+	def test_same_set_exists_and_new_attachments_join_an_open_document(self):
+		main, first, second = (pdf(unique(x).encode()) for x in ("main", "first", "second"))
+		created = self.json_upload(main, first)
+		for bodies in ((first,), ()):
+			again = self.json_upload(main, *bodies)
+			self.assertEqual((again["status"], again["name"]), ("exists", created["name"]))
+		updated = self.json_upload(main, first, second)
+		self.assertEqual((updated["status"], updated["name"]), ("updated", created["name"]))
+		self.assertEqual(self.shas(created["name"]), [content.sha256(first), content.sha256(second)])
+		self.assertEqual(self.json_upload(main, second, first)["status"], "exists")
+
+	def test_new_attachments_for_an_archived_document_make_a_replacement(self):
+		main, first, second = (pdf(unique(x).encode()) for x in ("main", "first", "second"))
+		created = self.json_upload(main, first, source_key=unique("billing:invoice"))
+		frappe.db.set_value(DOCUMENT, created["name"], "archive_started_at", frappe.utils.now_datetime())
+		replaced = self.json_upload(main, second, source_key=None)
+		self.assertEqual((replaced["status"], replaced["replaces"]), ("replaced", created["name"]))
+		self.assertEqual(self.shas(replaced["name"]), [content.sha256(second)])
+		self.assertEqual(self.shas(created["name"]), [content.sha256(first)])
+		again = self.json_upload(main, second)
+		self.assertEqual((again["status"], again["name"]), ("exists", replaced["name"]))
