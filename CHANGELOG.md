@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.1](https://github.com/EffizienzAgent/docarchive/compare/v0.8.0...v0.8.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **correspondence:** stateless and multi-pod deployments are supported: mail originals are written straight to the file storage (S3 via s3storage) instead of a local spool folder; while the storage is down, mails up to 10 MB are kept in the database and file writes pause for 5 minutes; spooled v0.8.0 originals are moved by a migration patch ([#41](https://github.com/EffizienzAgent/docarchive/pull/41)) ([4653788](https://github.com/EffizienzAgent/docarchive/commit/46537888efcc1d704ee29f2923f4e22944a57161), [bcd3f4d](https://github.com/EffizienzAgent/docarchive/commit/bcd3f4de6561e7dd2161367c4d60592ba828ca4a), [9287f55](https://github.com/EffizienzAgent/docarchive/commit/9287f5596c24f1aa1e41205089d90dc39ac2d484))
+* files stored by s3storage are read natively, without a host `docarchive_read_file` hook ([#41](https://github.com/EffizienzAgent/docarchive/pull/41)) ([e464f57](https://github.com/EffizienzAgent/docarchive/commit/e464f5752c719c94090e6afbe5e4552c5396b1bb), [a3e0c7f](https://github.com/EffizienzAgent/docarchive/commit/a3e0c7f537963dd8bad3082a1498b1a36bdd7da1))
+
+
+### Documentation
+
+* short README with the details in docs/, German screenshots, documents panel on its own tab in the demo ([#39](https://github.com/EffizienzAgent/docarchive/pull/39)) ([94c72de](https://github.com/EffizienzAgent/docarchive/commit/94c72dea744beea1c6ceb0b9f3a234dabfdc7442))
+
 ## [0.8.0](https://github.com/EffizienzAgent/docarchive/compare/v0.7.0...v0.8.0) (2026-10-25)
 
 
