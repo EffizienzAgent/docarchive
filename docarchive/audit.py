@@ -40,7 +40,7 @@ PREFIX = "_audit/"
 SAVEPOINT = "docarchive_audit"
 DEFAULT_YEARS = 10
 UNWRITTEN_HOURS = 24
-PENDING, WRITTEN = "Pending", "Written"
+PENDING, WRITTEN, EXPIRED = "Pending", "Written", "Expired"
 CHANGED_IN_DB = "changed in database"
 
 ARCHIVE_RUN = "archive.run"
@@ -100,6 +100,26 @@ def body_of(entry) -> str:
 	return json.dumps(entry, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
 
+def stored_fields(entry) -> dict:
+	"""Database fields derived from the stored entry body."""
+	body = body_of(entry)
+	return {
+		"body": body,
+		"sha256": hashlib.sha256(body.encode()).hexdigest(),
+		"details": json.dumps(entry["details"], sort_keys=True, indent=1, ensure_ascii=False),
+		"document_count": len(entry["documents"]),
+	}
+
+
+def document_row(row) -> dict:
+	return {
+		"document_doctype": row["doctype"],
+		"document_name": row["name"],
+		"outcome": row["outcome"],
+		"reason": row["reason"],
+	}
+
+
 def log(action, doctype=None, name=None, details=None, documents=None, write=False) -> str:
 	"""Record an audit entry and return its name. See the module docstring."""
 	entry_id, at = uuid.uuid4().hex, now_datetime()
@@ -114,7 +134,6 @@ def log(action, doctype=None, name=None, details=None, documents=None, write=Fal
 		"documents": rows,
 		"details": details or {},
 	}
-	body = body_of(entry)
 	doc = frappe.get_doc(
 		{
 			"doctype": LOG,
@@ -123,19 +142,8 @@ def log(action, doctype=None, name=None, details=None, documents=None, write=Fal
 			"action": action,
 			"reference_doctype": doctype,
 			"reference_name": name,
-			"details": json.dumps(entry["details"], sort_keys=True, indent=1, ensure_ascii=False),
-			"document_count": len(rows),
-			"documents": [
-				{
-					"document_doctype": row["doctype"],
-					"document_name": row["name"],
-					"outcome": row["outcome"],
-					"reason": row["reason"],
-				}
-				for row in rows
-			],
-			"body": body,
-			"sha256": hashlib.sha256(body.encode()).hexdigest(),
+			**stored_fields(entry),
+			"documents": [document_row(row) for row in rows],
 			"object_key": object_key(entry_id, at),
 			"retain_until": retain_until(at).replace(tzinfo=None),
 			"status": PENDING,
@@ -309,9 +317,12 @@ def reconcile(targets) -> dict:
 	now, cutoff = datetime.now(UTC), now_datetime() - timedelta(hours=UNWRITTEN_HOURS)
 	entries = frappe.get_all(
 		LOG,
+		filters={"status": ("!=", EXPIRED)},
 		fields=["name", "at", "user", "action", "body", "sha256", "object_key", "retain_until"],
 		limit_page_length=0,
 	)
+	expired = set(frappe.get_all(LOG, filters={"status": EXPIRED}, pluck="object_key", limit_page_length=0))
+
 	held = {}
 	for copy in frappe.get_all(COPY_ROW, fields=["parent", "target_name"], limit_page_length=0):
 		held.setdefault(copy.target_name, set()).add(copy.parent)
@@ -332,7 +343,7 @@ def reconcile(targets) -> dict:
 			problem = target_problem(target, entry, listed, held.get(target.name, set()), now, cutoff)
 			if problem:
 				mismatches.append({"target": target.name, "key": entry.object_key, "problem": problem})
-		known = {entry.object_key for entry in entries}
+		known = {entry.object_key for entry in entries} | expired
 		mismatches += [
 			{"target": target.name, "key": key, "problem": "unknown"} for key in sorted(set(listed) - known)
 		]
@@ -388,6 +399,85 @@ def nightly(targets) -> dict:
 	return {**flush(targets), **reconcile(targets)}
 
 
+def prune() -> int:
+	"""Daily: blank entries whose lock has ended. User, content and document references go; the
+	row keeps time, action and object key, so reconcile still knows the object until a lifecycle
+	rule removes it."""
+	now = datetime.now(UTC).replace(tzinfo=None)
+	names = frappe.get_all(
+		LOG,
+		filters={"retain_until": ("<=", now), "status": ("!=", EXPIRED)},
+		pluck="name",
+		limit_page_length=0,
+	)
+	for start in range(0, len(names), 500):
+		chunk = names[start : start + 500]
+		frappe.db.delete(DOCUMENT_ROW, {"parenttype": LOG, "parent": ("in", chunk)})
+		frappe.db.set_value(
+			LOG,
+			{"name": ("in", chunk)},
+			{
+				**dict.fromkeys(("user", "reference_doctype", "reference_name", "details", "body", "sha256")),
+				"document_count": 0,
+				"status": EXPIRED,
+			},
+			update_modified=False,
+		)
+	frappe.db.commit()
+	return len(names)
+
+
+def note_change(doctype, name, fields):
+	"""Log a pre-archive change. Further changes in the same transaction by the same user extend
+	that entry, so a bulk update gives one entry and one locked object."""
+	open_entry = getattr(frappe.local, "docarchive_change_entry", None)
+	if (
+		open_entry
+		and open_entry[1] == frappe.session.user
+		and extend_change(open_entry[0], doctype, name, fields)
+	):
+		return
+	entry = log(
+		DOCUMENT_CHANGED,
+		details={"fields": {name: sorted(fields)}},
+		documents=[(doctype, name, "changed")],
+	)
+	frappe.local.docarchive_change_entry = (entry, frappe.session.user)
+	frappe.db.after_commit.add(close_change_entry)
+	frappe.db.after_rollback.add(close_change_entry)
+
+
+def close_change_entry():
+	frappe.local.docarchive_change_entry = None
+
+
+def extend_change(entry_name, doctype, name, fields) -> bool:
+	"""Add a document to an entry of this transaction that no bucket holds yet."""
+	row = frappe.db.get_value(LOG, entry_name, ["body", "status"], as_dict=True)
+	if not row or row.status != PENDING or frappe.db.exists(COPY_ROW, {"parent": entry_name}):
+		return False
+	entry = json.loads(row.body)
+	if any(item["doctype"] != doctype for item in entry["documents"]):
+		return False
+	changed = entry["details"]["fields"]
+	if name not in changed:
+		item = {"doctype": doctype, "name": name, "outcome": "changed", "reason": None}
+		entry["documents"].append(item)
+		frappe.get_doc(
+			{
+				"doctype": DOCUMENT_ROW,
+				"parenttype": LOG,
+				"parentfield": "documents",
+				"parent": entry_name,
+				"idx": len(entry["documents"]),
+				**document_row(item),
+			}
+		).db_insert()
+	changed[name] = sorted(set(changed.get(name, [])) | set(fields))
+	frappe.db.set_value(LOG, entry_name, stored_fields(entry), update_modified=False)
+	return True
+
+
 @frappe.whitelist()
 def entries_for(doctype: str, name: str) -> list[dict]:
 	"""Audit entries that touched a document the user can read, newest first."""
@@ -441,7 +531,7 @@ def entries_for_export(names=(), date_from=None, date_to=None) -> list:
 		return []
 	return frappe.get_all(
 		LOG,
-		filters={"name": ("in", list(found))},
+		filters={"name": ("in", list(found)), "status": ("!=", EXPIRED)},
 		fields=["name", "at", "body", "sha256", "object_key", "status"],
 		order_by="at asc",
 		limit_page_length=0,
