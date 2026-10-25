@@ -26,7 +26,7 @@ extend_doctype_class = {
 }
 scheduler_events = {
 	"cron": {"30 2 * * *": ["docarchive.run.schedule"], "30 7 * * *": ["docarchive.monitoring.daily"]},
-	"daily": ["docarchive.mail.cleanup.run", "docarchive.export.expire"],
+	"daily": ["docarchive.mail.cleanup.run", "docarchive.export.expire", "docarchive.audit.prune"],
 }
 has_permission = {"File": "docarchive.guards.file_permission"}
 ignore_links_on_delete = ["Archive Audit Log", "Archive Audit Document"]

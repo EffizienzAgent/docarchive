@@ -29,6 +29,9 @@ class AuditTestCase(HoldTestCase):
 	def commit(self, *args, **kwargs):
 		frappe.db.after_commit.run()
 
+	def reconcile(self):
+		return audit.reconcile(store.targets())
+
 	def log(self, *args, **kwargs):
 		name = audit.log(*args, **kwargs)
 		frappe.db.commit()
@@ -228,9 +231,75 @@ class TestTriggers(AuditTestCase):
 		doc.document_number = "INV-NEW"
 		doc.save(ignore_permissions=True)
 		[entry] = self.entries(audit.DOCUMENT_CHANGED)
-		self.assertEqual(json.loads(entry.details), {"fields": ["document_number"]})
+		self.assertEqual(json.loads(entry.details), {"fields": {doc.name: ["document_number"]}})
 		self.assertNotIn("INV-NEW", entry.body)
 		self.assertEqual(self.outcomes(entry), {doc.name: ("changed", None)})
+
+	def test_bulk_changes_in_one_transaction_are_one_entry(self):
+		docs = [self.document() for _ in range(3)]
+		frappe.db.commit()
+		for doc in docs:
+			doc.document_number = "INV-BULK"
+			doc.save(ignore_permissions=True)
+		docs[0].document_date = "2026-03-16"
+		docs[0].save(ignore_permissions=True)
+		[entry] = self.entries(audit.DOCUMENT_CHANGED)
+		self.assertEqual(set(self.outcomes(entry)), {doc.name for doc in docs})
+		self.assertEqual(
+			json.loads(entry.details)["fields"],
+			{
+				docs[0].name: ["document_date", "document_number"],
+				docs[1].name: ["document_number"],
+				docs[2].name: ["document_number"],
+			},
+		)
+		self.assertEqual(entry.sha256, hashlib.sha256(entry.body.encode()).hexdigest())
+		self.assertEqual(json.loads(entry.body)["details"], json.loads(entry.details))
+		frappe.db.commit()
+		audit.flush()
+		self.assertEqual(frappe.db.get_value(LOG, entry.name, "status"), "Written")
+		self.assertEqual(self.reconcile()["mismatches"], [])
+
+	def test_next_transaction_starts_a_new_entry(self):
+		first, second = self.document(), self.document()
+		frappe.db.commit()
+		first.document_number = "INV-A"
+		first.save(ignore_permissions=True)
+		frappe.db.commit()
+		second.document_number = "INV-B"
+		second.save(ignore_permissions=True)
+		self.assertEqual(len(self.entries(audit.DOCUMENT_CHANGED)), 2)
+
+	def test_full_rollback_closes_the_open_entry(self):
+		doc = self.document()
+		frappe.db.commit()
+		doc.document_number = "INV-1"
+		doc.save(ignore_permissions=True)
+		with patch("frappe.db.sql"):
+			frappe.db.rollback()
+		self.assertIsNone(frappe.local.docarchive_change_entry)
+
+	def test_other_doctype_starts_a_new_entry(self):
+		doc = self.document()
+		frappe.db.commit()
+		doc.document_number = "INV-1"
+		doc.save(ignore_permissions=True)
+		audit.note_change("Contact", doc.name, ["first_name"])
+		self.assertEqual(len(self.entries(audit.DOCUMENT_CHANGED)), 2)
+
+	def test_change_rolled_back_to_a_savepoint_is_not_logged(self):
+		doc = self.document()
+		frappe.db.commit()
+		frappe.db.savepoint("audit_test")
+		doc.document_number = "INV-GONE"
+		doc.save(ignore_permissions=True)
+		frappe.db.rollback(save_point="audit_test")
+		self.assertEqual(self.entries(audit.DOCUMENT_CHANGED), [])
+		other = self.document()
+		other.document_number = "INV-KEPT"
+		other.save(ignore_permissions=True)
+		[entry] = self.entries(audit.DOCUMENT_CHANGED)
+		self.assertEqual(set(self.outcomes(entry)), {other.name})
 
 
 class TestCommit(AuditTestCase):
@@ -343,6 +412,33 @@ class TestReconcile(AuditTestCase):
 		self.fake("primary").fail = {"head_object"}
 		problems = {(m["target"], m["problem"]) for m in self.reconcile()["mismatches"]}
 		self.assertIn(("primary", "unchecked: Storage error InternalError"), problems)
+
+	def test_expired_entries_are_blanked(self):
+		old = self.log(
+			"test.old", "Communication", "COMM-1", documents=[(DOCUMENT, "DOC-OLD", "archived")], write=True
+		)
+		kept = self.log("test.kept", write=True)
+		frappe.db.set_value(LOG, old.name, "retain_until", datetime(2020, 1, 1))
+		self.assertEqual(audit.prune(), 1)
+		row = frappe.db.get_value(
+			LOG, old.name, ["status", "user", "body", "details", "reference_name", "object_key"], as_dict=True
+		)
+		self.assertEqual(
+			(row.status, row.user, row.body, row.details, row.reference_name),
+			("Expired", None, None, None, None),
+		)
+		self.assertFalse(frappe.db.exists(audit.DOCUMENT_ROW, {"parent": old.name}))
+		self.assertEqual(audit.entries_for_export(["DOC-OLD"]), [])
+		self.assertEqual(self.reconcile()["mismatches"], [])
+		for target in ("primary", "secondary"):
+			del self.fake(target).versions[(f"archive-{target}", row.object_key)]
+		self.assertEqual(self.reconcile()["mismatches"], [])
+		self.assertTrue(frappe.db.exists(LOG, old.name))
+		self.assertTrue(frappe.db.exists(LOG, kept.name))
+		self.assertEqual(audit.prune(), 0)
+
+	def test_prune_runs_daily_without_archiving(self):
+		self.assertIn("docarchive.audit.prune", frappe.get_hooks("scheduler_events")["daily"])
 
 	def test_lifecycle_deletion_after_the_lock_is_fine(self):
 		entry = self.log("test.action", write=True)
