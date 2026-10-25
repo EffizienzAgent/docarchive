@@ -224,5 +224,19 @@ Open file,Datei öffnen
 Copy link,Link kopieren
 {0} of {1} documents,{0} von {1} Dokumenten
 Only the newest {0} are shown.,Nur die neuesten {0} werden angezeigt.
+No file,Keine Datei
+Download,Herunterladen
+Assign documents,Dokumente zuordnen
+{0} of {1},{0} von {1}
+Save and next,Speichern & weiter
+Skip,Überspringen
+Back,Zurück
+You cannot change this document.,Sie können dieses Dokument nicht ändern.
+Still missing: {0},Es fehlt noch: {0}
+All documents processed.,Alle Dokumente bearbeitet.
+Nothing to assign.,Nichts zuzuordnen.
+Assign,Zuordnen
+Assign all,Alle zuordnen
 Deleted,Gelöscht
 Show deleted,Gelöschte anzeigen
+"Someone else changed this document in the meantime. It was reloaded, please check it again.","Jemand anderes hat dieses Dokument inzwischen geändert. Es wurde neu geladen, bitte noch einmal prüfen."

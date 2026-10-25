@@ -81,6 +81,43 @@
 	margin-right: 2px;
 }
 
+.docarchive-triage .form-column:first-child {
+	flex: 0 0 42%;
+	max-width: 42%;
+}
+
+.docarchive-triage .form-column:last-child {
+	flex: 0 0 58%;
+	max-width: 58%;
+}
+
+.docarchive-triage-frame,
+.docarchive-triage-image,
+.docarchive-triage-empty {
+	width: 100%;
+	height: 70vh;
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius-md);
+}
+
+.docarchive-triage-image {
+	object-fit: contain;
+	background: var(--subtle-fg);
+}
+
+.docarchive-triage-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--padding-sm);
+}
+
+.docarchive-triage-file {
+	font-weight: 600;
+	word-break: break-all;
+}
+
 .docarchive-toggle {
 	display: inline-flex;
 	align-items: center;
