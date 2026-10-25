@@ -10,7 +10,12 @@ from docarchive.tests.factories import make_file, make_settings
 PNG = base64.b64decode(
 	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 )
-NEUTRAL = {"export_brand_name": None, "export_brand_logo": None, "export_brand_color": None, "export_show_credit": 1}
+NEUTRAL = {
+	"export_brand_name": None,
+	"export_brand_logo": None,
+	"export_brand_color": None,
+	"export_show_credit": 1,
+}
 
 
 def payload(html) -> dict:
@@ -54,7 +59,9 @@ class TestExportBranding(IntegrationTestCase):
 
 	def test_logo_is_embedded_as_data_uri(self):
 		content = PNG + b"embedded"
-		make_settings(**{**NEUTRAL, "export_brand_name": "Muster GmbH", "export_brand_logo": self.logo(content)})
+		make_settings(
+			**{**NEUTRAL, "export_brand_name": "Muster GmbH", "export_brand_logo": self.logo(content)}
+		)
 		brand = export_package.brand()
 		self.assertEqual(brand["logo"], "data:image/png;base64," + base64.b64encode(content).decode())
 		html = export_package.viewer({"scope": {}, "documents": [], "mismatches": []}, brand)
@@ -69,12 +76,13 @@ class TestExportBranding(IntegrationTestCase):
 		self.assertIsNone(export_package.brand()["logo"])
 
 	def test_brand_values_cannot_break_out_of_the_script(self):
-		name = "</script><script>alert(1)</script> &  "
+		name = "</script><script>alert(1)</script> & \u2028"
 		html = export_package.viewer(
-			{"scope": {}, "documents": [], "mismatches": []}, {"name": name, "color": None, "logo": None, "credit": True}
+			{"scope": {}, "documents": [], "mismatches": []},
+			{"name": name, "color": None, "logo": None, "credit": True},
 		)
 		data = html.split("const DATA = ", 1)[1].split(";\n", 1)[0]
-		for char in ("<", ">", "&", " "):
+		for char in ("<", ">", "&", "\u2028"):
 			self.assertNotIn(char, data)
 		self.assertEqual(payload(html)["brand"]["name"], name)
 		self.assertNotIn(export_package.CORE_MARKER, html)

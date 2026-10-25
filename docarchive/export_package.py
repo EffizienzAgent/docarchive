@@ -21,7 +21,13 @@ VIEWER_CORE = Path(__file__).with_name("export_viewer_core.js")
 DATA_MARKER = "/*DOCARCHIVE_DATA*/"
 CORE_MARKER = "/*DOCARCHIVE_CORE*/"
 LOGO_LIMIT = 200 * 1024
-LOGO_TYPES = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
+LOGO_TYPES = {
+	"png": "image/png",
+	"jpg": "image/jpeg",
+	"jpeg": "image/jpeg",
+	"gif": "image/gif",
+	"webp": "image/webp",
+}
 LOGO_MAGIC = (
 	(b"\x89PNG\r\n\x1a\n", "image/png"),
 	(b"\xff\xd8\xff", "image/jpeg"),

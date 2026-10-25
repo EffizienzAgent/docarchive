@@ -14,7 +14,14 @@ from frappe.utils import now_datetime
 
 from docarchive import export, export_package, run
 from docarchive.permissions import ADMIN_ROLE
-from docarchive.tests.factories import eml, make_document_type, make_manager, make_party, make_user, party_fields
+from docarchive.tests.factories import (
+	eml,
+	make_document_type,
+	make_manager,
+	make_party,
+	make_user,
+	party_fields,
+)
 from docarchive.tests.hold_case import DOCUMENT, HoldTestCase
 from docarchive.tests.test_attachments import attachment, xml_file
 

@@ -22,7 +22,9 @@ class ArchiveSettings(Document):
 		if self.export_brand_color and not export_package.valid_color(self.export_brand_color):
 			frappe.throw(_("The brand color must be a hex color like #1a7f37."))
 		if self.export_brand_logo:
-			error = export_package.logo_error(self.export_brand_logo, content.read_bytes(self.export_brand_logo))
+			error = export_package.logo_error(
+				self.export_brand_logo, content.read_bytes(self.export_brand_logo)
+			)
 			if error:
 				frappe.throw(error)
 
