@@ -6,6 +6,11 @@ import frappe
 FOLDERS = {"/private/files/": ("private", "files"), "/files/": ("public", "files")}
 
 
+def content_for(doc) -> tuple[bytes | None, str]:
+	stem, dot, ext = (doc.file or "").rpartition(".")
+	return read_bytes(doc.file), ext.lower() if dot and stem else ""
+
+
 def read_bytes(file_url) -> bytes | None:
 	for method in reversed(frappe.get_hooks("docarchive_read_file")):
 		data = frappe.get_attr(method)(file_url)

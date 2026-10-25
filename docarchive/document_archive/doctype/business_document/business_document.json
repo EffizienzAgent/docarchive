@@ -34,6 +34,8 @@
   "source_party_id",
   "source_party_name",
   "source_party_email",
+  "source_doctype",
+  "source_name",
   "column_break_source",
   "source_key",
   "replaces",
@@ -50,7 +52,10 @@
   "object_key",
   "meta_key",
   "retention_mode",
-  "retain_until"
+  "retain_until",
+  "archive_copies_section",
+  "archive_copies",
+  "archive_meta"
  ],
  "fields": [
   {
@@ -185,6 +190,20 @@
    "read_only": 1
   },
   {
+   "fieldname": "source_doctype",
+   "fieldtype": "Link",
+   "label": "Source Record Type",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Source Record",
+   "options": "source_doctype",
+   "read_only": 1
+  },
+  {
    "fieldname": "column_break_source",
    "fieldtype": "Column Break"
   },
@@ -285,7 +304,28 @@
   {
    "fieldname": "retain_until",
    "fieldtype": "Datetime",
-   "label": "Retain Until",
+   "label": "Retain Until (UTC)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_copies_section",
+   "fieldtype": "Section Break",
+   "label": "Archive Copies",
+   "collapsible": 1,
+   "depends_on": "eval:doc.archive_started_at"
+  },
+  {
+   "fieldname": "archive_copies",
+   "fieldtype": "Table",
+   "label": "Archive Copies",
+   "options": "Archive Copy",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_meta",
+   "fieldtype": "Code",
+   "label": "Archive Metadata",
+   "options": "JSON",
    "read_only": 1
   }
  ],

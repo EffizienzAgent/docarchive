@@ -3,7 +3,7 @@ import re
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import getdate
+from frappe.utils import add_days, add_years, getdate, today
 from frappe.utils.data import cast
 
 from docarchive import assignment, content, counterparty, settings
@@ -15,6 +15,8 @@ SOURCE_FIELDS = (
 	"source_party_id",
 	"source_party_name",
 	"source_party_email",
+	"source_doctype",
+	"source_name",
 )
 LOCKED_FIELDS = (
 	"own_company",
@@ -39,6 +41,8 @@ PROTECTED_FIELDS = (
 	"meta_key",
 	"retention_mode",
 	"retain_until",
+	"archive_copies",
+	"archive_meta",
 	"source_key",
 	"replaces",
 	*SOURCE_FIELDS,
@@ -100,6 +104,7 @@ def missing_fields(doc) -> list[str]:
 class BusinessDocument(Document):
 	def _validate_links(self):
 		before = self.get_doc_before_save()
+		self.restore_protected(before)
 		if not (before and before.archive_started_at):
 			counterparty.check_read(self, before)
 		return super()._validate_links()
@@ -114,6 +119,7 @@ class BusinessDocument(Document):
 			self.resolve_own_company()
 			self.validate_file(before)
 		counterparty.validate(self)
+		self.validate_dates()
 		self.validate_contract_end()
 		self.set_title(before)
 
@@ -183,6 +189,21 @@ class BusinessDocument(Document):
 		if data is None:
 			frappe.throw(_("File {0} does not exist.").format(self.file))
 		self.content_sha256 = content.sha256(data)
+
+	def validate_dates(self):
+		limits = settings.date_limits()
+		if getdate(self.document_date) > getdate(add_days(today(), limits.future_days)):
+			frappe.throw(
+				_("The document date cannot be more than {0} days in the future.").format(limits.future_days)
+			)
+		if self.contract_end_date and getdate(self.contract_end_date) > add_years(
+			getdate(self.document_date), limits.contract_years
+		):
+			frappe.throw(
+				_("The contract end date cannot be more than {0} years after the document date.").format(
+					limits.contract_years
+				)
+			)
 
 	def validate_contract_end(self):
 		if not self.contract_end_date:

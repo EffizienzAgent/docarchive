@@ -151,4 +151,51 @@ The file needs a file name without slashes.,Die Datei braucht einen Dateinamen o
 The file is empty.,Die Datei ist leer.
 The file is larger than {0} MB.,Die Datei ist größer als {0} MB.
 The file is damaged or does not match its file type.,Die Datei ist beschädigt oder passt nicht zu ihrem Dateityp.
+An archive object needs a key and bytes.,Ein Archivobjekt braucht einen Schlüssel und Bytes.
+Archive Copies,Archivkopien
+Archive Copy,Archivkopie
+Archive Metadata,Archiv-Metadaten
+Error,Fehler
+Invalid lock mode {0}.,Ungültiger Sperrmodus {0}.
+Invalid retain-until date {0}.,Ungültiges Aufbewahrungsende {0}.
+Only smoke test objects may be deleted.,Nur Objekte des Smoke-Tests dürfen gelöscht werden.
+Retain Until (UTC),Aufbewahren bis (UTC)
+Status,Status
+Storage error {0},Speicherfehler {0}
+Storage target {0} is missing: {1},Speicherziel {0} fehlt: {1}
+The archived copy does not match the checksum.,Die archivierte Kopie passt nicht zur Prüfsumme.
+The file of document {0} cannot be read.,Die Datei von Dokument {0} kann nicht gelesen werden.
+The file of document {0} no longer matches its checksum.,Die Datei von Dokument {0} passt nicht mehr zu ihrer Prüfsumme.
+The retain-until date must be a date and time with a time zone.,Das Aufbewahrungsende muss ein Datum mit Uhrzeit und Zeitzone sein.
+The retain-until date must be in the future.,Das Aufbewahrungsende muss in der Zukunft liegen.
+There is no retention rule for {0} and {1}.,Es gibt keine Aufbewahrungsregel für {0} und {1}.
+There is no storage target named {0}.,Es gibt kein Speicherziel namens {0}.
+{0} already exists with different content.,{0} existiert bereits mit anderem Inhalt.
+Archive now,Jetzt festschreiben
+Archiving started.,Archivierung gestartet.
+Archive status: {0},Archivstatus: {0}
+"After this, the file and the archived fields of {0} document(s) can no longer be changed or deleted. They are kept unchangeable until {1} (mode {2}).","Danach können die Datei und die archivierten Felder von {0} Dokument(en) nicht mehr geändert oder gelöscht werden. Sie werden bis {1} unveränderbar aufbewahrt (Modus {2})."
+{0} selected document(s) cannot be archived yet and are skipped.,{0} der ausgewählten Dokumente können noch nicht archiviert werden und werden übersprungen.
+Archiving is switched off.,Die Archivierung ist ausgeschaltet.
+Archiving has already started.,Die Archivierung hat bereits begonnen.
+Documents of this type are not archived.,Dokumente dieser Art werden nicht archiviert.
+Missing before archiving: {0},Fehlt vor dem Archivieren: {0}
+No storage target is configured.,Es ist kein Speicherziel eingerichtet.
+Source Record Type,Art des Quelldatensatzes
+Source Record,Quelldatensatz
 This source_key is already used by another source.,Dieser source_key wird bereits von einer anderen Quelle verwendet.
+Object Version ID,Objektversion
+Meta Version ID,Meta-Version
+An archive object version is missing. The bucket needs Object Lock.,Eine Version des Archivobjekts fehlt. Der Bucket braucht Object Lock.
+{0} is missing on the storage target.,{0} fehlt auf dem Speicherziel.
+{0} is not locked as expected.,{0} ist nicht wie erwartet gesperrt.
+{0} does not match its checksum.,{0} passt nicht zu seiner Prüfsumme.
+{0} has a new version on the storage target.,{0} hat eine neue Version auf dem Speicherziel.
+The document date cannot be more than {0} days in the future.,Das Belegdatum darf höchstens {0} Tage in der Zukunft liegen.
+The contract end date cannot be more than {0} years after the document date.,Das Vertragsende darf höchstens {0} Jahre nach dem Belegdatum liegen.
+Max. Days in the Future,Max. Tage in der Zukunft
+Max. Contract Years,Max. Vertragsjahre
+A document date may be at most this many days after today.,Ein Belegdatum darf höchstens so viele Tage nach heute liegen.
+A contract end date may be at most this many years after the document date.,Ein Vertragsende darf höchstens so viele Jahre nach dem Belegdatum liegen.
+Skipped,Übersprungen
+The recorded version of {0} is missing on the storage target.,Die gespeicherte Version von {0} fehlt auf dem Speicherziel.
