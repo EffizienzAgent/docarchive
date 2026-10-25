@@ -4,6 +4,7 @@ from email.message import EmailMessage
 import frappe
 from frappe.utils.response import build_response
 
+from docarchive import mail
 from docarchive.mail import archiving, thread, viewer
 from docarchive.tests.factories import make_manager, make_outsider, make_own_company
 from docarchive.tests.test_mail_archiving import MailArchivingTestCase, address
@@ -231,6 +232,20 @@ class TestViewer(MailArchivingTestCase):
 		raw = b"From: a@example.test\r\nSubject: x\r\nContent-Type: text/plain; charset=unknown-8\r\n\r\nK\xf6ln\r\n"
 		r = viewer.render(archiving.archive(self.capture(raw)))
 		self.assertEqual(r["text"].strip(), "K\ufffdln")
+
+	def test_render_origin_of_the_archived_original(self):
+		mid = f"<{message_id()}>"
+		first = mail.capture(self.communication(), mime(text="a", Message_ID=mid).as_bytes(), "first")
+		second = mail.capture(self.communication(), mime(text="b", Message_ID=mid).as_bytes(), "second")
+		name = archiving.archive(first)
+		archiving.archive(second)
+		frappe.db.set_value(
+			"Mail Original",
+			second,
+			{"creation": "2020-01-01 00:00:00", "modified": "2099-01-01 00:00:00"},
+			update_modified=False,
+		)
+		self.assertEqual(viewer.render(name)["origin"], "first")
 
 	def test_render_needs_eml_file(self):
 		name = self.archived(mime(text="x"))
