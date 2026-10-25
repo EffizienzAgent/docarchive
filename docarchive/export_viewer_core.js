@@ -104,10 +104,12 @@ const ViewerCore = (() => {
 		return doc.correspondence_at || doc.date || "";
 	}
 
+	const threadId = (doc) => doc.thread_root || doc.thread_key;
+
 	function threadOf(doc, docs) {
-		if (!doc.thread_key) return [];
+		if (!threadId(doc)) return [];
 		return docs
-			.filter((other) => other.thread_key === doc.thread_key)
+			.filter((other) => threadId(other) === threadId(doc))
 			.sort((a, b) => sentAt(b).localeCompare(sentAt(a)) || b.id.localeCompare(a.id));
 	}
 

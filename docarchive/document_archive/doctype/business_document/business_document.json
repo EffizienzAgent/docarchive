@@ -36,6 +36,7 @@
   "correspondence_at",
   "column_break_correspondence",
   "thread_key",
+  "thread_root",
   "mail_message_id",
   "mail_in_reply_to",
   "mail_references",
@@ -234,6 +235,15 @@
    "search_index": 1
   },
   {
+   "fieldname": "thread_root",
+   "fieldtype": "Data",
+   "length": 500,
+   "label": "Thread Root",
+   "read_only": 1,
+   "hidden": 1,
+   "search_index": 1
+  },
+  {
    "fieldname": "mail_message_id",
    "fieldtype": "Data",
    "length": 500,
@@ -246,7 +256,8 @@
    "fieldtype": "Data",
    "length": 500,
    "label": "In-Reply-To",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "mail_references",

@@ -132,4 +132,9 @@ test("threads list the newest mail first", () => {
 	];
 	assert.deepEqual(threadOf(docs[0], docs).map((doc) => doc.id), ["c", "b", "a"]);
 	assert.deepEqual(threadOf({ id: "n" }, docs), []);
+	const split = [
+		{ id: "a", thread_key: "a", thread_root: "a", date: "2026-03-10" },
+		{ id: "c", thread_key: "b", thread_root: "a", date: "2026-03-12" },
+	];
+	assert.deepEqual(threadOf(split[0], split).map((doc) => doc.id), ["c", "a"]);
 });

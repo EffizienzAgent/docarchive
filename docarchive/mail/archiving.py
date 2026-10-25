@@ -5,6 +5,7 @@ from frappe.utils import get_datetime, getdate
 from docarchive import audit, content, counterparty, settings
 from docarchive.document_types import CORRESPONDENCE, INTERNAL_CORRESPONDENCE
 from docarchive.mail import access, accounts, events, headers
+from docarchive.mail import thread as threads
 
 DOCUMENT = "Business Document"
 ORIGINAL = "Mail Original"
@@ -427,6 +428,7 @@ def _create(original, own_company, check_permission=False, raw=None):
 			"correspondence_direction": original.direction,
 			"correspondence_at": original.mail_at,
 			"thread_key": original.thread_key,
+			"thread_root": original.thread_key,
 			"mail_message_id": original.message_id,
 			"mail_in_reply_to": original.in_reply_to,
 			"mail_references": original.mail_references,
@@ -438,6 +440,7 @@ def _create(original, own_company, check_permission=False, raw=None):
 	doc.insert(ignore_permissions=True)
 	doc.file = _attach(original, doc.name, raw)
 	doc.save(ignore_permissions=True)
+	threads.join(doc.name)
 	return doc.name
 
 

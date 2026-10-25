@@ -367,18 +367,16 @@ class TestThread(MailArchivingTestCase):
 		self.addCleanup(frappe.set_user, "Administrator")
 		self.assertEqual(thread.thread(c_doc)[1]["state"], "unknown")
 
-	def test_gap_archived_under_other_thread(self):
+	def test_mail_archived_under_other_thread_is_listed(self):
 		a_id = message_id()
 		_, a = self.mail("2026-03-10 09:00:00", mime(text="a", Message_ID=f"<{a_id}>"))
 		_, c = self.mail("2026-03-12 09:00:00", mime(text="c", References=references(a_id)))
 		a_doc, c_doc = archiving.archive(a), archiving.archive(c)
-		frappe.db.set_value(DOCUMENT, a_doc, "thread_key", "elsewhere")
+		frappe.db.set_value(DOCUMENT, a_doc, {"thread_key": "elsewhere", "thread_root": "elsewhere"})
 		frappe.set_user(make_manager(address("manager")))
 		self.addCleanup(frappe.set_user, "Administrator")
-		gap = thread.thread(c_doc)[1]
 		self.assertEqual(
-			(gap["kind"], gap["state"], gap["business_document"], gap["communication"]),
-			("gap", "archived", a_doc, None),
+			[(i["kind"], i.get("name")) for i in thread.thread(c_doc)], [("mail", c_doc), ("mail", a_doc)]
 		)
 
 	def test_gap_archived_for_other_company_not_shown(self):

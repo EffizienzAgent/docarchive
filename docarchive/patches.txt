@@ -7,3 +7,4 @@ docarchive.patches.move_mail_spool
 docarchive.patches.apply_settings_defaults
 docarchive.patches.drop_stale_mail_index
 docarchive.patches.fill_counterparty_names
+docarchive.patches.join_mail_threads

@@ -301,6 +301,7 @@ def thread_fields(doc, meta) -> dict:
 	at = doc.get("correspondence_at")
 	return {
 		"thread_key": correspondence.get("thread_key") or doc.get("thread_key"),
+		"thread_root": doc.get("thread_root"),
 		"message_id": mail.get("message_id") or doc.get("mail_message_id"),
 		"in_reply_to": mail.get("in_reply_to") or doc.get("mail_in_reply_to"),
 		"references": mail.get("references") or (doc.get("mail_references") or "").split(),
