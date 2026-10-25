@@ -138,6 +138,18 @@ def extend_locked(target, key, version_id, sha256, mode, retain_until) -> bool:
 	return True
 
 
+def list_keys(target, prefix) -> dict[str, str]:
+	keys, token = {}, None
+	while True:
+		page = target._client.list_objects_v2(
+			Bucket=target.bucket, Prefix=prefix, **({"ContinuationToken": token} if token else {})
+		)
+		keys.update({item["Key"]: (item.get("ETag") or "").strip('"') for item in page.get("Contents") or []})
+		token = page.get("NextContinuationToken")
+		if not page.get("IsTruncated") or not token:
+			return keys
+
+
 def versioned(version_id):
 	if not version_id:
 		raise LockError(_("An archive object version is missing. The bucket needs Object Lock."))

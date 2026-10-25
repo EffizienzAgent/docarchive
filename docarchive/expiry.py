@@ -7,7 +7,7 @@ from frappe import _
 from frappe.utils import cint, format_date, now_datetime
 from frappe.utils.global_search import delete_for_document
 
-from docarchive import retention, run, store
+from docarchive import audit, retention, run, store
 from docarchive.legal_hold import (
 	OFF,
 	admin_refusal,
@@ -184,16 +184,19 @@ def delete_documents(names, confirm=None, early=0, reason=None, typed=None) -> d
 def run_job(names, user, early=0, reason=None) -> dict:
 	by_name = targets_by_name()
 	results = {}
-	for name in names:
-		lock = run.document_lock(name)
-		if not lock.acquire(blocking=False):
-			results[name] = run.SKIPPED
-			continue
-		try:
-			results[name] = delete_document(name, by_name, user, early, reason)
-		finally:
-			run.release(lock)
-		frappe.publish_realtime(EVENT, {"name": name, "status": results[name]}, user=user)
+	with audit.batch(audit.DOCUMENTS_DELETED, {"early": bool(early)}) as documents:
+		for name in names:
+			documents.start(DOCUMENT, name)
+			lock = run.document_lock(name)
+			if not lock.acquire(blocking=False):
+				results[name] = run.SKIPPED
+			else:
+				try:
+					results[name] = delete_document(name, by_name, user, early, reason)
+				finally:
+					run.release(lock)
+				frappe.publish_realtime(EVENT, {"name": name, "status": results[name]}, user=user)
+			documents.done(DOCUMENT, name, results[name].lower())
 	return results
 
 

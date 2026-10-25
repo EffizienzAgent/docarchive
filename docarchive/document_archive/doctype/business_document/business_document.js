@@ -55,6 +55,23 @@ function add_correspondence_buttons(frm) {
 	}
 }
 
+function render_audit(frm) {
+	const wrapper = frm.get_field("audit_html").$wrapper;
+	frappe.xcall("docarchive.audit.entries_for", { doctype: frm.doctype, name: frm.doc.name }).then((entries) => {
+		if (!entries.length) {
+			wrapper.html(`<p class="text-muted">${esc(__("No audit entries yet."))}</p>`);
+			return;
+		}
+		const head = [__("At"), __("User"), __("Action"), __("Outcome")].map((label) => `<th>${esc(label)}</th>`);
+		const rows = entries.map((entry) => {
+			const link = `<a href="/app/archive-audit-log/${encodeURIComponent(entry.name)}">${esc(frappe.datetime.str_to_user(entry.at))}</a>`;
+			const outcome = [entry.outcome, entry.reason].filter(Boolean).join(": ");
+			return `<tr><td>${frappe.user.has_role(["Archive Admin", "System Manager"]) ? link : esc(frappe.datetime.str_to_user(entry.at))}</td><td>${esc(entry.user)}</td><td>${esc(entry.action)}</td><td>${esc(outcome)}</td></tr>`;
+		});
+		wrapper.html(`<table class="table table-condensed"><tr>${head.join("")}</tr>${rows.join("")}</table>`);
+	});
+}
+
 frappe.ui.form.on("Business Document", {
 	setup(frm) {
 		frappe.xcall("docarchive.counterparty.doctypes").then((doctypes) => {
@@ -76,6 +93,7 @@ frappe.ui.form.on("Business Document", {
 			});
 		}
 		add_correspondence_buttons(frm);
+		render_audit(frm);
 		const status = frm.doc.archive_status || "Pending";
 		frm.page.set_indicator(__(status), ARCHIVE_COLORS[status]);
 		if (!frm.doc.archive_started_at && frm.perm[0].write && !frm.is_dirty()) {

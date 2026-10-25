@@ -621,3 +621,36 @@ This e-mail is archived.,Diese E-Mail ist archiviert.
 Another export is still running. Please wait until it is done.,"Ein anderer Export läuft noch. Bitte warten, bis er fertig ist."
 The export was interrupted.,Der Export wurde unterbrochen.
 "This file type is only offered as a download, so it cannot run in the viewer.","Dieser Dateityp wird nur zum Herunterladen angeboten, damit er im Viewer nicht ausgeführt werden kann."
+All actions,Alle Aktionen
+Archive Audit Copy,Protokollkopie
+Archive Audit Document,Protokollierter Beleg
+Archive Audit Log,Archivprotokoll
+Audit Log,Protokoll
+Audit log entries are written by the system and cannot be changed.,Protokolleinträge schreibt das System. Sie können nicht geändert werden.
+Audit log entries cannot be changed.,Protokolleinträge können nicht geändert werden.
+Audit log entries cannot be deleted.,Protokolleinträge können nicht gelöscht werden.
+Audit log entries cannot be renamed.,Protokolleinträge können nicht umbenannt werden.
+Copies,Kopien
+Document,Dokument
+Document Type,Dokumenttyp
+Each audit log entry is stored as a locked object on every enabled storage target for this many years.,Jeder Protokolleintrag wird so viele Jahre als gesperrtes Objekt auf jedem aktiven Speicherziel aufbewahrt.
+Entries,Einträge
+Lock Audit Log For (Years),Protokoll sperren für (Jahre)
+No audit entries match the filters.,Keine Protokolleinträge passen zu den Filtern.
+Not written to this storage target,Nicht auf dieses Speicherziel geschrieben
+Outcome,Ergebnis
+Reference,Bezug
+Reference Type,Bezugstyp
+SHA-256,SHA-256
+"Search user, action or document","Person, Aktion oder Dokument suchen"
+Storage Status,Speicherstatus
+Stored Entry,Gespeicherter Eintrag
+Stored entry,Gespeicherter Eintrag
+Written,Geschrieben
+Written At,Geschrieben am
+not in this export,nicht in diesem Export
+{0} more,{0} weitere
+The audit log does not match the storage,Das Archivprotokoll stimmt nicht mit dem Speicher überein
+Database,Datenbank
+No audit entries yet.,Noch keine Protokolleinträge.
+Not yet stored under Object Lock,Noch nicht unter Object Lock gespeichert
