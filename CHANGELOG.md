@@ -5,9 +5,8 @@
 
 ### Features
 
-* fixed preview header in the documents panel ([744cbe0](https://github.com/EffizienzAgent/docarchive/commit/744cbe052f0c556a801f4c1b1a8f7fe9f4f7c9b0))
-* German strings for the viewer shortcuts ([31ea0f8](https://github.com/EffizienzAgent/docarchive/commit/31ea0f8ce6eea2118f58fbcd392449cb5dc0bad3))
-* keyboard navigation, fixed metadata header and branding in the export viewer ([c215457](https://github.com/EffizienzAgent/docarchive/commit/c215457ee7344422b7bcd530eec95ad4364edabe))
+* **export viewer:** keyboard navigation (English and German shortcut help), a fixed metadata header and branding ([#29](https://github.com/EffizienzAgent/docarchive/pull/29)) ([c215457](https://github.com/EffizienzAgent/docarchive/commit/c215457ee7344422b7bcd530eec95ad4364edabe), [31ea0f8](https://github.com/EffizienzAgent/docarchive/commit/31ea0f8ce6eea2118f58fbcd392449cb5dc0bad3))
+* **documents panel:** the preview header stays fixed while scrolling ([#29](https://github.com/EffizienzAgent/docarchive/pull/29)) ([744cbe0](https://github.com/EffizienzAgent/docarchive/commit/744cbe052f0c556a801f4c1b1a8f7fe9f4f7c9b0))
 
 ## [0.5.0](https://github.com/EffizienzAgent/docarchive/compare/v0.4.1...v0.5.0) (2026-10-25)
 
