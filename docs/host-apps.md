@@ -8,7 +8,7 @@ Add these to your app's `hooks.py`:
 |---|---|---|
 | `docarchive_assign` | `doc` (Business Document, in `validate`, before archiving starts) | Fill `own_company`, `counterparty_type` and `counterparty`, e.g. from `source_system`, `source_account`, `source_party_type` and `source_party_id` (set by server code with `flags.archive_write`). Values the user set are kept. Do not save other documents here. |
 | `docarchive_counterparty_doctypes` | – | List of doctypes allowed as counterparty. Empty: any doctype that is not a child table or a single. |
-| `docarchive_read_file` | `file_url` | Return the raw bytes of a file, or `None`. Use this when files live outside the site folder (e.g. in object storage). The last hook wins. |
+| `docarchive_read_file` | `file_url` | Return the raw bytes of a file, or `None`. docarchive reads files in s3storage's bucket and in the site folder itself; use this hook for files stored elsewhere. Hooks are asked first and the last hook wins. |
 | `docarchive_einvoice_extractors` | `data`, `file_name` | Return e-invoice metadata or `None`. See [E-invoices](e-invoices.md#e-invoices). |
 
 Own company resolution: an explicit value, then the `docarchive_assign` hooks, then the successor company by date, then the default company from Archive Settings. While a document has no date, the successor and default companies are not applied: own company stays empty and is listed as missing until the date is set.

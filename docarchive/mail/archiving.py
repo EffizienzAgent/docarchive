@@ -16,7 +16,9 @@ TITLE_LENGTH = 140
 EMAIL_LENGTH = 140
 
 
-def archive(original_name: str, own_company: str | None = None, check_permission: bool = False) -> str:
+def archive(
+	original_name: str, own_company: str | None = None, check_permission: bool = False, raw=None
+) -> str:
 	original = frappe.get_doc(ORIGINAL, original_name)
 	if original.business_document:
 		return original.business_document
@@ -25,7 +27,7 @@ def archive(original_name: str, own_company: str | None = None, check_permission
 		frappe.throw(reason)
 	row = accounts.account_row(original.email_account) or frappe._dict()
 	own_company = settings.own_company_for(original.mail_at, own_company or row.own_company)
-	name = _existing(original, own_company) or _create(original, own_company, check_permission)
+	name = _existing(original, own_company) or _create(original, own_company, check_permission, raw)
 	original.db_set("business_document", name, update_modified=False)
 	return name
 
@@ -43,7 +45,7 @@ def refusal(original_name: str | None) -> str | None:
 	return None
 
 
-def auto_archive(original_name: str) -> str | None:
+def auto_archive(original_name: str, raw=None) -> str | None:
 	original = frappe.db.get_value(
 		ORIGINAL, original_name, ["email_account", "automated", "internal"], as_dict=True
 	)
@@ -55,7 +57,7 @@ def auto_archive(original_name: str) -> str | None:
 		or (original.internal and not row.archive_internal)
 	):
 		return None
-	return archive(original_name)
+	return archive(original_name, raw=raw)
 
 
 def remove_document(name: str) -> None:
@@ -321,7 +323,7 @@ def _existing_document(message_id, sha256, own_company):
 	return frappe.db.get_value(DOCUMENT, filters)
 
 
-def _create(original, own_company, check_permission=False):
+def _create(original, own_company, check_permission=False, raw=None):
 	doc = frappe.get_doc(
 		{
 			"doctype": DOCUMENT,
@@ -347,7 +349,7 @@ def _create(original, own_company, check_permission=False):
 		frappe.has_permission(DOCUMENT, "create", doc=doc, throw=True)
 	doc.flags.archive_write = True
 	doc.insert(ignore_permissions=True)
-	doc.file = _attach(original, doc.name)
+	doc.file = _attach(original, doc.name, raw)
 	doc.save(ignore_permissions=True)
 	return doc.name
 
@@ -357,8 +359,8 @@ def _party_email(original):
 	return (value or "").split(", ")[0][:EMAIL_LENGTH]
 
 
-def _attach(original, document):
-	data = content.read_bytes(original.file)
+def _attach(original, document, raw=None):
+	data = raw if raw is not None else content.read_bytes(original.file)
 	if data is None:
 		frappe.throw(_("The captured original of this e-mail is missing."))
 	file_name = frappe.db.get_value(

@@ -4,7 +4,6 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from docarchive import demo
-from docarchive.mail.originals import remove_spool
 from docarchive.tests.factories import make_business_document, make_own_company, make_settings
 
 
@@ -35,8 +34,6 @@ class TestDemo(IntegrationTestCase):
 			filters={"email_account": account},
 			fields=["name", "status", "business_document"],
 		)
-		for row in originals:
-			self.addCleanup(remove_spool, row.name)
 		self.assertTrue(originals)
 		self.assertTrue(all(row.status == "Stored" and row.business_document for row in originals))
 

@@ -3,3 +3,4 @@
 [post_model_sync]
 docarchive.patches.record_sidecar_versions
 docarchive.patches.add_mail_types
+docarchive.patches.move_mail_spool

@@ -19,6 +19,7 @@
   "error",
   "rebuilt_at",
   "file",
+  "raw_fallback",
   "sha256",
   "size",
   "direction",
@@ -97,6 +98,14 @@
    "fieldtype": "Attach",
    "label": "File",
    "read_only": 1
+  },
+  {
+   "fieldname": "raw_fallback",
+   "fieldtype": "Long Text",
+   "label": "Raw Fallback",
+   "read_only": 1,
+   "hidden": 1,
+   "permlevel": 1
   },
   {
    "fieldname": "sha256",

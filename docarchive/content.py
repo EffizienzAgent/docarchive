@@ -16,7 +16,19 @@ def read_bytes(file_url) -> bytes | None:
 		data = frappe.get_attr(method)(file_url)
 		if data is not None:
 			return data
-	return read_local(file_url)
+	data = read_stored(file_url)
+	return data if data is not None else read_local(file_url)
+
+
+def read_stored(file_url) -> bytes | None:
+	from s3storage import storage
+
+	if not storage.is_active():
+		return None
+	try:
+		return storage.read_file_url(file_url)
+	except storage.UnsafeFileURL:
+		return None
 
 
 def read_local(file_url) -> bytes | None:
