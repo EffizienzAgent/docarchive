@@ -182,9 +182,18 @@ class Triage {
 			`<p class="docarchive-triage-file">${esc(item.file_name || __("No file"))}</p>${kept}` +
 				(attachments ? `<p class="text-muted">${esc(__("Attachments"))}</p><ul>${attachments}</ul>` : ""),
 		);
+		const $actions = $(`<div class="docarchive-triage-actions">
+			<a class="btn btn-default btn-xs" href="${esc(frappe.utils.get_form_link("Business Document", item.name))}"
+				target="_blank" rel="noopener">${esc(__("Open document"))}</a>
+		</div>`).appendTo($info);
+		if (item.can_delete) {
+			$(`<button class="btn btn-default btn-xs text-danger">${esc(__("Delete"))}</button>`)
+				.appendTo($actions)
+				.on("click", () => this.delete_current());
+		}
 		if (item.can_write && !item.locked && item.file) {
 			$(`<button class="btn btn-default btn-xs">${esc(__("Add attachment"))}</button>`)
-				.appendTo($info)
+				.appendTo($actions)
 				.on("click", () => this.add_attachments(item.name));
 		}
 	}
@@ -209,6 +218,19 @@ class Triage {
 			this.render_files(this.item);
 			this.show_error(result.error);
 		};
+	}
+
+	delete_current() {
+		const { name, title } = this.item;
+		frappe.confirm(__("Permanently delete {0}?", [esc(title || name)]), async () => {
+			await frappe.xcall("frappe.client.delete", { doctype: "Business Document", name });
+			this.items.delete(name);
+			frappe.show_alert({ message: __("Deleted"), indicator: "green" });
+			if (name !== this.queue.current) return;
+			if (this.queue.remove_current()) return this.show_current();
+			this.dialog.hide();
+			frappe.show_alert({ message: __("All documents processed."), indicator: "green" });
+		});
 	}
 
 	focus_form() {

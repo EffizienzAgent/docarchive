@@ -62,3 +62,13 @@ test("only changed fields are sent", () => {
 		{ title: "B", document_number: "RE-1", counterparty: null },
 	);
 });
+
+test("removing the current item keeps the position", () => {
+	const queue = new Queue(["a", "b", "c"], 1);
+	assert.equal(queue.remove_current(), true);
+	assert.equal(queue.current, "c");
+	assert.equal(queue.remove_current(), true);
+	assert.equal(queue.current, "a");
+	assert.equal(queue.remove_current(), false);
+	assert.equal(queue.current, undefined);
+});

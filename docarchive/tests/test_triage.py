@@ -44,6 +44,7 @@ class TestTriage(IntegrationTestCase):
 		self.assertEqual(
 			(item["needs_contract_end"], item["locked"], item["can_write"]), (False, False, True)
 		)
+		self.assertTrue(item["can_delete"])
 
 	def test_contract_types_need_contract_end(self):
 		contract = make_document_type(retention_from="Contract End Date").name
@@ -101,12 +102,14 @@ class TestTriage(IntegrationTestCase):
 		frappe.share.add("Business Document", self.doc.name, user, read=1)
 		with self.set_user(user):
 			self.assertFalse(triage.triage_item(self.doc.name)["can_write"])
+			self.assertFalse(triage.triage_item(self.doc.name)["can_delete"])
 			with self.assertRaises(frappe.PermissionError):
 				triage.save_item(self.doc.name, frappe.as_json({"document_number": "X"}))
 
 	def test_locked_document_cannot_change(self):
 		frappe.db.set_value("Business Document", self.doc.name, "archive_started_at", now_datetime())
 		self.assertTrue(triage.triage_item(self.doc.name)["locked"])
+		self.assertFalse(triage.triage_item(self.doc.name)["can_delete"])
 		result = triage.save_item(self.doc.name, frappe.as_json({"document_number": "RE-4"}))
 		self.assertIn("error", result)
 
