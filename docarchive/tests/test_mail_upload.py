@@ -12,6 +12,7 @@ from docarchive.tests.factories import (
 	make_own_company,
 	make_party,
 	make_settings,
+	restrict_to_own_company,
 	unique,
 )
 
@@ -117,6 +118,24 @@ class TestArchiveUpload(IntegrationTestCase):
 		frappe.set_user(make_outsider("outsider-b@example.test"))
 		self.addCleanup(frappe.set_user, "Administrator")
 		self.assertRaises(frappe.PermissionError, archiving.archive_upload, file.file_url, "Incoming")
+
+	def test_upload_respects_own_company_permission(self):
+		user = make_manager(unique("restricted") + "@example.test")
+		restrict_to_own_company(user, make_own_company("acme-ltd").name)
+		frappe.set_user(user)
+		self.addCleanup(frappe.set_user, "Administrator")
+		file = upload(self.raw)
+		self.assertRaises(frappe.PermissionError, archiving.archive_upload, file.file_url, "Incoming")
+		frappe.set_user("Administrator")
+		self.assertFalse(frappe.db.exists(DOCUMENT, {"mail_message_id": self.message_id}))
+
+	def test_upload_allowed_for_permitted_own_company(self):
+		user = make_manager(unique("restricted") + "@example.test")
+		restrict_to_own_company(user, self.company)
+		frappe.set_user(user)
+		self.addCleanup(frappe.set_user, "Administrator")
+		name = archiving.archive_upload(upload(self.raw).file_url, "Incoming")
+		self.assertEqual(frappe.db.get_value(DOCUMENT, name, "own_company"), self.company)
 
 	def test_user_cannot_edit_direction_of_manual_upload(self):
 		name = archiving.archive_upload(upload(self.raw).file_url, "Incoming")

@@ -16,13 +16,13 @@ TITLE_LENGTH = 140
 EMAIL_LENGTH = 140
 
 
-def archive(original_name: str, own_company: str | None = None) -> str:
+def archive(original_name: str, own_company: str | None = None, check_permission: bool = False) -> str:
 	original = frappe.get_doc(ORIGINAL, original_name)
 	if original.business_document:
 		return original.business_document
 	row = accounts.account_row(original.email_account) or frappe._dict()
 	own_company = settings.own_company_for(original.mail_at, own_company or row.own_company)
-	name = _existing(original, own_company) or _create(original, own_company)
+	name = _existing(original, own_company) or _create(original, own_company, check_permission)
 	original.db_set("business_document", name, update_modified=False)
 	return name
 
@@ -165,8 +165,8 @@ def archive_communications(names) -> dict:
 		messages = len(frappe.local.message_log)
 		try:
 			frappe.db.savepoint(SAVEPOINT)
-			result["archived"][name] = archive(original)
-		except frappe.ValidationError as error:
+			result["archived"][name] = archive(original, check_permission=True)
+		except (frappe.ValidationError, frappe.PermissionError) as error:
 			frappe.db.rollback(save_point=SAVEPOINT)
 			del frappe.local.message_log[messages:]
 			result["refused"][name] = str(error)
@@ -211,7 +211,7 @@ def archive_upload(
 	name = _existing_document(parsed.message_id, content.sha256(raw), company)
 	if not name:
 		original = originals.create_upload(raw, parsed, direction)
-		name = archive(original, company)
+		name = archive(original, company, check_permission=True)
 		party = frappe._dict(counterparty_type=counterparty_type, counterparty=counterparty)
 		_complete(name, party if counterparty_type and counterparty else thread, source_doctype, source_name)
 	frappe.delete_doc("File", file_name, ignore_permissions=True)
@@ -306,7 +306,7 @@ def _existing_document(message_id, sha256, own_company):
 	return frappe.db.get_value(DOCUMENT, filters)
 
 
-def _create(original, own_company):
+def _create(original, own_company, check_permission=False):
 	doc = frappe.get_doc(
 		{
 			"doctype": DOCUMENT,
@@ -328,6 +328,8 @@ def _create(original, own_company):
 			"mail_references": original.mail_references,
 		}
 	)
+	if check_permission:
+		frappe.has_permission(DOCUMENT, "create", doc=doc, throw=True)
 	doc.flags.archive_write = True
 	doc.insert(ignore_permissions=True)
 	doc.file = _attach(original, doc.name)

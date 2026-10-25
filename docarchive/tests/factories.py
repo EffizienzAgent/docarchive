@@ -233,3 +233,9 @@ def eml(**headers):
 
 
 EML = eml()
+
+
+def restrict_to_own_company(user, own_company):
+	frappe.get_doc(
+		{"doctype": "User Permission", "user": user, "allow": "Own Company", "for_value": own_company}
+	).insert(ignore_permissions=True)

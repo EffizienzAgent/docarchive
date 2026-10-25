@@ -5,6 +5,7 @@ from frappe.utils import now_datetime
 from docarchive import content, mail, run
 from docarchive.document_types import CORRESPONDENCE, INTERNAL_CORRESPONDENCE
 from docarchive.mail import archiving
+from docarchive.permissions import MANAGER_ROLE
 from docarchive.tests.factories import (
 	EML,
 	eml,
@@ -15,6 +16,8 @@ from docarchive.tests.factories import (
 	make_outsider,
 	make_own_company,
 	make_settings,
+	make_user,
+	restrict_to_own_company,
 	unique,
 )
 
@@ -354,6 +357,19 @@ class TestDeskApi(MailArchivingTestCase):
 		self.addCleanup(frappe.set_user, "Administrator")
 		with self.assertRaises(frappe.PermissionError):
 			archiving.archive_communications([comm.name])
+
+	def test_archive_communications_respects_own_company_permission(self):
+		comm = self.communication()
+		self.capture(comm=comm)
+		user = make_user(address("restricted"), [MANAGER_ROLE, "System Manager"])
+		restrict_to_own_company(user, make_own_company("acme-ltd").name)
+		frappe.set_user(user)
+		self.addCleanup(frappe.set_user, "Administrator")
+		result = archiving.archive_communications([comm.name])
+		self.assertIn(comm.name, result["refused"])
+		self.assertEqual(result["archived"], {})
+		frappe.set_user("Administrator")
+		self.assertFalse(frappe.db.exists(DOCUMENT, {"source_name": comm.name}))
 
 
 class TestDiscard(MailArchivingTestCase):
