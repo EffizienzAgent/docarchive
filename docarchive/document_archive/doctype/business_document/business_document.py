@@ -152,8 +152,13 @@ class BusinessDocument(Document):
 		if self.flags.archive_write:
 			return
 		self.reset_fields(PROTECTED_FIELDS, before)
-		if self.source_doctype == "Communication":
+		if self.is_mail():
 			self.reset_fields(CORRESPONDENCE_FIELDS, before)
+
+	def is_mail(self):
+		return bool(
+			self.source_system == "email" or self.source_doctype == "Communication" or self.mail_message_id
+		)
 
 	def reset_fields(self, fields, before):
 		for field in fields:

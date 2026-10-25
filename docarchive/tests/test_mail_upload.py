@@ -5,10 +5,12 @@ from docarchive.mail import archiving
 from docarchive.tests.factories import (
 	PDF,
 	eml,
+	make_business_document,
 	make_file,
 	make_manager,
 	make_outsider,
 	make_own_company,
+	make_party,
 	make_settings,
 	unique,
 )
@@ -115,3 +117,46 @@ class TestArchiveUpload(IntegrationTestCase):
 		frappe.set_user(make_outsider("outsider-b@example.test"))
 		self.addCleanup(frappe.set_user, "Administrator")
 		self.assertRaises(frappe.PermissionError, archiving.archive_upload, file.file_url, "Incoming")
+
+	def test_user_cannot_edit_direction_of_manual_upload(self):
+		name = archiving.archive_upload(upload(self.raw).file_url, "Incoming")
+		doc = frappe.get_doc(DOCUMENT, name)
+		doc.correspondence_direction = "Outgoing"
+		doc.correspondence_channel = "Fax"
+		doc.save(ignore_permissions=True)
+		doc.reload()
+		self.assertEqual((doc.correspondence_direction, doc.correspondence_channel), ("Incoming", "E-mail"))
+
+	def test_letter_stays_editable(self):
+		doc = make_business_document(correspondence_channel="Letter", correspondence_direction="Incoming")
+		doc.correspondence_direction = "Outgoing"
+		doc.save(ignore_permissions=True)
+		doc.reload()
+		self.assertEqual(doc.correspondence_direction, "Outgoing")
+
+	def test_discard_removes_unstarted_manual_upload(self):
+		name = archiving.archive_upload(upload(self.raw).file_url, "Incoming")
+		result = archiving.discard([name])
+		self.assertEqual(result["discarded"], [name])
+		self.assertFalse(frappe.db.exists(DOCUMENT, name))
+
+	def test_gap_upload_takes_company_and_counterparty_from_thread(self):
+		other = make_own_company().name
+		party = make_party()
+		child = eml(**{"In-Reply-To": f"<{self.message_id}>"})
+		parent = archiving.archive_upload(upload(child).file_url, "Outgoing", own_company=other)
+		frappe.db.set_value(
+			DOCUMENT, parent, {"counterparty_type": party.doctype, "counterparty": party.name}
+		)
+		name = archiving.archive_upload(upload(self.raw).file_url, "Incoming", gap_message_id=self.message_id)
+		doc = frappe.get_doc(DOCUMENT, name)
+		self.assertEqual((doc.own_company, doc.counterparty), (other, party.name))
+
+	def test_gap_upload_without_thread_uses_default_company(self):
+		name = archiving.archive_upload(upload(self.raw).file_url, "Incoming", gap_message_id=self.message_id)
+		doc = frappe.get_doc(DOCUMENT, name)
+		self.assertEqual((doc.own_company, doc.counterparty), (self.company, None))
+
+	def test_upload_refuses_non_mail(self):
+		file = upload(PDF, "mail.eml")
+		self.assertRaises(frappe.ValidationError, archiving.archive_upload, file.file_url, "Incoming")

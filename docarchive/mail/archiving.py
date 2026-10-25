@@ -156,15 +156,19 @@ def archive_upload(
 	if raw is None:
 		frappe.throw(_("File {0} does not exist.").format(file_url))
 	parsed = headers.parse(raw)
+	if not (parsed.sender or parsed.message_id or parsed.date_header):
+		frappe.throw(_("This file is not an e-mail."))
 	if gap_message_id and parsed.message_id != gap_message_id:
 		frappe.throw(
 			_("This e-mail is not the missing one: its Message-ID is {0}.").format(parsed.message_id or "-")
 		)
-	company = settings.own_company_for(originals.mail_time(parsed), own_company)
+	thread = _gap_thread(gap_message_id) if gap_message_id and not own_company else frappe._dict()
+	company = settings.own_company_for(originals.mail_time(parsed), own_company or thread.own_company)
 	name = _existing_document(parsed.message_id, content.sha256(raw), company)
 	if not name:
 		original = originals.create_upload(raw, parsed, direction)
 		name = archive(original, company)
+		_set_counterparty(name, thread)
 	frappe.delete_doc("File", file_name, ignore_permissions=True)
 	return name
 
@@ -190,12 +194,36 @@ def _names(names) -> list[str]:
 
 
 def _discard_refusal(name):
-	source, started = frappe.db.get_value(DOCUMENT, name, ["source_doctype", "archive_started_at"])
+	source, system, started = frappe.db.get_value(
+		DOCUMENT, name, ["source_doctype", "source_system", "archive_started_at"]
+	)
 	if started:
 		return _("Archived documents cannot be discarded.")
-	if source != COMMUNICATION:
+	if source != COMMUNICATION and system != "email":
 		return _("Only e-mail documents can be discarded.")
 	return None
+
+
+def _gap_thread(message_id):
+	rows = frappe.get_list(
+		DOCUMENT,
+		or_filters=[["mail_references", "like", f"%{message_id}%"], ["mail_in_reply_to", "=", message_id]],
+		fields=["own_company", "counterparty_type", "counterparty", "mail_references", "mail_in_reply_to"],
+		order_by="correspondence_at asc",
+		limit_page_length=50,
+	)
+	for row in rows:
+		if message_id == row.mail_in_reply_to or message_id in (row.mail_references or "").split():
+			return row
+	return frappe._dict()
+
+
+def _set_counterparty(name, thread):
+	if not thread.counterparty:
+		return
+	doc = frappe.get_doc(DOCUMENT, name)
+	doc.counterparty_type, doc.counterparty = thread.counterparty_type, thread.counterparty
+	doc.save(ignore_permissions=True)
 
 
 def _upload_name(file_url):

@@ -181,20 +181,20 @@
    "fieldtype": "Select",
    "label": "Channel",
    "options": "\nE-mail\nLetter\nFax\nOther",
-   "read_only_depends_on": "eval:doc.archive_started_at || doc.source_doctype==\"Communication\""
+   "read_only_depends_on": "eval:doc.archive_started_at || doc.source_system==\"email\" || doc.mail_message_id"
   },
   {
    "fieldname": "correspondence_direction",
    "fieldtype": "Select",
    "label": "Direction",
    "options": "\nIncoming\nOutgoing",
-   "read_only_depends_on": "eval:doc.archive_started_at || doc.source_doctype==\"Communication\""
+   "read_only_depends_on": "eval:doc.archive_started_at || doc.source_system==\"email\" || doc.mail_message_id"
   },
   {
    "fieldname": "correspondence_at",
    "fieldtype": "Datetime",
    "label": "Correspondence Time",
-   "read_only_depends_on": "eval:doc.archive_started_at || doc.source_doctype==\"Communication\""
+   "read_only_depends_on": "eval:doc.archive_started_at || doc.source_system==\"email\" || doc.mail_message_id"
   },
   {
    "fieldname": "column_break_correspondence",
