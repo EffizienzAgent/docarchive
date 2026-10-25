@@ -332,7 +332,7 @@ const UPLOAD_COLUMNS = [
 		reqd: 1,
 		columns: 2,
 	},
-	{ fieldname: "document_date", fieldtype: "Date", label: "Document Date", reqd: 1, columns: 2 },
+	{ fieldname: "document_date", fieldtype: "Date", label: "Document Date", columns: 2 },
 ];
 
 function ask_details(party, files, on_saved) {

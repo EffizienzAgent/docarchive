@@ -64,4 +64,21 @@ def sync_mode(context, target):
 		sys.exit(1)
 
 
-commands = [run_archive, smoke, sync_mode]
+@click.command("docarchive-extract")
+@click.option("--dry-run", is_flag=True, help="Only list what would be filled")
+@pass_context
+def extract(context, dry_run=False):
+	"""Read e-invoice data of documents whose archiving has not started. Fills only empty fields."""
+	frappe = connect(context)
+	from docarchive import einvoice
+
+	try:
+		result = einvoice.backfill(dry_run=dry_run)
+	finally:
+		frappe.destroy()
+	click.echo(json.dumps(result, indent=1, default=str))
+	if result["errors"]:
+		sys.exit(1)
+
+
+commands = [run_archive, smoke, sync_mode, extract]

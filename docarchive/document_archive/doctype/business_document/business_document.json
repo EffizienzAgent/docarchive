@@ -30,6 +30,11 @@
   "hold_on_archive",
   "attachments_section",
   "attachments",
+  "einvoice_section",
+  "einvoice_html",
+  "einvoice_data",
+  "einvoice_needs_review",
+  "einvoice_checked",
   "source_section",
   "source_system",
   "source_account",
@@ -109,9 +114,9 @@
    "fieldname": "document_date",
    "fieldtype": "Date",
    "label": "Document Date",
-   "reqd": 1,
    "in_list_view": 1,
-   "read_only_depends_on": "eval:doc.archive_started_at"
+   "read_only_depends_on": "eval:doc.archive_started_at",
+   "description": "Empty: taken from an e-invoice or the file name when possible. Needed before archiving."
   },
   {
    "fieldname": "document_number",
@@ -174,6 +179,41 @@
    "options": "Business Document Attachment",
    "read_only_depends_on": "eval:doc.archive_started_at",
    "description": "Further files of this document, e.g. annexes or the XML of an e-invoice. The main file above is used for the preview and the title."
+  },
+  {
+   "fieldname": "einvoice_section",
+   "fieldtype": "Section Break",
+   "label": "E-Invoice",
+   "collapsible": 1,
+   "depends_on": "eval:doc.einvoice_data"
+  },
+  {
+   "fieldname": "einvoice_html",
+   "fieldtype": "HTML",
+   "label": "E-Invoice"
+  },
+  {
+   "fieldname": "einvoice_data",
+   "fieldtype": "Code",
+   "label": "E-Invoice Data",
+   "options": "JSON",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "einvoice_needs_review",
+   "fieldtype": "Check",
+   "label": "E-Invoice Needs Confirmation",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Own company or type were taken from the e-invoice. Check both and save to confirm."
+  },
+  {
+   "fieldname": "einvoice_checked",
+   "fieldtype": "Check",
+   "label": "E-Invoice Checked",
+   "read_only": 1,
+   "hidden": 1
   },
   {
    "fieldname": "source_section",

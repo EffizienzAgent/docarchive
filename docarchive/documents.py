@@ -1,5 +1,4 @@
 import frappe
-from frappe.utils import today
 
 from docarchive import extension, settings, storage_targets
 from docarchive.document_archive.doctype.business_document.business_document import missing_fields
@@ -23,6 +22,8 @@ PANEL_FIELDS = [
 	"retain_until",
 	"counterparty",
 	"contract_end_date",
+	"own_company",
+	"einvoice_needs_review",
 ]
 
 
@@ -102,7 +103,7 @@ def upload_defaults() -> dict:
 		limit=1,
 	)
 	fallback = frappe.db.get_single_value("Archive Settings", "default_upload_type")
-	return {"document_type": last[0] if last else fallback, "document_date": today()}
+	return {"document_type": last[0] if last else fallback}
 
 
 def upload_rows(file_urls, document_type, document_date, documents):
