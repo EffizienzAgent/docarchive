@@ -78,3 +78,10 @@ class TestDocumentsToAssign(IntegrationTestCase):
 		self.assertEqual(self.found()[doc.name].missing, ["Channel", "Direction"])
 		doc.db_set({"correspondence_channel": "Fax", "correspondence_direction": "Incoming"})
 		self.assertNotIn(doc.name, self.found())
+
+	def test_correspondence_lists_only_what_is_missing(self):
+		kind = make_document_type(is_correspondence=1).name
+		doc = make_business_document(
+			document_type=kind, correspondence_channel="Fax", correspondence_direction="Incoming"
+		)
+		self.assertEqual(self.found()[doc.name].missing, ["Counterparty"])

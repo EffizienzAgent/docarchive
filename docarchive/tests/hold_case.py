@@ -12,6 +12,7 @@ from docarchive.tests.factories import (
 	make_mail_settings,
 	make_settings,
 	party_fields,
+	store_mail_inline,
 )
 from docarchive.tests.fake_s3 import AdminClient, LockedFakeS3
 from docarchive.tests.test_run import DOCUMENT, ArchiveRunTestCase
@@ -45,6 +46,7 @@ class HoldTestCase(ArchiveRunTestCase):
 		return frappe.get_doc(DOCUMENT, doc.name)
 
 	def archived_mail(self, raw):
+		store_mail_inline(self)
 		if not getattr(self, "mail_account", None):
 			self.mail_account = make_email_account().name
 		make_mail_settings(self.mail_account, mode="Manual")

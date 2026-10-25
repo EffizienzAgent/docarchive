@@ -1,5 +1,6 @@
 import uuid
 from email.message import EmailMessage
+from unittest.mock import patch
 
 import frappe
 from frappe.utils.response import build_response
@@ -149,6 +150,28 @@ class TestViewer(MailArchivingTestCase):
 		self.assertIn("url(data:image/png;base64,", r["html"])
 		self.assertNotIn("cid:", r["html"])
 		self.assertFalse(r["remote_images"])
+
+	def test_large_cid_images_are_not_inlined(self):
+		html = "".join(f'<img src="cid:{cid}@x">' for cid in ("big", "a", "b", "c"))
+		msg = mime(text="plain", html=html)
+		related = msg.get_payload()[1]
+		related.add_related(PNG * 3, "image", "png", cid="<big@x>")
+		for cid in ("a", "b", "c"):
+			related.add_related(PNG, "image", "png", cid=f"<{cid}@x>")
+		name = self.archived(msg)
+		with patch.multiple(viewer, MAX_IMAGE_BYTES=len(PNG) * 2, MAX_IMAGES_BYTES=len(PNG) * 2):
+			r = viewer.render(name)
+		self.assertEqual(r["html"].count("data:image/png;base64,"), 2)
+		self.assertEqual(r["html"].count(viewer.IMAGE_PLACEHOLDER), 2)
+		self.assertNotIn("cid:", r["html"])
+
+	def test_attachment_size_without_decoding(self):
+		msg = mime(text="see attached")
+		msg.add_attachment(b"\x00" * 1000, maintype="application", subtype="octet-stream", filename="a.bin")
+		msg.add_attachment(b"x" * 1001, maintype="application", subtype="octet-stream", filename="b.bin")
+		msg.add_attachment(b"y" * 1002, maintype="application", subtype="octet-stream", filename="c.bin")
+		r = viewer.render(self.archived(msg))
+		self.assertEqual([a["size"] for a in r["attachments"]], [1000, 1001, 1002])
 
 	def test_attachments_listed_and_downloadable(self):
 		msg = mime(text="see attached")
@@ -324,6 +347,16 @@ class TestThread(MailArchivingTestCase):
 		self.addCleanup(frappe.set_user, "Administrator")
 		items = thread.thread(c_doc)
 		self.assertEqual((items[0]["state"], items[0]["communication"]), ("unknown", None))
+
+	def test_no_original_gap_needs_readable_communication(self):
+		b_id = message_id()
+		self.communication(message_id=b_id)
+		_, c = self.mail("2026-03-12 09:00:00", mime(text="c", References=references(b_id)))
+		c_doc = archiving.archive(c)
+		self.assertEqual(thread.thread(c_doc)[0]["state"], "no_original")
+		frappe.set_user(make_manager(address("manager")))
+		self.addCleanup(frappe.set_user, "Administrator")
+		self.assertEqual(thread.thread(c_doc)[0]["state"], "unknown")
 
 	def test_gap_archived_under_other_thread(self):
 		a_id = message_id()

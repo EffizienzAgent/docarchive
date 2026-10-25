@@ -1,12 +1,15 @@
+import os
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import frappe
 from frappe.email.doctype.email_account.email_account import EmailAccount
 from frappe.email.receive import InboundMail, SentEmailInInboxError
 from frappe.tests import IntegrationTestCase
+from frappe.utils import add_to_date, get_datetime, now_datetime
 
 from docarchive import content
-from docarchive.mail import originals
+from docarchive.mail import archiving, originals
 from docarchive.tests.factories import (
 	eml,
 	make_business_document,
@@ -15,12 +18,14 @@ from docarchive.tests.factories import (
 	make_mail_settings,
 	make_own_company,
 	make_settings,
+	store_mail_inline,
 	unique,
 )
 
 
 class TestMailHooks(IntegrationTestCase):
 	def setUp(self):
+		store_mail_inline(self)
 		make_settings(default_own_company=make_own_company().name)
 		self.email_id = f"{unique('info')}@acme.test"
 		self.account = make_email_account(
@@ -68,11 +73,20 @@ class TestMailHooks(IntegrationTestCase):
 		with self.assertRaises(SentEmailInInboxError):
 			self.receive(raw).process()
 
+	def pending(self, comm):
+		return frappe.db.get_value("Mail Original", {"communication": comm.name}, ["status", "file"])
+
 	def test_receive_succeeds_when_capture_fails(self):
-		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
+		with patch("docarchive.mail.originals._pend", side_effect=Exception("boom")):
 			comm = self.receive().process()
 		self.assertEqual(comm.name, self.received())
 		self.assertFalse(frappe.db.exists("Mail Original", {"communication": comm.name}))
+
+	def test_receive_succeeds_when_storing_fails(self):
+		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
+			comm = self.receive().process()
+		self.assertEqual(comm.name, self.received())
+		self.assertEqual(self.pending(comm), ("Pending", None))
 
 	def test_receive_logs_and_continues_when_capture_raises(self):
 		with (
@@ -121,6 +135,7 @@ class TestMailHooks(IntegrationTestCase):
 		self.send(comm)
 		handlers = frappe.get_hooks("mailsync_mail_read")
 		self.assertTrue(handlers)
+		self.commit.reset_mock()
 		for method in handlers:
 			frappe.get_attr(method)(
 				communication=comm,
@@ -129,6 +144,7 @@ class TestMailHooks(IntegrationTestCase):
 				folder="Sent",
 				sent_or_received="Sent",
 			)
+		self.commit.assert_not_called()
 		original = frappe.get_doc("Mail Original", {"communication": comm.name})
 		self.assertEqual((original.origin, original.direction), ("mailsync", "Outgoing"))
 		originals.from_mailsync(comm.name, self.raw)
@@ -143,7 +159,7 @@ class TestMailHooks(IntegrationTestCase):
 		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
 			self.send(comm)
 		self.assertTrue(frappe.flags.sent_mail)
-		self.assertFalse(frappe.db.exists("Mail Original", {"communication": comm.name}))
+		self.assertEqual(self.pending(comm), ("Pending", None))
 
 	def test_redacted_mail_not_captured(self):
 		comm = make_communication(self.account.name, "Sent")
@@ -198,11 +214,83 @@ class TestMailHooks(IntegrationTestCase):
 		self.assertFalse(frappe.db.exists("Mail Original", {"communication": comm.name}))
 
 	def test_capture_sent_never_raises(self):
-		with patch("docarchive.mail.originals.SendMailContext", side_effect=Exception("boom")):
-			comm = make_communication(self.account.name, "Sent")
+		comm = make_communication(self.account.name, "Sent")
+		with patch("docarchive.mail.originals._pend", side_effect=Exception("boom")):
 			self.send(comm)
 		self.assertTrue(frappe.flags.sent_mail)
 		self.assertFalse(frappe.db.exists("Mail Original", {"communication": comm.name}))
+
+	def test_failing_rebuild_keeps_pending_capture(self):
+		comm = make_communication(self.account.name, "Sent")
+		with patch("docarchive.mail.originals.SendMailContext", side_effect=Exception("boom")):
+			self.send(comm)
+		self.assertTrue(frappe.flags.sent_mail)
+		self.assertEqual(self.pending(comm), ("Pending", None))
+
+	def queued_send(self, comm):
+		scheduled = []
+		with patch("docarchive.mail.originals.schedule", side_effect=scheduled.append):
+			self.send(comm)
+		[name] = scheduled
+		self.addCleanup(originals.remove_spool, name)
+		return name
+
+	def stored(self, name):
+		originals.store(name)
+		return frappe.get_doc("Mail Original", name)
+
+	def test_rebuild_records_time_in_original_and_meta(self):
+		before = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+		original = self.stored(self.queued_send(make_communication(self.account.name, "Sent")))
+		self.assertEqual(original.status, "Stored")
+		self.assertGreaterEqual(get_datetime(original.rebuilt_at), before)
+		self.assertLess(get_datetime(original.rebuilt_at), before + timedelta(minutes=5))
+		document = frappe.get_doc("Business Document", archiving.archive(original.name))
+		self.assertEqual(
+			archiving.mail_meta(document)["rebuilt_at"],
+			get_datetime(original.rebuilt_at).isoformat() + "Z",
+		)
+
+	def test_rebuild_window_passed(self):
+		name = self.queued_send(make_communication(self.account.name, "Sent"))
+		queue = frappe.db.get_value("Mail Original", name, "email_queue")
+		frappe.db.set_value(
+			"Email Queue Recipient",
+			{"parent": queue},
+			"modified",
+			add_to_date(now_datetime(), hours=-2),
+			update_modified=False,
+		)
+		original = self.stored(name)
+		self.assertEqual((original.status, original.error), ("Failed", "rebuild window passed"))
+		self.assertFalse(original.file)
+
+	def test_revived_send_original_takes_the_new_origin(self):
+		comm = make_communication(self.account.name, "Sent")
+		name = self.queued_send(comm)
+		frappe.db.set_value(
+			"Mail Original",
+			name,
+			{"status": "Failed", "error": "rebuild window passed", "rebuilt_at": now_datetime()},
+		)
+		with patch("docarchive.mail.originals.schedule"):
+			originals.from_mailsync(comm, self.raw)
+		original = self.stored(name)
+		self.assertEqual((original.status, original.origin), ("Stored", "mailsync"))
+		self.assertFalse(original.email_queue or original.rebuilt_at)
+		document = frappe.get_doc("Business Document", archiving.archive(name))
+		meta = archiving.mail_meta(document)
+		self.assertEqual(meta["origin"], "mailsync")
+		self.assertNotIn("note", meta)
+		self.assertNotIn("rebuilt_at", meta)
+
+	def test_queue_not_capturable_at_job_time_fails(self):
+		name = self.queued_send(make_communication(self.account.name, "Sent"))
+		queue = frappe.db.get_value("Mail Original", name, "email_queue")
+		frappe.db.set_value("Email Queue", queue, "redact_message_after_send", 1)
+		original = self.stored(name)
+		self.assertEqual((original.status, original.attempts), ("Failed", 1))
+		self.assertFalse(original.file)
 
 	def capture(self):
 		comm = make_communication(self.account.name)
@@ -226,3 +314,50 @@ class TestMailHooks(IntegrationTestCase):
 		original = frappe.db.get_value("Mail Original", name, ["business_document", "file"], as_dict=True)
 		self.assertEqual((original.business_document, original.file), (document.name, file_url))
 		self.assertTrue(frappe.db.exists("File", {"file_url": file_url}))
+
+
+class TestMailEndToEnd(IntegrationTestCase):
+	def setUp(self):
+		make_settings(default_own_company=make_own_company().name)
+		self.email_id = f"{unique('info')}@acme.test"
+		self.account = make_email_account(self.email_id)
+		make_mail_settings(self.account.name, mode="Automatic")
+		self.message_id = f"{unique('mid')}@example.test"
+		self.raw = eml(To=self.email_id, **{"Message-ID": f"<{self.message_id}>"})
+		frappe.db.after_commit.reset()
+
+	def receive(self):
+		account = frappe.get_doc("Email Account", self.account.name)
+		with patch.object(
+			EmailAccount, "get_inbound_mails", return_value=[InboundMail(self.raw, account, uid="1")]
+		):
+			return account.get_inbound_mails()[0].process()
+
+	def test_receive_stores_in_job_after_commit(self):
+		def run_now(method, queue, job_id, deduplicate, **kwargs):
+			self.assertEqual((queue, deduplicate), ("long", True))
+			frappe.get_attr(method)(**kwargs)
+
+		comm = self.receive()
+		name = frappe.db.get_value("Mail Original", {"communication": comm.name})
+		self.addCleanup(originals.remove_spool, name)
+		self.assertEqual(frappe.db.get_value("Mail Original", name, "status"), "Pending")
+		with patch("frappe.enqueue", side_effect=run_now) as enqueue:
+			frappe.db.after_commit.run()
+			frappe.db.after_commit.run()
+		enqueue.assert_called_once()
+		original = frappe.get_doc("Mail Original", name)
+		self.assertEqual(original.status, "Stored")
+		self.assertEqual(content.read_bytes(original.file), self.raw)
+		self.assertTrue(original.business_document)
+		self.assertFalse(os.path.exists(originals.spool_path(name)))
+
+	def test_failing_spool_write_does_not_stop_receiving(self):
+		with (
+			patch("docarchive.mail.originals.write_spool", side_effect=OSError("disk full")),
+			patch("frappe.log_error") as log_error,
+		):
+			comm = self.receive()
+		self.assertTrue(frappe.db.exists("Communication", comm.name))
+		self.assertFalse(frappe.db.exists("Mail Original", {"communication": comm.name}))
+		log_error.assert_called_with(title="docarchive mail capture")

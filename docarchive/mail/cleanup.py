@@ -1,7 +1,7 @@
 import frappe
 from frappe.utils import add_days, now_datetime
 
-from docarchive.mail import archiving
+from docarchive.mail import archiving, originals
 
 ORIGINAL = "Mail Original"
 DOCUMENT = "Business Document"
@@ -17,6 +17,11 @@ def run() -> dict:
 		cutoff = add_days(now_datetime(), -(keep.get(account) or DEFAULT_KEEP_DAYS))
 		result["originals"] += _remove(_old_originals(account, cutoff), _remove_original)
 		result["documents"] += _remove(_old_documents(account, cutoff), _remove_document)
+	for step in (originals.retry_pending, originals.sweep_spool):
+		try:
+			step()
+		except Exception:
+			frappe.log_error(title="docarchive mail cleanup")
 	return result
 
 
@@ -42,6 +47,7 @@ def _old_originals(email_account, cutoff):
 		ORIGINAL,
 		filters={
 			"email_account": email_account,
+			"status": "Stored",
 			"business_document": ("is", "not set"),
 			"creation": ("<", cutoff),
 		},

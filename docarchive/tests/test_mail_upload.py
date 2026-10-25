@@ -1,7 +1,9 @@
 import frappe
 from frappe.tests import IntegrationTestCase
+from frappe.utils import get_datetime, get_system_timezone
 
-from docarchive.mail import archiving
+from docarchive import run
+from docarchive.mail import archiving, thread
 from docarchive.tests.factories import (
 	PDF,
 	eml,
@@ -224,3 +226,19 @@ class TestArchiveUpload(IntegrationTestCase):
 			source_doctype="Contact",
 			source_name="x",
 		)
+
+	def test_times_follow_the_system_time_zone(self):
+		def set_zone(zone):
+			frappe.db.set_single_value("System Settings", "time_zone", zone)
+			frappe.clear_document_cache("System Settings", "System Settings")
+			frappe.local.system_settings = None
+
+		self.addCleanup(set_zone, frappe.db.get_single_value("System Settings", "time_zone"))
+		set_zone("Europe/Berlin")
+		self.assertEqual(get_system_timezone(), "Europe/Berlin")
+		raw = eml(Date="Tue, 02 Jun 2026 08:41:00 +0200")
+		doc = frappe.get_doc(DOCUMENT, archiving.archive_upload(upload(raw).file_url, "Incoming"))
+		self.assertEqual(str(doc.correspondence_at), "2026-06-02 08:41:00")
+		self.assertEqual(run.utc_iso(get_datetime(doc.correspondence_at)), "2026-06-02T06:41:00Z")
+		[item] = thread.thread(doc.name)
+		self.assertEqual(str(item["at"]), "2026-06-02 08:41:00")

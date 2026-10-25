@@ -87,6 +87,13 @@ def _gap_state(message_id):
 			and frappe.has_permission(COMMUNICATION, "read", original.communication)
 		):
 			return "captured", original.communication
-	if not originals and frappe.db.exists(COMMUNICATION, {"message_id": message_id}):
+	if not originals and _readable_communication(message_id):
 		return "no_original", None
 	return "unknown", None
+
+
+def _readable_communication(message_id):
+	return any(
+		frappe.has_permission(COMMUNICATION, "read", name)
+		for name in frappe.get_all(COMMUNICATION, filters={"message_id": message_id}, pluck="name")
+	)

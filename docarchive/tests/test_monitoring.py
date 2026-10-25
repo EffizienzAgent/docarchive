@@ -4,8 +4,15 @@ import frappe
 from frappe.utils import add_to_date, now_datetime
 
 from docarchive import archive_now, monitoring, notify, run, store
+from docarchive.document_archive.report.archive_completeness import archive_completeness
 from docarchive.permissions import ADMIN_ROLE
-from docarchive.tests.factories import fields_target, make_document_type, make_settings, make_user
+from docarchive.tests.factories import (
+	fields_target,
+	make_document_type,
+	make_settings,
+	make_user,
+	restrict_to_own_company,
+)
 from docarchive.tests.test_run import DOCUMENT, ArchiveRunTestCase
 
 ADMIN = "monitoring-admin@example.test"
@@ -225,3 +232,79 @@ class TestReport(MonitoringTestCase):
 		)
 		[row] = [row for row in monitoring.problems() if row["name"] == doc.name]
 		self.assertEqual((row["problem"], row["details"], row["since"]), (monitoring.FAILED, None, started))
+
+
+class TestMailOriginals(MonitoringTestCase):
+	def original(self, status, hours=0, **fields):
+		name = (
+			frappe.get_doc({"doctype": "Mail Original", "status": status, "subject": "Offer", **fields})
+			.insert(ignore_permissions=True)
+			.name
+		)
+		old = add_to_date(now_datetime(), hours=-hours)
+		frappe.db.set_value("Mail Original", name, "creation", old, update_modified=False)
+		return name
+
+	def test_failed_and_stuck_originals_are_problems(self):
+		failed = self.original("Failed", error="rebuild window passed")
+		stuck = self.original("Pending", hours=25)
+		fresh = self.original("Pending", hours=1)
+		stored = self.original("Stored", hours=25)
+		rows = [row for row in monitoring.problems() if row["problem"] == monitoring.MAIL_ORIGINAL]
+		details = " ".join(row["details"] for row in rows)
+		self.assertIn(failed, details)
+		self.assertIn("rebuild window passed", details)
+		self.assertIn(stuck, details)
+		self.assertNotIn(fresh, details)
+		self.assertNotIn(stored, details)
+		only = monitoring.problems({"problem": monitoring.MAIL_ORIGINAL})
+		self.assertEqual(len(only), len(rows))
+		self.assertFalse(
+			[
+				r
+				for r in monitoring.problems({"document_type": self.type.name})
+				if r["problem"] == "Mail Original"
+			]
+		)
+
+	def test_daily_alerts_once_even_while_archiving_is_off(self):
+		self.configure(["primary"], enabled=0)
+		failed = self.original("Failed")
+		monitoring.daily()
+		monitoring.daily()
+		[alert] = self.alerts("mail_originals_failed")
+		self.assertIn(failed, alert.email_content)
+
+	def test_mail_rows_link_to_the_original(self):
+		failed = self.original("Failed")
+		[row] = [r for r in monitoring.problems() if r.get("mail_original") == failed]
+		self.assertEqual(row["problem"], monitoring.MAIL_ORIGINAL)
+		columns = archive_completeness.columns()
+		self.assertIn(
+			{"fieldname": "mail_original", "fieldtype": "Link", "options": "Mail Original"},
+			[{k: c.get(k) for k in ("fieldname", "fieldtype", "options")} for c in columns],
+		)
+
+	def test_mail_rows_only_for_unrestricted_mail_readers(self):
+		self.original("Failed")
+		with self.set_user(ADMIN):
+			self.assertFalse([r for r in monitoring.problems() if r["problem"] == monitoring.MAIL_ORIGINAL])
+		manager = "monitoring-sm@example.test"
+		make_user(manager, ["System Manager", ADMIN_ROLE])
+		with self.set_user(manager):
+			self.assertTrue([r for r in monitoring.problems() if r["problem"] == monitoring.MAIL_ORIGINAL])
+		restrict_to_own_company(manager, self.company)
+		with self.set_user(manager):
+			before = monitoring.problem_count()
+			self.assertFalse([r for r in monitoring.problems() if r["problem"] == monitoring.MAIL_ORIGINAL])
+			self.assertEqual(monitoring.problem_count(), before)
+
+	def test_failing_mail_check_does_not_stop_the_daily_checks(self):
+		with (
+			patch("docarchive.monitoring.mail_originals", side_effect=Exception("boom")),
+			patch("docarchive.monitoring.check") as check,
+			patch("frappe.log_error") as log_error,
+		):
+			monitoring.daily()
+		check.assert_called_once()
+		log_error.assert_called_once()

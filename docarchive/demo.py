@@ -17,7 +17,7 @@ from frappe.utils import add_days, add_to_date, get_system_timezone, now_datetim
 
 from docarchive import archive_now, audit, export, extension, legal_hold, mail, run
 from docarchive.document_types import CORRESPONDENCE
-from docarchive.mail import archiving
+from docarchive.mail import archiving, originals
 from docarchive.permissions import ADMIN_ROLE, MANAGER_ROLE
 
 DOCUMENT = run.DOCUMENT
@@ -109,8 +109,8 @@ class Demo:
 		missing = {ADMIN_ROLE, MANAGER_ROLE} - {row.role for row in user.roles}
 		for role in sorted(missing):
 			user.append("roles", {"role": role})
-		if missing:
-			user.save(ignore_permissions=True)
+		user.time_zone = get_system_timezone()
+		user.save(ignore_permissions=True)
 
 	def own_company(self):
 		if not frappe.db.exists("Own Company", {"slug": COMPANY}):
@@ -338,6 +338,7 @@ class Demo:
 				frappe.throw(
 					"The demo mail could not be captured. See the Error Log (docarchive mail capture)."
 				)
+			originals.store(original)
 			name = archiving.archive(original)
 			doc = frappe.get_doc(DOCUMENT, name)
 			if not doc.counterparty:

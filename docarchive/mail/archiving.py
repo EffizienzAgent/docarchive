@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import getdate
+from frappe.utils import get_datetime, getdate
 
 from docarchive import content, counterparty, settings
 from docarchive.document_types import CORRESPONDENCE, INTERNAL_CORRESPONDENCE
@@ -20,6 +20,9 @@ def archive(original_name: str, own_company: str | None = None, check_permission
 	original = frappe.get_doc(ORIGINAL, original_name)
 	if original.business_document:
 		return original.business_document
+	reason = refusal(original_name)
+	if reason:
+		frappe.throw(reason)
 	row = accounts.account_row(original.email_account) or frappe._dict()
 	own_company = settings.own_company_for(original.mail_at, own_company or row.own_company)
 	name = _existing(original, own_company) or _create(original, own_company, check_permission)
@@ -28,7 +31,16 @@ def archive(original_name: str, own_company: str | None = None, check_permission
 
 
 def refusal(original_name: str | None) -> str | None:
-	return None if original_name else _("No original was captured for this e-mail.")
+	if not original_name:
+		return _("No original was captured for this e-mail.")
+	status, attempts = frappe.db.get_value(ORIGINAL, original_name, ["status", "attempts"])
+	if status == "Pending" and attempts:
+		return _("Storing the original of this e-mail failed. It will be retried automatically.")
+	if status == "Pending":
+		return _("The original of this e-mail is still being stored. Please try again in a moment.")
+	if status == "Failed":
+		return _("Storing the original of this e-mail failed. See the Error Log.")
+	return None
 
 
 def auto_archive(original_name: str) -> str | None:
@@ -72,6 +84,8 @@ def mail_meta(doc) -> dict | None:
 	}
 	if original.origin == "frappe-send":
 		meta["note"] = SEND_NOTE
+	if original.rebuilt_at:
+		meta["rebuilt_at"] = get_datetime(original.rebuilt_at).isoformat() + "Z"
 	return meta
 
 
@@ -91,6 +105,7 @@ def _meta_original(doc):
 			"email_account",
 			"origin",
 			"sha256",
+			"rebuilt_at",
 		],
 		order_by="creation asc, name asc",
 	)

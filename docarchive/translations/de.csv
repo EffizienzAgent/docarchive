@@ -621,6 +621,11 @@ This e-mail is archived.,Diese E-Mail ist archiviert.
 Another export is still running. Please wait until it is done.,"Ein anderer Export läuft noch. Bitte warten, bis er fertig ist."
 The export was interrupted.,Der Export wurde unterbrochen.
 "This file type is only offered as a download, so it cannot run in the viewer.","Dieser Dateityp wird nur zum Herunterladen angeboten, damit er im Viewer nicht ausgeführt werden kann."
+Stored,Gespeichert
+Attempts,Versuche
+Email Queue,E-Mail-Warteschlange
+The original of this e-mail is still being stored. Please try again in a moment.,Das Original dieser E-Mail wird noch gespeichert. Bitte gleich noch einmal versuchen.
+Storing the original of this e-mail failed. See the Error Log.,Das Original dieser E-Mail konnte nicht gespeichert werden. Siehe Fehlerprotokoll.
 All actions,Alle Aktionen
 Archive Audit Copy,Protokollkopie
 Archive Audit Document,Protokollierter Beleg
@@ -675,3 +680,6 @@ never,nie
 Extending the retention failed for {0} documents,Die Verlängerung der Aufbewahrung ist für {0} Dokumente fehlgeschlagen
 "Archiving is enabled, but no storage target is configured","Die Archivierung ist aktiviert, aber kein Speicherziel ist eingerichtet"
 Archive Admins are notified about documents that are ready but not archived after this many hours. Empty or 0: 48 hours.,"Archiv-Admins werden benachrichtigt, wenn bereite Dokumente nach so vielen Stunden noch nicht archiviert sind. Leer oder 0: 48 Stunden."
+Rebuilt At (UTC),Neu erstellt am (UTC)
+Storing the original of this e-mail failed. It will be retried automatically.,Das Original dieser E-Mail konnte nicht gespeichert werden. Es wird automatisch erneut versucht.
+{0} e-mail originals could not be stored,{0} E-Mail-Originale konnten nicht gespeichert werden

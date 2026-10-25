@@ -36,4 +36,11 @@ def columns() -> list[dict]:
 		{"fieldname": "document_number", "label": _("Document Number"), "fieldtype": "Data", "width": 160},
 		{"fieldname": "since", "label": _("Since"), "fieldtype": "Datetime", "width": 150},
 		{"fieldname": "details", "label": _("Details"), "fieldtype": "Data", "width": 260},
+		{
+			"fieldname": "mail_original",
+			"label": _("Mail Original"),
+			"fieldtype": "Link",
+			"options": "Mail Original",
+			"width": 130,
+		},
 	]

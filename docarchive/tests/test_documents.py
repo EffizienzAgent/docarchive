@@ -150,6 +150,18 @@ class TestCounterpartyDocuments(IntegrationTestCase):
 		self.assertIsNone(rows[ready.name]["archive_reason"])
 		self.assertIn("Document Number", rows[incomplete.name]["archive_reason"])
 
+	def test_panel_correspondence_is_complete(self):
+		make_settings(default_own_company=self.company, enabled=1, targets=[fields_target()])
+		mail_type = make_document_type(is_correspondence=1).name
+		doc = make_business_document(
+			document_type=mail_type,
+			correspondence_channel="E-mail",
+			correspondence_direction="Incoming",
+			**party_fields(self.party),
+		)
+		[row] = documents.counterparty_panel("Contact", self.party.name)["documents"]
+		self.assertEqual((row["name"], row["missing"], row["eligible"]), (doc.name, [], True))
+
 	def test_panel_lists_attachments(self):
 		files = [make_file(file_name="Rechnung.pdf"), make_file(file_name="Anlage.pdf")]
 		[name] = documents.create_documents(

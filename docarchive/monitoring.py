@@ -13,6 +13,8 @@ DEFAULT_OVERDUE_HOURS = 48
 RUN_MISSED_HOURS = 26
 SEEN_SECONDS = 26 * 3600
 OVERDUE, FAILED, MISSING_COPIES, NUMBER_GAP = "Overdue", "Failed", "Missing Copies", "Number Gap"
+MAIL_ORIGINAL = "Mail Original"
+MAIL_STUCK_HOURS = 24
 TRAILING_NUMBER = re.compile(r"^(.*?)(\d+)$")
 
 
@@ -100,8 +102,48 @@ def check(names=None):
 	frappe.db.commit()
 
 
+def mail_originals() -> list[dict]:
+	"""Failed originals and originals still pending after a day."""
+	stuck = add_to_date(now_datetime(), hours=-MAIL_STUCK_HOURS)
+	rows = frappe.get_all(
+		"Mail Original",
+		filters={"status": ("in", ("Failed", "Pending"))},
+		fields=["name", "status", "subject", "error", "creation"],
+		order_by="creation",
+	)
+	return [row for row in rows if row.status == "Failed" or get_datetime(row.creation) <= stuck]
+
+
+def can_see_mail_originals() -> bool:
+	"""Mail Originals have no own company, so users restricted to own companies do not see them."""
+	from frappe.permissions import get_user_permissions
+
+	return bool(frappe.has_permission("Mail Original", "read")) and not get_user_permissions(
+		frappe.session.user
+	).get("Own Company")
+
+
+def mail_problem(row) -> str:
+	return ": ".join(part for part in (row.name, _(row.status), first_line(row.error)) if part)
+
+
+def check_mail_originals():
+	rows = mail_originals()
+	if rows:
+		notify.admins(
+			_("{0} e-mail originals could not be stored").format(len(rows)),
+			notify.lines([mail_problem(row) for row in rows]),
+			alert_link("mail_originals_failed", MAIL_ORIGINAL),
+		)
+		frappe.db.commit()
+
+
 def daily():
 	"""Scheduled check that also notices a nightly run that did not finish."""
+	try:
+		check_mail_originals()
+	except Exception:
+		frappe.log_error(title="docarchive monitoring: mail originals")
 	if not settings.get().enabled:
 		return
 	last = frappe.db.get_single_value("Archive Settings", "last_run_finished_at")
@@ -181,6 +223,22 @@ def problems(filters=None) -> list[dict]:
 		for doc in docs:
 			problem, since, details = found[doc.name]
 			rows.append({**doc, "problem": problem, "since": since, "details": details})
+	if not (filters.document_type or filters.own_company) and can_see_mail_originals():
+		rows += [
+			{
+				"name": None,
+				"mail_original": row.name,
+				"title": row.subject,
+				"document_type": None,
+				"own_company": None,
+				"document_date": None,
+				"document_number": None,
+				"problem": MAIL_ORIGINAL,
+				"since": row.creation,
+				"details": mail_problem(row),
+			}
+			for row in mail_originals()
+		]
 	if filters.number_gaps:
 		rows += number_gaps(filters)
 	if filters.problem:

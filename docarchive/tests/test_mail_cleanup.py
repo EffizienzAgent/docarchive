@@ -39,6 +39,15 @@ class TestCleanup(MailArchivingTestCase):
 		self.assertEqual(cleanup.run(), {"originals": 0, "documents": 0})
 		self.assertTrue(frappe.db.exists(ORIGINAL, original))
 
+	def test_pending_and_failed_originals_are_never_removed(self):
+		pending, failed = self.original(), self.original()
+		frappe.db.set_value(ORIGINAL, pending, "status", "Pending")
+		frappe.db.set_value(ORIGINAL, failed, "status", "Failed")
+		with patch("docarchive.mail.originals.enqueue"):
+			self.assertEqual(cleanup.run(), {"originals": 0, "documents": 0})
+		self.assertTrue(frappe.db.exists(ORIGINAL, pending))
+		self.assertTrue(frappe.db.exists(ORIGINAL, failed))
+
 	def test_original_with_document_kept(self):
 		name, original = self.archived()
 		self.assign_party(name)

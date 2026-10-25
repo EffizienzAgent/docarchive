@@ -13,6 +13,11 @@
   "communication",
   "email_account",
   "origin",
+  "status",
+  "attempts",
+  "email_queue",
+  "error",
+  "rebuilt_at",
   "file",
   "sha256",
   "size",
@@ -50,6 +55,41 @@
    "fieldname": "origin",
    "fieldtype": "Data",
    "label": "Origin",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "read_only": 1,
+   "options": "Pending\nStored\nFailed",
+   "default": "Stored",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Attempts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "email_queue",
+   "fieldtype": "Data",
+   "label": "Email Queue",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rebuilt_at",
+   "fieldtype": "Datetime",
+   "label": "Rebuilt At (UTC)",
    "read_only": 1
   },
   {

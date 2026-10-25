@@ -4,7 +4,7 @@ frappe.query_reports["Archive Completeness"] = {
 			fieldname: "problem",
 			label: __("Problem"),
 			fieldtype: "Select",
-			options: ["", "Overdue", "Failed", "Missing Copies", "Number Gap"].map((value) => ({
+			options: ["", "Overdue", "Failed", "Missing Copies", "Number Gap", "Mail Original"].map((value) => ({
 				value,
 				label: value ? __(value) : "",
 			})),
