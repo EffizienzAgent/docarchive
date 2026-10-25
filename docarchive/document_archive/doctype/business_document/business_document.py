@@ -47,6 +47,8 @@ PROTECTED_FIELDS = (
 	"retention_history",
 	"extension_meta",
 	"einvoice_data",
+	"einvoice_needs_review",
+	"einvoice_checked",
 	"source_key",
 	"replaces",
 	*SOURCE_FIELDS,
@@ -122,6 +124,8 @@ def missing_fields(doc) -> list[str]:
 	checks = [
 		("File", not doc.file),
 		("Document Date", not doc.document_date),
+		("Own Company", not doc.own_company),
+		("Confirmation", doc.get("einvoice_needs_review")),
 		("Counterparty", rules.counterparty_required and not doc.counterparty),
 		("Document Number", rules.number_required and not doc.document_number),
 		("Contract End Date", rules.contract_end_required and not doc.contract_end_date),
@@ -145,6 +149,7 @@ class BusinessDocument(Document):
 		else:
 			self.validate_file(before)
 			self.validate_attachments(before)
+			einvoice.confirm(self, before)
 			einvoice.update(self, before, self.einvoice_files())
 			if self.file and not self.document_date:
 				self.document_date = file_names.date_from_file_name(file_name_of(self))[0]
@@ -204,6 +209,8 @@ class BusinessDocument(Document):
 			frappe.throw(_("Attachments cannot be changed once archiving has started."))
 
 	def resolve_own_company(self):
+		if not (self.own_company or self.document_date):
+			return
 		self.own_company = settings.own_company_for(self.document_date, self.own_company)
 		if not self.own_company:
 			frappe.throw(

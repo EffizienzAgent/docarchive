@@ -238,7 +238,6 @@ Invoice,Rechnung
 Invoice Number,Rechnungsnummer
 Issue Date,Rechnungsdatum
 Net,Netto
-"One per line. Tax numbers work too. E-invoices whose seller has one of these IDs are outgoing, those whose buyer has one are incoming.","Eine pro Zeile. Steuernummern gehen auch. E-Rechnungen, deren Verkäufer eine dieser IDs hat, sind ausgehend, solche, deren Käufer eine hat, eingehend."
 Read From,Gelesen aus
 Seller,Verkäufer
 Store E-Invoice XML as Attachment,XML der E-Rechnung als Anlage speichern
@@ -324,3 +323,8 @@ Deleted documents cannot be extended.,Gelöschte Dokumente können nicht verlän
 These storage targets hold a copy but are not enabled: {0},"Diese Speicherziele haben eine Kopie, sind aber nicht aktiv: {0}"
 "Someone else changed this document in the meantime. It was reloaded, please check it again.","Jemand anderes hat dieses Dokument inzwischen geändert. Es wurde neu geladen, bitte noch einmal prüfen."
 Add attachment,Anlage hinzufügen
+Confirmation,Bestätigung
+E-Invoice Checked,E-Rechnung geprüft
+E-Invoice Needs Confirmation,E-Rechnung muss bestätigt werden
+Own company or type were taken from the e-invoice. Check both and save to confirm.,Eigene Firma oder Dokumentart stammen aus der E-Rechnung. Beides prüfen und speichern zum Bestätigen.
+"One per line. E-invoices whose seller has one of these VAT IDs are outgoing, those whose buyer has one are incoming. The result is a suggestion that a person confirms.","Eine pro Zeile. E-Rechnungen, deren Verkäufer eine dieser USt-IdNrn. hat, sind ausgehend, solche, deren Käufer eine hat, eingehend. Das Ergebnis ist ein Vorschlag, den eine Person bestätigt."

@@ -22,6 +22,7 @@ ALLOWED_ROLES = (INTEGRATION_ROLE, "System Manager")
 PARTY_HINTS = ("source_party_id", "source_party_name", "source_party_email")
 SAVEPOINT = "docarchive_upload"
 MAX_ATTACHMENTS = 20
+TRUSTED_FROM_EINVOICE = ("document_date", "document_number")
 
 
 class UploadError(frappe.ValidationError):
@@ -75,9 +76,12 @@ def upload_document(
 			*((a["file_name"], a["data"], f"attachment {n}") for n, a in enumerate(extra, 1)),
 		]
 	)
+	suggested = not doc_type
 	doc_type = doc_type or document_type_for(None, einvoice.expected(info).get("document_type"))
 	fill_from_einvoice(fields, info)
 	fields["document_type"] = doc_type.name
+	if suggested:
+		fields["einvoice_needs_review"] = 1
 	check_required(doc_type, fields, bool(einvoice.counterparty_of(info)))
 	sha = content.sha256(data)
 	source_key = clean(source_key)
@@ -189,7 +193,7 @@ def own_company_for(value):
 
 def fill_from_einvoice(fields, info):
 	for field, value in einvoice.expected(info).items():
-		if field in fields and not fields[field]:
+		if field in TRUSTED_FROM_EINVOICE and not fields[field]:
 			fields[field] = value
 	if not fields["document_date"]:
 		fail(_("{0} is missing.").format(_("Document Date")))

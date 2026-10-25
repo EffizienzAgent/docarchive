@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 from unittest.mock import patch
 
@@ -6,6 +7,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from docarchive import api, content, einvoice, einvoice_parser, run, store
+from docarchive.document_archive.doctype.business_document.business_document import missing_fields
 from docarchive.permissions import INTEGRATION_ROLE
 from docarchive.tests.einvoice_fixtures import BUYER, SELLER, cii, ubl, zugferd
 from docarchive.tests.factories import (
@@ -39,6 +41,16 @@ def hint_assign(doc):
 	if hint and not doc.counterparty:
 		doc.counterparty_type = "Contact"
 		doc.counterparty = frappe.db.get_value("Contact", {"first_name": hint["vat_id"] or hint["name"]})
+
+
+def bad_extractor(data, file_name):
+	return {
+		"number": "X" * 500,
+		"issue_date": "next tuesday",
+		"kind": "<script>",
+		"document_type": "contract",
+		"seller": "not a dict",
+	}
 
 
 def plugged_extractor(data, file_name):
@@ -144,6 +156,21 @@ class TestParser(IntegrationTestCase):
 			self.assertIsNone(einvoice_parser.extract(zugferd(cii())))
 		self.assertIsNotNone(einvoice_parser.extract(zugferd(cii())))
 
+	def test_at_most_five_embedded_candidates(self):
+		from pypdf import PdfWriter
+
+		writer = PdfWriter()
+		writer.add_blank_page(width=200, height=200)
+		for n in range(6):
+			writer.add_attachment(f"a{n}.xml", b"<note/>")
+		writer.add_attachment("factur-x.xml", cii())
+		out = io.BytesIO()
+		writer.write(out)
+		self.assertEqual(einvoice_parser.extract(out.getvalue())["embedded_file"], "factur-x.xml")
+		with patch.object(einvoice_parser, "from_xml", return_value=None) as parse:
+			einvoice_parser.extract(out.getvalue())
+		self.assertEqual(parse.call_count, einvoice_parser.MAX_CANDIDATES)
+
 
 class EInvoiceTestCase(IntegrationTestCase):
 	def setUp(self):
@@ -182,9 +209,54 @@ class TestPrefill(EInvoiceTestCase):
 		self.assertEqual((doc.document_type, doc.own_company), (self.incoming, self.own))
 		self.assertEqual(doc.title, f"Credit Note UBL-2026-7 {SELLER['name']}")
 
-	def test_tax_numbers_match_too(self):
+	def test_tax_numbers_do_not_decide(self):
 		frappe.db.set_value("Own Company", self.own, "vat_ids", "201 / 113 / 40209")
-		self.assertEqual(self.blank(xml_upload(cii()).file_url).document_type, self.outgoing)
+		doc = self.document(cii())
+		self.assertIsNone(json.loads(doc.einvoice_data)["direction"])
+		self.assertFalse(doc.einvoice_needs_review)
+
+	def test_own_ids_on_both_sides_fill_nothing(self):
+		frappe.db.set_value("Own Company", self.own, "vat_ids", f"{SELLER['vat']}\n{BUYER['vat']}")
+		doc = self.document(cii(), own_company=None)
+		self.assertEqual((doc.document_type, doc.own_company), (self.other_type, self.default_company))
+		self.assertFalse(doc.einvoice_needs_review)
+
+	def test_suggested_company_or_type_needs_confirmation(self):
+		doc = self.blank(xml_upload(cii()).file_url)
+		self.assertEqual(doc.einvoice_needs_review, 1)
+		self.assertIn("Confirmation", missing_fields(doc))
+		server = frappe.get_doc(DOCUMENT, doc.name)
+		server.title = "Server save"
+		server.save(ignore_permissions=True)
+		self.assertEqual(doc.reload().einvoice_needs_review, 1)
+		frappe.get_doc(DOCUMENT, doc.name).save()
+		self.assertEqual(doc.reload().einvoice_needs_review, 0)
+		self.assertNotIn("Confirmation", missing_fields(doc))
+
+	def test_no_own_company_from_the_date_fallback_without_a_date(self):
+		doc = make_business_document(document_type=self.other_type, document_date=None)
+		self.assertIsNone(doc.own_company)
+		self.assertIn("Own Company", missing_fields(doc))
+		doc.document_date = "2026-03-15"
+		doc.save(ignore_permissions=True)
+		self.assertEqual(doc.own_company, self.default_company)
+
+	def test_number_and_date_alone_need_no_confirmation(self):
+		doc = self.document(cii(), document_number=None, own_company=self.own)
+		self.assertEqual(doc.document_number, "RE-2026-0042")
+		self.assertFalse(doc.einvoice_needs_review)
+
+	def test_hook_output_is_validated(self):
+		with self.patch_hooks(
+			{"docarchive_einvoice_extractors": ["docarchive.tests.test_einvoice.bad_extractor"]}
+		):
+			doc = self.document(cii(), document_number=None, document_date=None, own_company=self.own)
+		data = json.loads(doc.einvoice_data)
+		self.assertEqual((data["issue_date"], data["kind"]), (None, "invoice"))
+		self.assertNotIn("document_type", data)
+		self.assertEqual(doc.document_type, self.other_type)
+		self.assertEqual(len(data["number"]), einvoice.MAX_TEXT)
+		self.assertIsNone(doc.document_date)
 
 	def test_unknown_parties_leave_type_and_company_alone(self):
 		frappe.db.set_value("Own Company", self.own, "vat_ids", "")
@@ -327,6 +399,18 @@ class TestEInvoiceUpload(EInvoiceTestCase):
 			(self.outgoing, "2026-03-10", self.own),
 		)
 		self.assertTrue(doc.document_number.startswith("ZF"))
+		self.assertEqual(doc.einvoice_needs_review, 1)
+		self.assertIn("Confirmation", result["missing"])
+
+	def test_api_type_and_company_are_trusted(self):
+		result = self.upload(
+			cii(number=unique("RE")),
+			document_type="outgoing-invoice",
+			own_company=self.own,
+		)
+		frappe.set_user("Administrator")
+		self.assertEqual(frappe.db.get_value(DOCUMENT, result["name"], "einvoice_needs_review"), 0)
+		self.assertNotIn("Confirmation", result["missing"])
 
 	def test_explicit_fields_win(self):
 		result = self.upload(
@@ -352,7 +436,9 @@ class TestBackfill(EInvoiceTestCase):
 
 	def old_document(self, data, **fields):
 		doc = self.document(data, **fields)
-		frappe.db.set_value(DOCUMENT, doc.name, {"einvoice_data": None, "document_number": None})
+		frappe.db.set_value(
+			DOCUMENT, doc.name, {"einvoice_data": None, "einvoice_checked": 0, "document_number": None}
+		)
 		return doc.name
 
 	def test_dry_run_lists_and_writes_nothing(self):
@@ -373,6 +459,19 @@ class TestBackfill(EInvoiceTestCase):
 		self.assertIn("document_date", {c["field"] for c in json.loads(doc.einvoice_data)["conflicts"]})
 		self.assertNotIn(started, [row["name"] for row in result["found"]])
 		self.assertIsNone(frappe.db.get_value(DOCUMENT, started, "einvoice_data"))
+
+	def test_documents_without_einvoice_are_marked_once(self):
+		plain = self.old_document(b"<note/>")
+		modified = frappe.db.get_value(DOCUMENT, plain, "modified")
+		einvoice.backfill(dry_run=True)
+		self.assertEqual(frappe.db.get_value(DOCUMENT, plain, "einvoice_checked"), 0)
+		einvoice.backfill()
+		self.assertEqual(
+			frappe.db.get_value(DOCUMENT, plain, ["einvoice_checked", "modified"]), (1, modified)
+		)
+		with patch("docarchive.einvoice.backfill_document") as again:
+			einvoice.backfill()
+		self.assertNotIn(plain, [call.args[0] for call in again.call_args_list])
 
 	def test_command_is_registered(self):
 		from docarchive.commands import commands

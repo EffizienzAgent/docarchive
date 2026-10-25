@@ -8,6 +8,7 @@ from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
 MAX_XML_BYTES = 10 * 1024 * 1024
+MAX_CANDIDATES = 5
 EMBEDDED_NAMES = ("factur-x.xml", "zugferd-invoice.xml", "xrechnung.xml")
 CREDIT_NOTE_CODES = {"81", "83", "261", "262", "296", "308", "381", "396", "420", "458", "532"}
 NS = {
@@ -42,9 +43,10 @@ def embedded_xml(data):
 		files = list(PdfReader(io.BytesIO(data)).attachment_list)
 	except PyPdfError, ValueError, KeyError, TypeError:
 		return
-	files.sort(key=lambda f: (f.name or "").lower() not in EMBEDDED_NAMES)
-	for file in files:
-		if not (file.name or "").lower().endswith(".xml") or (file.size or 0) > MAX_XML_BYTES:
+	files = [f for f in files if (f.name or "").lower().endswith(".xml")]
+	files.sort(key=lambda f: f.name.lower() not in EMBEDDED_NAMES)
+	for file in files[:MAX_CANDIDATES]:
+		if (file.size or 0) > MAX_XML_BYTES:
 			continue
 		try:
 			content = file.content

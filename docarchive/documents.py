@@ -14,6 +14,8 @@ PANEL_FIELDS = [
 	"retain_until",
 	"counterparty",
 	"contract_end_date",
+	"own_company",
+	"einvoice_needs_review",
 ]
 
 

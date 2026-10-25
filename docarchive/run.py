@@ -26,6 +26,8 @@ CANDIDATE_FIELDS = [
 	"name",
 	"document_type",
 	"document_date",
+	"own_company",
+	"einvoice_needs_review",
 	"file",
 	"counterparty",
 	"document_number",

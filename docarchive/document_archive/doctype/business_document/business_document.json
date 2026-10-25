@@ -32,6 +32,8 @@
   "einvoice_section",
   "einvoice_html",
   "einvoice_data",
+  "einvoice_needs_review",
+  "einvoice_checked",
   "source_section",
   "source_system",
   "source_account",
@@ -189,6 +191,21 @@
    "fieldtype": "Code",
    "label": "E-Invoice Data",
    "options": "JSON",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "einvoice_needs_review",
+   "fieldtype": "Check",
+   "label": "E-Invoice Needs Confirmation",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Own company or type were taken from the e-invoice. Check both and save to confirm."
+  },
+  {
+   "fieldname": "einvoice_checked",
+   "fieldtype": "Check",
+   "label": "E-Invoice Checked",
    "read_only": 1,
    "hidden": 1
   },

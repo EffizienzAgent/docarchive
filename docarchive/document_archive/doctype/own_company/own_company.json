@@ -40,7 +40,7 @@
    "fieldname": "vat_ids",
    "fieldtype": "Small Text",
    "label": "VAT IDs",
-   "description": "One per line. Tax numbers work too. E-invoices whose seller has one of these IDs are outgoing, those whose buyer has one are incoming."
+   "description": "One per line. E-invoices whose seller has one of these VAT IDs are outgoing, those whose buyer has one are incoming. The result is a suggestion that a person confirms."
   },
   {
    "fieldname": "disabled",

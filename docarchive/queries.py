@@ -9,6 +9,7 @@ FIELDS = [
 	"document_number",
 	"document_date",
 	"own_company",
+	"einvoice_needs_review",
 	"counterparty_type",
 	"counterparty",
 	"contract_end_date",
@@ -30,6 +31,8 @@ def incomplete_filters():
 	queries = [
 		[["file", "is", "not set"]],
 		[["document_date", "is", "not set"]],
+		[["own_company", "is", "not set"]],
+		[["einvoice_needs_review", "=", 1]],
 		[["archive_status", "=", "Failed"]],
 	]
 	for flag, conditions in REQUIREMENTS:
