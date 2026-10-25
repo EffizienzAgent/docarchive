@@ -368,3 +368,4 @@ Set Legal Hold When Archiving,Legal Hold beim Festschreiben setzen
 Every archived object gets a legal hold at upload. It can only be released with the admin key.,Jedes archivierte Objekt bekommt beim Hochladen einen Legal Hold. Er lässt sich nur mit dem Admin-Schlüssel aufheben.
 Set when archiving.,Beim Festschreiben gesetzt.
 {0} must be true or false.,{0} muss true oder false sein.
+Only under legal hold,Nur unter Legal Hold
