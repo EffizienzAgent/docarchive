@@ -2,12 +2,13 @@ import json
 import os
 import shutil
 import tempfile
+import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, getdate, now_datetime
+from frappe.utils import add_days, add_to_date, cint, getdate, now_datetime
 
 from docarchive import export_package, run, store
 from docarchive.legal_hold import is_admin, targets_by_name
@@ -21,6 +22,9 @@ FILTERS = ("own_company", "document_type", "date_from", "date_to", "counterparty
 WORKERS = 4
 ATTEMPTS = 3
 DEFAULT_PART_MB = 2048
+MAX_PART_MB = 4096
+STALE_HOURS = 7
+TEMP_PREFIX = "docarchive-export-"
 DEFAULT_EXPIRY_DAYS = 7
 META_SIZE = 64 * 1024
 
@@ -59,6 +63,8 @@ def clean_scope(scope) -> dict:
 def start_export(scope=None) -> str:
 	frappe.only_for(ADMIN_ROLE)
 	scope = clean_scope(scope)
+	if frappe.db.exists(EXPORT, {"status": ("in", (QUEUED, RUNNING))}):
+		frappe.throw(_("Another export is still running. Please wait until it is done."))
 	doc = frappe.get_doc(
 		{
 			"doctype": EXPORT,
@@ -91,8 +97,13 @@ def selected(export) -> list[str]:
 		filters["document_date"] = (">=", export.date_from)
 	elif export.date_to:
 		filters["document_date"] = ("<=", export.date_to)
-	return frappe.get_all(
-		DOCUMENT, filters=filters, pluck="name", order_by="document_date asc, name asc", limit_page_length=0
+	return frappe.get_list(
+		DOCUMENT,
+		filters=filters,
+		pluck="name",
+		order_by="document_date asc, name asc",
+		limit_page_length=0,
+		user=export.requested_by,
 	)
 
 
@@ -109,7 +120,7 @@ def planned_size(doc) -> int:
 
 def part_limit() -> int:
 	value = cint(frappe.db.get_single_value("Archive Settings", "export_part_size_mb")) or DEFAULT_PART_MB
-	return value * 1024 * 1024
+	return min(value, MAX_PART_MB) * 1024 * 1024
 
 
 def plan_parts(entries, limit) -> list[list]:
@@ -146,11 +157,11 @@ def run_export(name):
 			entries.append({"doc": doc_name, "size": planned_size(doc)})
 		parts = plan_parts(entries, part_limit())
 		export.db_set({"total_documents": len(entries), "skipped_documents": skipped})
-		workdir = tempfile.mkdtemp(prefix="docarchive-export-")
-		check_space(workdir, max((sum(e["size"] for e in part) for part in parts), default=0))
+		workdir = tempfile.mkdtemp(prefix=TEMP_PREFIX)
 		progress = Progress(export, len(entries))
 		mismatches, total_size = [], 0
 		for number, part in enumerate(parts, start=1):
+			check_space(workdir, sum(entry["size"] for entry in part))
 			result = build_part(export, target, part, number, len(parts), workdir, progress)
 			mismatches += result["mismatches"]
 			total_size += result["size"]
@@ -171,9 +182,7 @@ def run_export(name):
 	except Exception as e:
 		frappe.db.rollback()
 		frappe.log_error(title=f"docarchive: export {name}")
-		delete_files(name)
-		frappe.db.set_value(EXPORT, name, {"status": FAILED, "error": run.safe_error(e)})
-		frappe.db.commit()
+		fail(name, run.safe_error(e))
 	finally:
 		if workdir:
 			shutil.rmtree(workdir, ignore_errors=True)
@@ -182,9 +191,19 @@ def run_export(name):
 	return status
 
 
-def check_space(workdir, largest_part):
+def fail(name, error):
+	try:
+		delete_files(name)
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(title=f"docarchive: export {name}")
+	frappe.db.set_value(EXPORT, name, {"status": FAILED, "error": error})
+	frappe.db.commit()
+
+
+def check_space(workdir, part_size):
 	free = shutil.disk_usage(workdir).free
-	needed = int(largest_part * 1.1) + 64 * 1024 * 1024
+	needed = int(part_size * 1.1) + 64 * 1024 * 1024
 	if free < needed:
 		raise ExportError(
 			_("Not enough disk space for the export: {0} MB needed, {1} MB free.").format(
@@ -299,6 +318,7 @@ def store_file(export, path, file_name):
 
 
 def expire():
+	sweep()
 	names = frappe.get_all(
 		EXPORT, filters={"status": COMPLETED, "expires_at": ("<=", now_datetime())}, pluck="name"
 	)
@@ -310,6 +330,19 @@ def expire():
 		except Exception:
 			frappe.db.rollback()
 			frappe.log_error(title=f"docarchive: export {name}")
+
+
+def sweep():
+	stale = add_to_date(now_datetime(), hours=-STALE_HOURS)
+	for name in frappe.get_all(
+		EXPORT, filters={"status": ("in", (QUEUED, RUNNING)), "modified": ("<", stale)}, pluck="name"
+	):
+		fail(name, _("The export was interrupted."))
+	cutoff = time.time() - STALE_HOURS * 3600
+	root = tempfile.gettempdir()
+	for entry in os.scandir(root):
+		if entry.name.startswith(TEMP_PREFIX) and entry.is_dir() and entry.stat().st_mtime < cutoff:
+			shutil.rmtree(entry.path, ignore_errors=True)
 
 
 def delete_files(name):
