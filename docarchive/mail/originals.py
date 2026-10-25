@@ -121,7 +121,7 @@ def enqueue(name: str) -> None:
 	try:
 		frappe.enqueue(
 			JOB,
-			queue="long",
+			queue="default",
 			job_id=f"docarchive-mail-original-{name}",
 			deduplicate=True,
 			original=name,

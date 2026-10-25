@@ -217,14 +217,14 @@ class TestMailStoreJob(IntegrationTestCase):
 		after = set(os.listdir(folder)) if os.path.isdir(folder) else set()
 		self.assertEqual(after, before)
 
-	def test_schedule_enqueues_deduplicated_long_job_after_commit(self):
+	def test_schedule_enqueues_deduplicated_default_job_after_commit(self):
 		SCHEDULE("MO-1")
 		callback = frappe.db.after_commit._functions.pop()
 		with patch("frappe.enqueue") as enqueue:
 			callback()
 		enqueue.assert_called_once_with(
 			"docarchive.mail.originals.store",
-			queue="long",
+			queue="default",
 			job_id="docarchive-mail-original-MO-1",
 			deduplicate=True,
 			original="MO-1",

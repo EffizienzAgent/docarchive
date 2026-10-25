@@ -335,7 +335,7 @@ class TestMailEndToEnd(IntegrationTestCase):
 
 	def test_receive_stores_in_job_after_commit(self):
 		def run_now(method, queue, job_id, deduplicate, **kwargs):
-			self.assertEqual((queue, deduplicate), ("long", True))
+			self.assertEqual((queue, deduplicate), ("default", True))
 			frappe.get_attr(method)(**kwargs)
 
 		comm = self.receive()
