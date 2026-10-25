@@ -1,8 +1,21 @@
 import frappe
 from frappe.utils import today
 
+from docarchive import settings, storage_targets
+from docarchive.document_archive.doctype.business_document.business_document import missing_fields
+
+DOCUMENT = "Business Document"
 DOCUMENT_LIMIT = 50
+PANEL_LIMIT = 500
 DOCUMENT_FIELDS = ["name", "title", "document_type", "document_number", "document_date", "archive_status"]
+PANEL_FIELDS = [
+	*DOCUMENT_FIELDS,
+	"file",
+	"archive_started_at",
+	"retain_until",
+	"counterparty",
+	"contract_end_date",
+]
 
 
 @frappe.whitelist()
@@ -17,6 +30,47 @@ def counterparty_documents(counterparty_type: str, counterparty: str) -> list:
 		order_by="document_date desc, creation desc",
 		limit=DOCUMENT_LIMIT,
 	)
+
+
+def archiving_on() -> bool:
+	return bool(settings.get().enabled and storage_targets.configured())
+
+
+@frappe.whitelist()
+def counterparty_panel(counterparty_type: str, counterparty: str) -> dict:
+	frappe.has_permission(counterparty_type, "read", counterparty, throw=True)
+	panel = {
+		"documents": [],
+		"truncated": False,
+		"can_create": bool(frappe.has_permission(DOCUMENT, "create")),
+		"can_write": bool(frappe.has_permission(DOCUMENT, "write")),
+		"archiving": archiving_on(),
+	}
+	if not frappe.has_permission(DOCUMENT, "read"):
+		return panel
+	rows = frappe.get_list(
+		DOCUMENT,
+		filters={"counterparty_type": counterparty_type, "counterparty": counterparty},
+		fields=PANEL_FIELDS,
+		order_by="document_date desc, creation desc",
+		limit=PANEL_LIMIT + 1,
+	)
+	archived_types = set(frappe.get_all("Business Document Type", filters={"archive": 1}, pluck="name"))
+	for row in rows[:PANEL_LIMIT]:
+		missing = missing_fields(row)
+		panel["documents"].append(
+			{
+				**{field: row.get(field) for field in (*DOCUMENT_FIELDS, "file", "retain_until")},
+				"missing": missing,
+				"eligible": panel["archiving"]
+				and panel["can_write"]
+				and not row.archive_started_at
+				and row.document_type in archived_types
+				and not missing,
+			}
+		)
+	panel["truncated"] = len(rows) > PANEL_LIMIT
+	return panel
 
 
 @frappe.whitelist()
@@ -34,25 +88,40 @@ def upload_defaults() -> dict:
 	return {"document_type": last[0] if last else fallback, "document_date": today()}
 
 
+def upload_rows(file_urls, document_type, document_date, documents):
+	if documents:
+		return frappe.parse_json(documents)
+	return [
+		{"file_url": url, "document_type": document_type, "document_date": document_date}
+		for url in frappe.parse_json(file_urls) or []
+	]
+
+
 @frappe.whitelist(methods=["POST"])
 def create_documents(
-	counterparty_type: str, counterparty: str, file_urls, document_type: str, document_date: str
+	counterparty_type: str,
+	counterparty: str,
+	file_urls=None,
+	document_type: str | None = None,
+	document_date: str | None = None,
+	documents=None,
 ) -> list:
 	frappe.has_permission(counterparty_type, "read", counterparty, throw=True)
 	return [
 		frappe.get_doc(
 			{
-				"doctype": "Business Document",
+				"doctype": DOCUMENT,
 				"counterparty_type": counterparty_type,
 				"counterparty": counterparty,
-				"document_type": document_type,
-				"document_date": document_date,
-				"file": file_url,
+				"document_type": row.get("document_type"),
+				"document_date": row.get("document_date"),
+				"title": row.get("title"),
+				"file": row["file_url"],
 			}
 		)
 		.insert()
 		.name
-		for file_url in frappe.parse_json(file_urls)
+		for row in upload_rows(file_urls, document_type, document_date, documents)
 	]
 
 
