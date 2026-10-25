@@ -82,13 +82,13 @@
 }
 
 .docarchive-triage .form-column:first-child {
-	flex: 0 0 58%;
-	max-width: 58%;
+	flex: 0 0 42%;
+	max-width: 42%;
 }
 
 .docarchive-triage .form-column:last-child {
-	flex: 0 0 42%;
-	max-width: 42%;
+	flex: 0 0 58%;
+	max-width: 58%;
 }
 
 .docarchive-triage-frame,

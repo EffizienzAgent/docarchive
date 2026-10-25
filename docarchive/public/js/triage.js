@@ -57,8 +57,6 @@ class Triage {
 			title: __("Assign documents"),
 			size: "extra-large",
 			fields: [
-				{ fieldname: "preview", fieldtype: "HTML" },
-				{ fieldtype: "Column Break" },
 				{ fieldname: "file_info", fieldtype: "HTML" },
 				{ fieldname: "title", fieldtype: "Data", label: __("Title") },
 				{
@@ -91,6 +89,8 @@ class Triage {
 				{ fieldname: "contract_end_date", fieldtype: "Date", label: __("Contract End Date") },
 				{ fieldname: "missing", fieldtype: "HTML" },
 				{ fieldname: "error", fieldtype: "HTML" },
+				{ fieldtype: "Column Break" },
+				{ fieldname: "preview", fieldtype: "HTML" },
 			],
 			primary_action_label: __("Save and next"),
 			primary_action: () => this.save_and_next(),
