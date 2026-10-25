@@ -257,7 +257,8 @@ class Triage {
 		const name = this.queue.current;
 		try {
 			const values = changed_values(pick(this.item), pick(this.dialog.get_values(true)));
-			if (!Object.keys(values).length) return this.move(1);
+			const confirming = this.item.missing.includes("Confirmation");
+			if (!Object.keys(values).length && !confirming) return this.move(1);
 			const result = await frappe.xcall(`${METHOD}.save_item`, {
 				name,
 				values,

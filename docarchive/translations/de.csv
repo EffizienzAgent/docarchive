@@ -328,3 +328,4 @@ E-Invoice Checked,E-Rechnung geprüft
 E-Invoice Needs Confirmation,E-Rechnung muss bestätigt werden
 Own company or type were taken from the e-invoice. Check both and save to confirm.,Eigene Firma oder Dokumentart stammen aus der E-Rechnung. Beides prüfen und speichern zum Bestätigen.
 "One per line. E-invoices whose seller has one of these VAT IDs are outgoing, those whose buyer has one are incoming. The result is a suggestion that a person confirms.","Eine pro Zeile. E-Rechnungen, deren Verkäufer eine dieser USt-IdNrn. hat, sind ausgehend, solche, deren Käufer eine hat, eingehend. Das Ergebnis ist ein Vorschlag, den eine Person bestätigt."
+Confirm own company and type,Eigene Firma und Dokumentart bestätigen

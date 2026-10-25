@@ -51,6 +51,12 @@ frappe.ui.form.on("Business Document", {
 		const data = frm.doc.einvoice_data && JSON.parse(frm.doc.einvoice_data);
 		frm.get_field("einvoice_html").$wrapper.html(data ? einvoice_html(data) : "");
 		if (frm.is_new()) return;
+		if (frm.doc.einvoice_needs_review && !frm.doc.archive_started_at && frm.perm[0].write) {
+			frm.add_custom_button(__("Confirm own company and type"), () => {
+				frm.dirty();
+				frm.save();
+			});
+		}
 		const status = frm.doc.archive_status || "Pending";
 		frm.page.set_indicator(__(status), ARCHIVE_COLORS[status]);
 		if (!frm.doc.archive_started_at && frm.perm[0].write && !frm.is_dirty()) {

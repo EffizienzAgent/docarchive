@@ -490,3 +490,15 @@ class TestDialogDate(EInvoiceTestCase):
 			"Contact", party.name, json.dumps([xml_upload(cii()).file_url]), self.other_type
 		)
 		self.assertEqual(str(frappe.db.get_value(DOCUMENT, name, "document_date")), "2026-03-10")
+
+
+class TestTriageConfirmation(EInvoiceTestCase):
+	def test_saving_in_the_triage_confirms(self):
+		from docarchive import triage
+
+		doc = frappe.get_doc({"doctype": DOCUMENT, "file": xml_upload(cii()).file_url}).insert(
+			ignore_permissions=True
+		)
+		self.assertIn("Confirmation", triage.triage_item(doc.name)["missing"])
+		result = triage.save_item(doc.name, frappe.as_json({}))
+		self.assertNotIn("Confirmation", result["item"]["missing"])
