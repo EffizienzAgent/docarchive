@@ -75,7 +75,7 @@ class Screens:
 
 	def counterparty_panel(self):
 		open_form(self.page, "contact", CONTACT)
-		self.page.locator("[data-fieldname='documents_html']").scroll_into_view_if_needed()
+		self.page.locator("#contact-documents_tab-tab, [data-fieldname='documents_tab'].nav-link").first.click()
 		shot(self.page, "counterparty-panel", 4000)
 
 	def document_form(self):
