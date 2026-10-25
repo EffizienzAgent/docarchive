@@ -75,7 +75,7 @@ File deletion runs inside the File controller, before any `doc_events` hook. So 
 
 ### Counterparty panel
 
-The app's JS bundle offers a panel for any form: the record's documents with search, filters (type, year, status) and sorting, row actions (open, open file, copy link, archive now, also for several at once) and an upload with drag and drop. The upload dialog has one row per file with title, type and date. A date in the file name (`2026-08-05`, `2026_08_05`, `20260805` or `05.08.2026`) becomes the document date and is left out of the title. Uploads without a date take it from an e-invoice or the file name on the server too; otherwise the document stays without a date and is listed as missing it. With several files, the dialog can file them as one document: the first row becomes the main file, the others its attachments.
+The app's JS bundle offers a panel for any form: the record's documents with search, filters (type, year, status) and sorting, row actions (preview, open in a new tab, copy link, archive now) and an upload with drag and drop. The upload dialog has one row per file with title, type and date. A date in the file name (`2026-08-05`, `2026_08_05`, `20260805` or `05.08.2026`) becomes the document date and is left out of the title. Uploads without a date take it from an e-invoice or the file name on the server too; otherwise the document stays without a date and is listed as missing it. With several files, the dialog can file them as one document: the first row becomes the main file, the others its attachments.
 
 ```js
 frappe.ui.form.on("Customer", {
@@ -87,9 +87,11 @@ frappe.ui.form.on("Customer", {
 
 `docarchive.render_documents($wrapper, { counterparty_type, counterparty })` and `docarchive.upload_documents({ counterparty_type, counterparty, files, on_saved })` are available for custom layouts. Set `docarchive.file_url = (file_url) => url` to open files in your own viewer.
 
+Rows the user can act on have a checkbox. A bar above the list then offers "Archive now", "Extend term", "Legal Hold" and, for Archive Admins, "Export" for the selected rows; rows without any of these show a disabled checkbox with the reason. Clicking a row opens a preview pane on the right (an overlay on narrow screens) with the document's details, its main file and attachments as tabs. Up/Down or j/k move through the list, Esc closes, and the pane can be resized. PDFs and images show inline, other files as a download. HTML is never rendered by docarchive itself: set `docarchive.html_preview = (file_url, title) => Promise<HTMLIFrameElement>` to return a sandboxed frame from your app, otherwise the pane links to `docarchive.file_url`.
+
 ### Triage
 
-`docarchive.triage(names, { start, on_close })` opens a dialog that walks through documents one by one: the fields and what is still missing on the left, and the file on the right (PDF and images inline, other types as a download). "Save and next" (Ctrl/Cmd+Enter), "Skip", "Back" and Alt+Left/Right move through the list; Esc closes. Each save is a normal `doc.save()` with permission checks, and validation errors stay inline. `docarchive.triage_all()` opens it on every document that still needs work. The Business Document list has "Assign" for selected documents and "Assign all".
+`docarchive.triage(names, { start, on_close })` opens a dialog that walks through documents one by one: the fields and what is still missing on the left, and the file on the right (PDF and images inline, other types as a download). "Save and next" (Ctrl/Cmd+Enter), "Skip", "Back" and Alt+Left/Right move through the list; Esc closes. "Open document" opens the form in a new tab, so the dialog and unsaved input stay; documents that are not archived yet can be deleted from the dialog. Each save is a normal `doc.save()` with permission checks, and validation errors stay inline. `docarchive.triage_all()` opens it on every document that still needs work. The Business Document list has "Assign" for selected documents and "Assign all".
 
 ### Dashboard helpers
 
