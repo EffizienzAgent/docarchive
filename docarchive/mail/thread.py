@@ -26,17 +26,17 @@ def thread(name: str) -> list[dict]:
 		DOCUMENT,
 		filters={"thread_key": key, "own_company": own_company},
 		fields=FIELDS,
-		order_by="correspondence_at asc, creation asc",
+		order_by="correspondence_at desc, creation desc",
 	)
 	seen = {mail.mail_message_id for mail in mails if mail.mail_message_id}
 	items = []
-	for mail in mails:
+	for mail in reversed(mails):
 		for message_id in _referenced(mail):
 			if message_id not in seen:
 				seen.add(message_id)
 				items.append(_gap(message_id, own_company))
 		items.append(_mail(mail))
-	return items
+	return items[::-1]
 
 
 def _referenced(mail):
@@ -70,8 +70,8 @@ def _archived(message_id, own_company):
 		DOCUMENT,
 		filters={"mail_message_id": message_id, "own_company": own_company},
 		pluck="name",
-		order_by="creation asc",
-		limit_page_length=1,
+		order_by="correspondence_at desc, creation desc",
+		limit=1,
 	)
 	return names[0] if names else None
 

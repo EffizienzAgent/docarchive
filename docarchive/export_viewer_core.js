@@ -92,7 +92,18 @@ const ViewerCore = (() => {
 		return (doc.audit || []).map((id) => byId.get(id)).filter(Boolean).sort((a, b) => b.at.localeCompare(a.at));
 	}
 
-	return { action, escape, move, cycle, typing, control, meta, typeOf, party, outcomeOf, auditRows, entriesOf };
+	function sentAt(doc) {
+		return doc.correspondence_at || doc.date || "";
+	}
+
+	function threadOf(doc, docs) {
+		if (!doc.thread_key) return [];
+		return docs
+			.filter((other) => other.thread_key === doc.thread_key)
+			.sort((a, b) => sentAt(b).localeCompare(sentAt(a)) || b.id.localeCompare(a.id));
+	}
+
+	return { action, escape, move, cycle, typing, control, meta, typeOf, party, outcomeOf, auditRows, entriesOf, threadOf };
 })();
 
 if (typeof module !== "undefined") module.exports = ViewerCore;

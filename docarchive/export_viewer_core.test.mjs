@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const ViewerCore = createRequire(import.meta.url)("./export_viewer_core.js");
-const { action, escape, move, cycle, typing, control, meta, outcomeOf, auditRows, entriesOf } = ViewerCore;
+const { action, escape, move, cycle, typing, control, meta, outcomeOf, auditRows, entriesOf, threadOf } = ViewerCore;
 
 const key = (value, extra = {}) => ({ key: value, ...extra });
 
@@ -110,4 +110,15 @@ test("a document links to its entries and their outcome", () => {
 	assert.equal(outcomeOf(entries[0], "DOC-2"), "failed: checksum");
 	assert.equal(outcomeOf(entries[0], "DOC-9"), "");
 	assert.deepEqual(entriesOf({ id: "DOC-3" }, entries), []);
+});
+
+test("threads list the newest mail first", () => {
+	const docs = [
+		{ id: "a", thread_key: "t", correspondence_at: "2026-03-10T09:00:00Z" },
+		{ id: "c", thread_key: "t", correspondence_at: "2026-03-12T09:00:00Z" },
+		{ id: "x", thread_key: "other", correspondence_at: "2026-03-13T09:00:00Z" },
+		{ id: "b", thread_key: "t", date: "2026-03-11" },
+	];
+	assert.deepEqual(threadOf(docs[0], docs).map((doc) => doc.id), ["c", "b", "a"]);
+	assert.deepEqual(threadOf({ id: "n" }, docs), []);
 });
