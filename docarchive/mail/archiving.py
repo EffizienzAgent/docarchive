@@ -33,7 +33,9 @@ def archive(original_name: str, own_company: str | None = None, check_permission
 def refusal(original_name: str | None) -> str | None:
 	if not original_name:
 		return _("No original was captured for this e-mail.")
-	status = frappe.db.get_value(ORIGINAL, original_name, "status")
+	status, attempts = frappe.db.get_value(ORIGINAL, original_name, ["status", "attempts"])
+	if status == "Pending" and attempts:
+		return _("Storing the original of this e-mail failed. It will be retried automatically.")
 	if status == "Pending":
 		return _("The original of this e-mail is still being stored. Please try again in a moment.")
 	if status == "Failed":

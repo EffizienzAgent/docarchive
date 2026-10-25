@@ -330,6 +330,14 @@ class TestMailStoreJob(IntegrationTestCase):
 		originals.store(name)
 		self.assertEqual(self.row(name, "status"), "Stored")
 
+	def test_refusal_after_a_failed_attempt_says_it_is_retried(self):
+		name = self.pending()
+		frappe.db.set_value("Mail Original", name, "attempts", 1)
+		self.assertEqual(
+			archiving.refusal(name),
+			"Storing the original of this e-mail failed. It will be retried automatically.",
+		)
+
 	def test_cleanup_retries_pending_and_sweeps_orphans(self):
 		name = self.pending()
 		orphan = originals.spool_path("orphan")
