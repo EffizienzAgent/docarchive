@@ -17,12 +17,19 @@
 	}
 }
 * { box-sizing: border-box; }
-body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); }
+body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); display: flex; flex-direction: column; height: 100vh; }
 header { padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
-header h1 { font-size: 18px; margin: 0 0 4px; }
+header .top { display: flex; align-items: center; gap: 12px; }
+header .titles { flex: 1; min-width: 0; }
+header h1 { font-size: 18px; margin: 0 0 4px; overflow-wrap: anywhere; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.brand img { max-height: 36px; max-width: 160px; object-fit: contain; }
+.help-button { flex: none; }
+footer { padding: 6px 16px; border-top: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 12px; }
+footer a { color: inherit; }
 .scope { color: var(--muted); font-size: 13px; }
 .banner { margin-top: 8px; padding: 8px 12px; border-radius: 6px; background: var(--bad-bg); color: var(--bad); }
-main { display: grid; grid-template-columns: minmax(280px, 400px) 1fr; height: calc(100vh - 70px); }
+main { display: grid; grid-template-columns: minmax(280px, 400px) 1fr; flex: 1; min-height: 0; }
 aside { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
 .filters { padding: 12px; display: grid; gap: 6px; border-bottom: 1px solid var(--line); }
 .filters input[type=search], .filters select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
@@ -32,6 +39,7 @@ aside { border-right: 1px solid var(--line); display: flex; flex-direction: colu
 .item { padding: 8px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .item:hover { background: var(--bg); }
 .item.active { background: var(--accent-bg); }
+.item.cursor { box-shadow: inset 3px 0 0 var(--accent); }
 .item .t { font-weight: 500; overflow-wrap: anywhere; }
 .item .m { color: var(--muted); font-size: 12px; }
 .more { margin: 12px; }
@@ -39,14 +47,20 @@ button, .btn { padding: 5px 10px; border: 1px solid var(--line); border-radius: 
 button:disabled { opacity: .5; cursor: default; }
 .btn.primary { border-color: var(--accent); color: var(--accent); }
 section.detail { overflow: auto; padding: 16px; min-width: 0; }
-.nav { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
-.nav h2 { font-size: 17px; margin: 0; flex: 1; min-width: 200px; overflow-wrap: anywhere; }
+.nav { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; height: 32px; }
+.nav h2 { font-size: 17px; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav button { flex: none; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; margin-bottom: 12px; }
+@media (min-width: 900px) { .fields { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1200px) { .fields { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.field { min-width: 0; height: 40px; }
+.field .label { color: var(--muted); font-size: 12px; }
+.field .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.field.bad .value { color: var(--bad); }
+.field.hold .value { color: var(--hold); }
 .pill { font-size: 12px; padding: 1px 8px; border-radius: 10px; margin-left: 6px; }
 .pill.hold { background: var(--hold-bg); color: var(--hold); }
 .pill.bad { background: var(--bad-bg); color: var(--bad); }
-table.meta { border-collapse: collapse; margin-bottom: 16px; }
-table.meta th { text-align: left; color: var(--muted); font-weight: 500; padding: 2px 16px 2px 0; vertical-align: top; }
-table.meta td { padding: 2px 0; overflow-wrap: anywhere; }
 .card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-bottom: 16px; }
 .card .head { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .card .head .name { flex: 1; font-weight: 500; overflow-wrap: anywhere; min-width: 160px; }
@@ -58,17 +72,35 @@ table.meta td { padding: 2px 0; overflow-wrap: anywhere; }
 .thread .msg.active { background: var(--accent-bg); }
 .thread .msg:last-child { border-bottom: 0; }
 .muted { color: var(--muted); }
+.tabs { display: flex; gap: 6px; margin-bottom: 8px; height: 32px; overflow-x: auto; overflow-y: hidden; }
+.tabs button { flex: none; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabs button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+kbd { font: 12px ui-monospace, monospace; padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--bg); }
+.overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .4); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+.overlay[hidden] { display: none; }
+.overlay .dialog { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; max-width: 420px; width: 100%; }
+.overlay h2 { font-size: 16px; margin: 0 0 12px; }
+.overlay table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+.overlay td { padding: 4px 0; vertical-align: top; }
+.overlay td:first-child { white-space: nowrap; padding-right: 16px; }
 ul.plain { margin: 0; padding-left: 18px; }
 @media (max-width: 760px) {
-	main { grid-template-columns: 1fr; height: auto; }
+	body { height: auto; }
+	main { grid-template-columns: 1fr; }
 	aside { max-height: 50vh; border-right: 0; border-bottom: 1px solid var(--line); }
 }
 </style>
 </head>
 <body>
 <header>
-	<h1 id="title"></h1>
-	<div class="scope" id="scope"></div>
+	<div class="top">
+		<div class="brand" id="brand" hidden></div>
+		<div class="titles">
+			<h1 id="title"></h1>
+			<div class="scope" id="scope"></div>
+		</div>
+		<button class="help-button" id="help-button" type="button" aria-haspopup="dialog">?</button>
+	</div>
 	<div id="banner"></div>
 </header>
 <main>
@@ -79,6 +111,9 @@ ul.plain { margin: 0; padding-left: 18px; }
 	</aside>
 	<section class="detail" id="detail"></section>
 </main>
+<footer id="footer" hidden></footer>
+<div class="overlay" id="help" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden></div>
+<script>/*DOCARCHIVE_CORE*/</script>
 <script>
 const DATA = /*DOCARCHIVE_DATA*/;
 const L = DATA.labels;
@@ -86,7 +121,10 @@ const PAGE = 100;
 const ACTIVE = ["html", "htm", "xhtml", "xht", "svg", "svgz", "mht", "mhtml", "js", "xsl", "xslt"];
 const docs = DATA.documents;
 const byId = new Map(docs.map((doc) => [doc.id, doc]));
-const state = { search: "", type: "", party: "", company: "", year: "", held: false, problems: false, shown: PAGE, current: null };
+const CREDIT_URL = "https://github.com/EffizienzAgent/docarchive";
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+const LOGO_URI = /^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+\/]+={0,2}$/;
+const state = { search: "", type: "", party: "", company: "", year: "", held: false, problems: false, shown: PAGE, current: null, cursor: null, file: 0 };
 
 function h(tag, attrs, ...children) {
 	const el = document.createElement(tag);
@@ -104,8 +142,7 @@ function h(tag, attrs, ...children) {
 
 const fmt = (text, ...args) => args.reduce((out, arg, i) => out.replace(`{${i}}`, arg), text);
 const href = (path) => path.split("/").map(encodeURIComponent).join("/");
-const typeOf = (doc) => doc.type_label || doc.type;
-const party = (doc) => (doc.counterparty && (doc.counterparty.name || doc.counterparty.id)) || "";
+const { typeOf, party } = ViewerCore;
 const ext = (file) => ((file.name || file.key || "").split(".").pop() || "").toLowerCase();
 
 function options(values, all) {
@@ -133,6 +170,51 @@ function renderHeader() {
 	}
 }
 
+function renderBrand() {
+	const brand = DATA.brand || {};
+	if (typeof brand.color === "string" && HEX_COLOR.test(brand.color)) {
+		document.documentElement.style.setProperty("--accent", brand.color);
+	}
+	const box = document.getElementById("brand");
+	const logo = typeof brand.logo === "string" && LOGO_URI.test(brand.logo) ? brand.logo : null;
+	if (logo) box.append(h("img", { src: logo, alt: brand.name || "" }));
+	if (brand.name) box.append(h("span", {}, brand.name));
+	box.hidden = !box.childNodes.length;
+	if (brand.credit) {
+		const footer = document.getElementById("footer");
+		footer.append(h("a", { href: CREDIT_URL, target: "_blank", rel: "noopener noreferrer" }, L.credit));
+		footer.hidden = false;
+	}
+}
+
+function renderHelp() {
+	const rows = [
+		[["j", "k", "↑", "↓"], L.key_move],
+		[["Enter"], L.key_open],
+		[["/"], L.key_search],
+		[["Esc"], L.key_escape],
+		[["←", "→"], L.key_files],
+		[["?"], L.key_help],
+	];
+	const dialog = h("div", { class: "dialog" },
+		h("h2", { id: "help-title" }, L.shortcuts),
+		h("table", {}, rows.map(([keys, text]) => h("tr", {}, h("td", {}, keys.flatMap((key) => [h("kbd", {}, key), " "])), h("td", {}, text)))),
+		h("button", { type: "button", onclick: () => toggleHelp(false) }, L.close));
+	const overlay = document.getElementById("help");
+	overlay.append(dialog);
+	overlay.addEventListener("click", (event) => event.target === overlay && toggleHelp(false));
+	document.getElementById("help-button").setAttribute("title", L.shortcuts);
+	document.getElementById("help-button").setAttribute("aria-label", L.shortcuts);
+	document.getElementById("help-button").addEventListener("click", () => toggleHelp(true));
+}
+
+function toggleHelp(open) {
+	const overlay = document.getElementById("help");
+	overlay.hidden = !open;
+	if (open) overlay.querySelector("button").focus();
+	else document.getElementById("help-button").blur();
+}
+
 function renderFilters() {
 	const box = document.getElementById("filters");
 	const bind = (el, key, prop = "value") => {
@@ -144,7 +226,7 @@ function renderFilters() {
 		return el;
 	};
 	box.append(
-		bind(h("input", { type: "search", placeholder: L.search, "aria-label": L.search }), "search"),
+		bind(h("input", { type: "search", id: "search", placeholder: `${L.search} (/)`, "aria-label": L.search }), "search"),
 		bind(h("select", { "aria-label": L.type }, options(unique(docs.map(typeOf)), L.all_types)), "type"),
 		bind(h("select", { "aria-label": L.counterparty }, options(unique(docs.map(party)), L.all_counterparties)), "party"),
 		bind(h("select", { "aria-label": L.own_company }, options(unique(docs.map((d) => d.own_company)), L.all_companies)), "company"),
@@ -175,7 +257,7 @@ function renderList() {
 	if (!rows.length) list.append(h("div", { class: "item muted" }, L.none));
 	for (const doc of rows.slice(0, state.shown)) {
 		list.append(
-			h("div", { class: `item${doc.id === state.current ? " active" : ""}`, onclick: () => show(doc.id) },
+			h("div", { class: `item${doc.id === state.current ? " active" : ""}${doc.id === state.cursor ? " cursor" : ""}`, "data-id": doc.id, onclick: () => show(doc.id) },
 				h("div", { class: "t" }, doc.title || doc.id,
 					doc.legal_hold ? h("span", { class: "pill hold" }, L.legal_hold) : null,
 					doc.verified ? null : h("span", { class: "pill bad" }, "!")),
@@ -226,34 +308,38 @@ function threadOf(doc) {
 	return docs.filter((other) => other.thread_key === doc.thread_key).sort((a, b) => (a.date || "").localeCompare(b.date || "") || a.id.localeCompare(b.id));
 }
 
-function show(id) {
+function show(id, file = 0) {
 	const doc = byId.get(id);
 	if (!doc) return;
 	state.current = id;
+	state.cursor = id;
+	state.file = Math.min(Math.max(file, 0), Math.max(doc.files.length - 1, 0));
 	if (location.hash !== `#${encodeURIComponent(id)}`) history.replaceState(null, "", `#${encodeURIComponent(id)}`);
 	const rows = renderList();
 	const index = rows.findIndex((row) => row.id === id);
 	const step = (delta) => rows[index + delta] && show(rows[index + delta].id);
 	const detail = document.getElementById("detail");
-	const meta = [
-		[L.type, typeOf(doc)], [L.date, doc.date], [L.number, doc.number], [L.counterparty, party(doc)],
-		[L.own_company, doc.own_company], [L.retain_until, doc.retain_until], [L.lock_mode, doc.lock_mode],
-		[L.verified, doc.verified ? "✓" : "✗"],
-	].filter(([, value]) => value);
 	const thread = threadOf(doc);
+	const title = doc.title || doc.id;
 	detail.replaceChildren(...[
 		h("div", { class: "nav" },
-			h("button", { onclick: () => step(-1), disabled: index <= 0 }, `← ${L.previous}`),
-			h("h2", {}, doc.title || doc.id, doc.legal_hold ? h("span", { class: "pill hold" }, L.legal_hold) : null),
-			h("button", { onclick: () => step(1), disabled: index < 0 || index >= rows.length - 1 }, `${L.next} →`)),
-		h("table", { class: "meta" }, meta.map(([label, value]) => h("tr", {}, h("th", {}, label), h("td", {}, value)))),
+			h("h2", { title }, title),
+			h("button", { onclick: () => step(-1), disabled: index <= 0, title: "k" }, L.previous),
+			h("button", { onclick: () => step(1), disabled: index < 0 || index >= rows.length - 1, title: "j" }, L.next)),
+		h("div", { class: "fields" }, ViewerCore.meta(doc, L).map(([key, label, value]) =>
+			h("div", { class: `field${key === "status" && !doc.verified ? " bad" : ""}${key === "legal_hold" && value ? " hold" : ""}`, "data-field": key },
+				h("div", { class: "label" }, label),
+				h("div", { class: "value", title: value || null }, value || h("span", { class: "muted" }, "–"))))),
+		h("div", { class: "tabs", role: "tablist", "aria-label": L.files }, doc.files.map((file, i) =>
+			h("button", { type: "button", role: "tab", "aria-selected": String(i === state.file), title: file.name || file.key, onclick: () => show(id, i) },
+				file.title || file.name || file.key))),
+		doc.files.length ? fileCard(doc.files[state.file]) : null,
 		thread.length > 1
 			? h("div", { class: "card thread" },
 				h("div", { class: "head" }, h("span", { class: "name" }, `${L.thread} (${thread.length})`)),
 				thread.map((msg) => h("div", { class: `msg${msg.id === id ? " active" : ""}`, onclick: () => show(msg.id) },
 					h("div", {}, msg.title || msg.id), h("div", { class: "muted" }, [msg.date, party(msg)].filter(Boolean).join(" · ")))))
 			: null,
-		doc.files.map(fileCard),
 		doc.history.length
 			? h("div", { class: "card" },
 				h("div", { class: "head" }, h("span", { class: "name" }, L.retention_trail)),
@@ -269,15 +355,68 @@ function show(id) {
 	detail.scrollTop = 0;
 }
 
-document.addEventListener("keydown", (event) => {
-	if (event.target.matches("input, select") || !state.current) return;
+function closePreview() {
+	state.current = null;
+	if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+	document.getElementById("detail").replaceChildren(h("div", { class: "muted" }, L.empty));
+	renderList();
+}
+
+function moveCursor(delta) {
 	const rows = filtered();
-	const index = rows.findIndex((row) => row.id === state.current);
-	if (event.key === "ArrowDown" || event.key === "j") rows[index + 1] && show(rows[index + 1].id);
-	if (event.key === "ArrowUp" || event.key === "k") rows[index - 1] && show(rows[index - 1].id);
+	const next = ViewerCore.move(rows.map((row) => row.id), state.cursor, delta);
+	if (!next) return;
+	state.cursor = next;
+	const index = rows.findIndex((row) => row.id === next);
+	if (index >= state.shown) state.shown = Math.ceil((index + 1) / PAGE) * PAGE;
+	renderList();
+	const item = document.querySelector(`.item[data-id="${CSS.escape(next)}"]`);
+	if (item) item.scrollIntoView({ block: "nearest" });
+}
+
+function escape(target) {
+	const search = document.getElementById("search");
+	const todo = ViewerCore.escape({
+		help: !document.getElementById("help").hidden,
+		search: Boolean(state.search),
+		typing: ViewerCore.typing(target),
+		preview: Boolean(state.current),
+	});
+	if (todo === "clear_search") {
+		search.value = "";
+		state.search = "";
+		state.shown = PAGE;
+		renderList();
+	}
+	if (todo === "blur") target.blur();
+	if (todo === "close_preview") closePreview();
+}
+
+document.addEventListener("keydown", (event) => {
+	const target = event.target;
+	const todo = ViewerCore.action(event, {
+		help: !document.getElementById("help").hidden,
+		typing: ViewerCore.typing(target),
+		control: ViewerCore.control(target),
+	});
+	if (!todo) return;
+	event.preventDefault();
+	if (todo === "close_help") toggleHelp(false);
+	if (todo === "help") toggleHelp(true);
+	if (todo === "escape") escape(target);
+	if (todo === "search") document.getElementById("search").focus();
+	if (todo === "next") moveCursor(1);
+	if (todo === "previous") moveCursor(-1);
+	if (todo === "open" && state.cursor) show(state.cursor);
+	const doc = byId.get(state.current);
+	if (doc && (todo === "next_file" || todo === "previous_file")) {
+		show(doc.id, ViewerCore.cycle(doc.files.length, state.file, todo === "next_file" ? 1 : -1));
+	}
 });
 
 renderHeader();
+renderBrand();
+renderHelp();
 renderFilters();
 const start = decodeURIComponent(location.hash.slice(1));
 const first = byId.has(start) ? start : docs[0] && docs[0].id;
