@@ -14,7 +14,9 @@ const STATE_STYLES = {
 	complete: ["blue", "Complete"],
 	archived: ["green", "Archived"],
 	failed: ["red", "Failed"],
+	deleted: ["gray", "Deleted"],
 };
+const storage = () => window.localStorage;
 
 docarchive.file_url ??= (file) => file;
 
@@ -51,7 +53,7 @@ class DocumentsPanel {
 		this.$wrapper = $wrapper;
 		this.party = party;
 		this.key = core.filter_key(party.counterparty_type, party.counterparty);
-		this.filters = core.load_filters(window.localStorage, this.key);
+		this.filters = core.load_filters(storage, this.key);
 		this.selected = new Set();
 	}
 
@@ -92,6 +94,12 @@ class DocumentsPanel {
 			${select("year", __("All years"), years.map((year) => [year, year]), this.filters.year)}
 			${select("state", __("All statuses"), states, this.filters.state)}
 			<button class="btn btn-default btn-xs" data-action="sort">${esc(sort_label(this.filters))}</button>
+			${
+				this.data.documents.some((doc) => doc.archive_status === core.DELETED)
+					? `<label class="docarchive-toggle"><input type="checkbox" data-filter-check="show_deleted"
+						${this.filters.show_deleted ? "checked" : ""}> ${esc(__("Show deleted"))}</label>`
+					: ""
+			}
 			<span class="docarchive-spacer"></span>
 			<button class="btn btn-default btn-xs hidden" data-action="bulk-archive"></button>
 			${upload}
@@ -102,6 +110,9 @@ class DocumentsPanel {
 		const $toolbar = this.$panel.find(".docarchive-toolbar");
 		$toolbar.on("input change", "[data-filter]", (event) =>
 			this.set_filter(event.currentTarget.dataset.filter, event.currentTarget.value),
+		);
+		$toolbar.on("change", "[data-filter-check]", (event) =>
+			this.set_filter(event.currentTarget.dataset.filterCheck, event.currentTarget.checked),
 		);
 		$toolbar.on("click", "[data-action=sort]", (event) => {
 			this.set_filter("oldest_first", !this.filters.oldest_first);
@@ -165,7 +176,7 @@ class DocumentsPanel {
 
 	set_filter(name, value) {
 		this.filters[name] = value;
-		core.save_filters(window.localStorage, this.key, this.filters);
+		core.save_filters(storage, this.key, this.filters);
 		this.render_body();
 	}
 

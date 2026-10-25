@@ -80,3 +80,11 @@
 .docarchive-table .indicator-pill .icon {
 	margin-right: 2px;
 }
+
+.docarchive-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin: 0;
+	font-size: var(--text-sm);
+}
