@@ -5,8 +5,7 @@
 
 ### Bug Fixes
 
-* harden the archive export ([91c6d71](https://github.com/EffizienzAgent/docarchive/commit/91c6d719503f5be6c08d56dd5f927d3f597f9621))
-* harden the archive export ([c1fa7bd](https://github.com/EffizienzAgent/docarchive/commit/c1fa7bdbfd95341ac1e0146091b55318a207d162))
+* harden the archive export: safe viewer data, recovery of interrupted exports, one export at a time, download-only active files, User Permissions and admin-only export downloads ([c1fa7bd](https://github.com/EffizienzAgent/docarchive/commit/c1fa7bdbfd95341ac1e0146091b55318a207d162))
 
 ## [0.4.0](https://github.com/EffizienzAgent/docarchive/compare/v0.3.0...v0.4.0) (2026-10-25)
 
