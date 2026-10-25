@@ -37,3 +37,34 @@ test("attachment file names lose markup characters", () => {
 	assert.equal(safe_file_name("Rechnung 2026.pdf"), "Rechnung 2026.pdf");
 	assert.equal(safe_file_name("<>"), "attachment");
 });
+
+test("archive results are escaped line by line", async () => {
+	const { archive_lines } = await import("./mail_core.js");
+	const lines = archive_lines(
+		{ archived: { "<a>": "DOC-1" }, refused: { "MO-2": "<b>no</b>" } },
+		{ link: (doc) => `[${doc}]`, archived_as: (link) => `Archived as ${link}` },
+	);
+	assert.deepEqual(lines, ["&lt;a&gt;: Archived as [DOC-1]", "MO-2: &lt;b&gt;no&lt;/b&gt;"]);
+});
+
+test("mail original actions follow its status", async () => {
+	const { original_actions } = await import("./mail_core.js");
+	const base = { archived: false, viewable: true, ignored: false, reason: null };
+	assert.deepEqual(original_actions(base, true), {
+		headline: null,
+		show: true,
+		archive: true,
+		archive_reason: null,
+		ignore: true,
+		unignore: false,
+	});
+	assert.equal(original_actions({ ...base, ignored: true }, true).unignore, true);
+	assert.equal(original_actions(base, false).archive, false);
+	const pending = original_actions({ ...base, viewable: false, reason: "still being stored" }, true);
+	assert.deepEqual([pending.show, pending.archive_reason, pending.ignore], [false, "still being stored", false]);
+	assert.deepEqual(original_actions({ archived: true, business_document: "DOC-1", viewable: true }, true), {
+		headline: "link",
+		show: true,
+	});
+	assert.equal(original_actions({ archived: true, business_document: null, viewable: true }, true).headline, "plain");
+});

@@ -30,3 +30,26 @@ export function safe_file_name(file_name, fallback = "attachment") {
 		.trim();
 	return name || fallback;
 }
+
+export function archive_lines(result, { link, archived_as }) {
+	return [
+		...Object.entries(result.archived).map(
+			([name, doc]) => `${escape_html(name)}: ${archived_as(link(doc))}`,
+		),
+		...Object.entries(result.refused).map(([name, reason]) => `${escape_html(name)}: ${escape_html(reason)}`),
+	];
+}
+
+export function original_actions(status, can_create) {
+	if (status.archived) {
+		return { headline: status.business_document ? "link" : "plain", show: status.viewable };
+	}
+	return {
+		headline: null,
+		show: status.viewable,
+		archive: can_create,
+		archive_reason: status.reason || null,
+		ignore: can_create && status.viewable && !status.ignored,
+		unignore: can_create && status.viewable && status.ignored,
+	};
+}
