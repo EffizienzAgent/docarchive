@@ -38,7 +38,7 @@ def capture(communication, raw: bytes | str, origin: str) -> str | None:
 		frappe.db.savepoint(SAVEPOINT)
 		existing = _existing(communication)
 		if existing:
-			return _revive(existing, _as_bytes(raw))
+			return _revive(existing, _as_bytes(raw), origin)
 		name = _pend(communication, origin, raw=_as_bytes(raw))
 	except Exception:
 		fail(SAVEPOINT)
@@ -48,13 +48,20 @@ def capture(communication, raw: bytes | str, origin: str) -> str | None:
 	return name
 
 
-def _revive(name, raw):
+def _revive(name, raw, origin):
 	if frappe.db.get_value(ORIGINAL, name, "status") == FAILED:
 		write_spool(name, raw)
 		frappe.db.set_value(
 			ORIGINAL,
 			name,
-			{"status": PENDING, "attempts": 0, "error": None, "email_queue": None},
+			{
+				"status": PENDING,
+				"attempts": 0,
+				"error": None,
+				"origin": origin,
+				"email_queue": None,
+				"rebuilt_at": None,
+			},
 			update_modified=False,
 		)
 		schedule(name)

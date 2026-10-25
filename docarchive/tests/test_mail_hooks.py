@@ -265,6 +265,25 @@ class TestMailHooks(IntegrationTestCase):
 		self.assertEqual((original.status, original.error), ("Failed", "rebuild window passed"))
 		self.assertFalse(original.file)
 
+	def test_revived_send_original_takes_the_new_origin(self):
+		comm = make_communication(self.account.name, "Sent")
+		name = self.queued_send(comm)
+		frappe.db.set_value(
+			"Mail Original",
+			name,
+			{"status": "Failed", "error": "rebuild window passed", "rebuilt_at": now_datetime()},
+		)
+		with patch("docarchive.mail.originals.schedule"):
+			originals.from_mailsync(comm, self.raw)
+		original = self.stored(name)
+		self.assertEqual((original.status, original.origin), ("Stored", "mailsync"))
+		self.assertFalse(original.email_queue or original.rebuilt_at)
+		document = frappe.get_doc("Business Document", archiving.archive(name))
+		meta = archiving.mail_meta(document)
+		self.assertEqual(meta["origin"], "mailsync")
+		self.assertNotIn("note", meta)
+		self.assertNotIn("rebuilt_at", meta)
+
 	def test_queue_not_capturable_at_job_time_fails(self):
 		name = self.queued_send(make_communication(self.account.name, "Sent"))
 		queue = frappe.db.get_value("Mail Original", name, "email_queue")
