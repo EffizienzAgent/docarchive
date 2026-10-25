@@ -336,7 +336,7 @@ bench get-app https://github.com/EffizienzAgent/docarchive --branch version-16
 bench --site <site> install-app docarchive
 ```
 
-docarchive requires the [s3storage](https://github.com/EffizienzAgent/s3storage) app for its S3 client. s3storage keeps files on local disk until you configure its own bucket.
+docarchive requires the [s3storage](https://github.com/EffizienzAgent/s3storage) app (v0.3.0 or later) for its S3 client and for storing large export files. s3storage keeps files on local disk until you configure its own bucket.
 
 **Compatibility:** Frappe v16. The `version-16` branch always points to the latest release; tagged releases
 and the changelog are on the [releases page](https://github.com/EffizienzAgent/docarchive/releases).
