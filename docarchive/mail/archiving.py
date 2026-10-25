@@ -133,22 +133,31 @@ def archive_communications(names) -> dict:
 		if reason:
 			result["refused"][name] = reason
 			continue
+		messages = len(frappe.local.message_log)
 		try:
 			frappe.db.savepoint(SAVEPOINT)
 			result["archived"][name] = archive(original)
 		except frappe.ValidationError as error:
 			frappe.db.rollback(save_point=SAVEPOINT)
+			del frappe.local.message_log[messages:]
 			result["refused"][name] = str(error)
 	return result
 
 
 @frappe.whitelist(methods=["POST"])
 def archive_upload(
-	file_url: str, direction: str, gap_message_id: str | None = None, own_company: str | None = None
+	file_url: str,
+	direction: str,
+	gap_message_id: str | None = None,
+	own_company: str | None = None,
+	counterparty_type: str | None = None,
+	counterparty: str | None = None,
 ) -> str:
 	from docarchive.mail import originals
 
 	frappe.has_permission(DOCUMENT, "create", throw=True)
+	if counterparty_type and counterparty:
+		frappe.has_permission(counterparty_type, "read", counterparty, throw=True)
 	if direction not in DIRECTIONS:
 		frappe.throw(_("The direction must be Incoming or Outgoing."))
 	file_name = _upload_name(file_url)
@@ -168,7 +177,8 @@ def archive_upload(
 	if not name:
 		original = originals.create_upload(raw, parsed, direction)
 		name = archive(original, company)
-		_set_counterparty(name, thread)
+		party = frappe._dict(counterparty_type=counterparty_type, counterparty=counterparty)
+		_set_counterparty(name, party if counterparty_type and counterparty else thread)
 	frappe.delete_doc("File", file_name, ignore_permissions=True)
 	return name
 

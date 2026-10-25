@@ -6,7 +6,7 @@ docarchive files business documents such as invoices, contracts and bank stateme
 
 ## Status
 
-This version has the document model, the locks, the storage configuration, the upload API, the nightly archive run to Object Lock storage, legal holds, and the deletion of expired documents. Archiving is off until a System Manager enables it in Archive Settings. Until then, nothing leaves the site.
+This version has the document model, the locks, the storage configuration, the upload API, the nightly archive run to Object Lock storage, legal holds, the deletion of expired documents, and the archiving of e-mails and other correspondence. Archiving is off until a System Manager enables it in Archive Settings. Until then, nothing leaves the site.
 
 ## No compliance promise
 
@@ -18,11 +18,11 @@ docarchive is a technical tool. It does not make you compliant with GoBD, the GD
 - **Attachments**: a document has one main file (`file`, used for the preview and the title) and optional **Attachments**: further files such as annexes, the XML of an e-invoice or a proof of service. Each row has a file, a role (Attachment, Structured Invoice (XML), Proof of Service), a title (defaults to the file name) and its SHA-256. Attachments follow the same rules as the main file: private, uploaded to this document by the same user (exact URL and owner), an allowed file type, and no file twice in one document. They are archived, locked, extended and checked together with the main file. Once archiving starts, the attachment list is locked: no row can be added, removed, reordered or changed. An addendum becomes a new document, e.g. with `replaces` set by the upload API.
 - **Checksums**: when a file is attached, the app computes `content_sha256` from the raw file bytes. The archive run compares this value with the bytes it reads back from storage.
 - **Object Lock**: each archived object gets its own retention mode (GOVERNANCE or COMPLIANCE) and retain-until date. With the regular archive key the app never deletes from an archive bucket; its only delete call is the smoke check, which tries to delete its own `_smoke/` test object and expects a refusal. Deleting expired documents needs a separate, optional archive admin key (see [Deleting expired documents](#deleting-expired-documents)). Object Lock only lets retention grow, never shrink.
-- **Retention**: the retention period ends on January 1 after the document year plus the retention years. For contracts it can count from the contract end date instead. Years come from a rule per own company and document type in Archive Settings, or from the type's default. The seeded types (Outgoing Invoice, Incoming Invoice, Contract, Bank Statement) ship with editable defaults. Check them for your jurisdiction.
+- **Retention**: the retention period ends on January 1 after the document year plus the retention years. For contracts it can count from the contract end date instead. Years come from a rule per own company and document type in Archive Settings, or from the type's default. The seeded types (Outgoing Invoice, Incoming Invoice, Contract, Bank Statement, Correspondence, Internal Correspondence) ship with editable defaults. Check them for your jurisdiction.
 - **Locking**: once archiving starts (`archive_started_at`), the fields that make up the object key and the source fields can no longer change: own company, type, date, number, counterparty, file, the attachments and `source_*`. The contract end date can still move later (which extends retention), but never earlier, and it cannot be cleared. Deleting the document is refused. Its file cannot be deleted, moved, made public or detached. Other File rows that share the archived object (the same `file_url` through deduplication, the same `content_hash`, or a `thumbnail_url` pointing at it) cannot change their URL, hash, thumbnail or privacy either. A counterparty linked from an archived document cannot be renamed or merged.
 - **Server-only fields**: the checksum, the archive status, keys and retention fields, and the `source_*` fields are restored on every save, unless server code sets `doc.flags.archive_write`.
 - **Plausible dates**: a document date may be at most **Max. Days in the Future** (default 31) after today, and a contract end at most **Max. Contract Years** (default 50) after the document date.
-- **File types**: only the extensions listed in Archive Settings → Allowed File Types can be filed (default: pdf, png, jpg, jpeg, tif, tiff, xml). Both the file name and the file URL must match.
+- **File types**: only the extensions listed in Archive Settings → Allowed File Types can be filed (default: pdf, png, jpg, jpeg, tif, tiff, xml). Both the file name and the file URL must match. E-mail documents may also have an `.eml` main file.
 - **Access**: files are always private and attached to their Business Document, so Frappe's File permission follows the document permission. A user who sets or changes a counterparty needs read permission on it; an unknown counterparty gets the same answer as one without access. Queries go through `frappe.get_list`.
 
 ## Roles
@@ -75,7 +75,7 @@ File deletion runs inside the File controller, before any `doc_events` hook. So 
 
 ### Counterparty panel
 
-The app's JS bundle offers a panel for any form: the record's documents with search, filters (type, year, status) and sorting, row actions (open, open file, copy link, archive now, also for several at once) and an upload with drag and drop. The upload dialog has one row per file with title, type and date. A date in the file name (`2026-08-05`, `2026_08_05`, `20260805` or `05.08.2026`) becomes the document date and is left out of the title. Uploads without a date take it from an e-invoice or the file name on the server too; otherwise the document stays without a date and is listed as missing it. With several files, the dialog can file them as one document: the first row becomes the main file, the others its attachments.
+The app's JS bundle offers a panel for any form: the record's documents with search, filters (type, year, status) and sorting, row actions (open, open file, copy link, show thread for mails, archive now, also for several at once) and an upload with drag and drop. `.eml` files dropped there are filed as e-mails for the counterparty (see [Correspondence](#correspondence)). The upload dialog has one row per file with title, type and date. A date in the file name (`2026-08-05`, `2026_08_05`, `20260805` or `05.08.2026`) becomes the document date and is left out of the title. Uploads without a date take it from an e-invoice or the file name on the server too; otherwise the document stays without a date and is listed as missing it. With several files, the dialog can file them as one document: the first row becomes the main file, the others its attachments.
 
 ```js
 frappe.ui.form.on("Customer", {
@@ -85,7 +85,7 @@ frappe.ui.form.on("Customer", {
 });
 ```
 
-`docarchive.render_documents($wrapper, { counterparty_type, counterparty })` and `docarchive.upload_documents({ counterparty_type, counterparty, files, on_saved })` are available for custom layouts. Set `docarchive.file_url = (file_url) => url` to open files in your own viewer.
+`docarchive.render_documents($wrapper, { counterparty_type, counterparty })` and `docarchive.upload_documents({ counterparty_type, counterparty, files, on_saved, defaults })` are available for custom layouts (`defaults` may hold `document_date`, `source_doctype` and `source_name`). `docarchive.show_mail(name)` and `docarchive.show_thread(name)` open the mail viewer and the thread. Set `docarchive.file_url = (file_url) => url` to open files in your own viewer.
 
 ### Triage
 
@@ -123,6 +123,79 @@ docarchive recognizes e-invoices among a document's files (main file first, then
 **Safety**: XML is parsed with `defusedxml` (no DTDs, no entities, no network) with explicit namespaces. XML larger than 10 MB, also inside a PDF, is skipped, and at most 5 embedded XML files of a PDF are tried, known file names first. Files that cannot be read are treated as plain documents; saving never fails because of them.
 
 **GoBD note**: for a hybrid invoice such as ZUGFeRD, the structured XML is the authoritative original, not the PDF view. Archive the file you received unchanged; docarchive does that. The extracted metadata is a convenience for filing and search. docarchive does not validate e-invoices against EN 16931 or XRechnung, does not check that the PDF view matches the XML, and makes no compliance promise (see [No compliance promise](#no-compliance-promise)).
+
+## Correspondence
+
+docarchive can keep business letters, above all e-mails, in the format in which they were received or sent: the original MIME message (`.eml`). It decides nothing for you. Which mails are business letters, and how long they are kept, is your call (see [No compliance promise](#no-compliance-promise)).
+
+### Account settings and modes
+
+Archive Settings → **E-Mail Accounts** has one row per Frappe Email Account (System Manager only):
+
+| Field | Default | Meaning |
+|---|---|---|
+| Email Account | – | The account. |
+| Mode | Off | **Off**: nothing is captured. **Manual**: every mail is captured, a person archives it. **Automatic**: every mail is captured and every qualifying mail becomes a Business Document right away. |
+| Outgoing Originals From | Frappe | **Frappe**: the original of a sent mail is rebuilt after sending. **Sent Folder**: it comes from the IMAP Sent folder through mailsync (see below). Only for IMAP accounts. |
+| Archive Internal Mails | off | Whether mails where every address is internal qualify at all. |
+| Contacts Count as Counterparty | off | Whether a Contact without a linked party (e.g. a private contact) may be set as counterparty automatically. |
+| Keep Unarchived Originals (Days) | 90 | After this, captured originals that were not archived are deleted. |
+| Own Company | empty | Own company for this account's mails. Empty: the normal resolution. |
+| Internal Domains | domain of the account's address | Comma-separated. |
+
+Capturing never makes receiving or sending fail: every capture runs in its own savepoint, and errors go to the Error Log ("docarchive mail capture") while the mail goes through.
+
+- **Incoming**: every mail that becomes a new Communication (IMAP, POP3, Frappe Mail) keeps its raw message as a private **Mail Original** with its SHA-256.
+- **Outgoing (Frappe)**: after a successful send, docarchive rebuilds the message that went to the first recipient from the Email Queue. This is the message Frappe built, not a byte copy of what went over the wire: print-format attachments are rendered again, and the copies of other recipients differ in tracking and unsubscribe links. The meta records this. Newsletters and queue rows with "redact message after send" are not captured.
+- **Outgoing (Sent Folder via mailsync)**: if the mail server stores sent mails itself (e.g. Microsoft 365, Gmail), the copy in the IMAP Sent folder is closer to what was sent. With the mailsync app installed, docarchive handles mailsync's `mailsync_mail_read` hook and captures each mail with origin `mailsync`. mailsync calls this hook once per mail, when it first reads the mail's UID. Mails that are already in the Sent folder when mailsync runs for the first time are not handed in. Neither app imports the other; each works on its own.
+
+### Automated and internal mails
+
+A mail counts as automated if it has a `List-Unsubscribe` header, an `Auto-Submitted` header other than `no`, or `Precedence: bulk`, `list` or `junk`. A mail is internal if every address in From, To and Cc belongs to an internal domain. Automatic mode never archives automated mails, and internal mails only when **Archive Internal Mails** is on. Internal mails get the seeded type **Internal Correspondence** (6 years, no counterparty required), all others **Correspondence** (6 years, counterparty required). In manual mode a person can still archive an automated or internal mail after a warning.
+
+### Archiving and discarding
+
+- The Communication form has **Archive** (disabled with the reason when no original was captured) and, once archived, a link "Archived as …". The Communication list has **Archive** for selected mails and reports the mails it could not archive in one message. It needs read access to the Communication and create permission on Business Document.
+- Each mail becomes one Business Document per own company and Message-ID (without a Message-ID: per SHA-256). Archiving it again returns the existing document. The document gets the `.eml` as its file, the subject as title, the date the mail was received or sent, `source_doctype` = Communication, `source_system` = `email`, the account, and the correspondence fields: channel, direction, time, `thread_key` and the Message-ID headers. These are server-only for mails and locked once archiving starts.
+- The counterparty comes from the Communication's links: Contacts with only internal addresses are dropped, a Contact stands for its linked Customer, Supplier etc. (or for itself, if **Contacts Count as Counterparty** is on and it has none). If exactly one candidate is left, it is set; otherwise the document waits in `documents_to_assign()`. The nightly run picks up links added later until archiving starts. Host `docarchive_assign` hooks still run.
+- **Discard** (form button and list action, with confirmation) removes a mail document that has not started archiving, together with its captured original. It works for captured and uploaded mails, needs write permission and is refused for archived documents and documents marked for legal hold.
+- Letters and faxes are uploaded like other documents with a type that has **Correspondence** set; the upload dialog then asks for channel, direction and time.
+
+### Cleanup
+
+A daily job deletes, per account, captured originals older than **Keep Unarchived Originals (Days)** that were not archived. It also removes mail documents of that age whose archiving has not started and that still have no counterparty, together with their original, unless they are marked for legal hold. So spam and private mail never reach WORM storage unless someone assigns them. Deleting a Communication deletes its unarchived original with it; an archived mail stays.
+
+### Viewer
+
+**Show e-mail** on a correspondence document reads the archived `.eml` itself (the same bytes the archive run reads) and shows the headers, the origin and whether the checksum matches. The body is sanitized on the server and shown in an `<iframe sandbox>` without scripts and with a Content-Security-Policy. Remote images are blocked until you click **Load images**; images embedded in the mail (`cid:`) show right away. Each attachment can be downloaded, extracted from the `.eml` on the fly, or filed with **File as document**, which opens the upload dialog with the counterparty and date of the mail and sets `source_doctype` / `source_name` to the mail's document.
+
+### Threads and gaps
+
+**Show thread** (on the document and as a row action in the counterparty panel) lists the archived mails with the same `thread_key` and own company in time order, with direction, date and sender or recipient. Every Message-ID in a mail's `References` or `In-Reply-To` that is not archived shows up as a gap, in the order of the References chain. A gap is either **Original available** (it can be archived from there), **In Frappe, no original** (e.g. received before capture was on) or **Not in Frappe** (only the Message-ID is known). A gap is information, not an error: the archive makes completeness checkable, it does not claim it.
+
+### Closing gaps with an `.eml` upload
+
+**Upload .eml** on a gap takes the mail as exported from a mail client. Its Message-ID must match the gap, otherwise the upload is refused. You pick the direction; own company and counterparty come from the thread. The `.eml` becomes a Mail Original without Communication, with origin `manual-upload`, and is archived through the same path as captured mails (same dedupe, fields and meta). The viewer and the meta show the origin, so it stays clear that a person supplied this original. The upload in the counterparty panel accepts `.eml` files the same way: it asks for the direction and files them for that counterparty.
+
+### Host apps: `docarchive.mail.capture`
+
+Apps that create Communications themselves can hand in the original bytes:
+
+```python
+from docarchive import mail
+
+mail.capture(communication, raw, "my-app")  # Communication doc, bytes (or str), origin
+```
+
+The account settings come from the Communication's `email_account`. Without an account, or with an account that is off or not configured, nothing is captured. `capture` returns the Mail Original's name, or `None`; it never raises. A Communication that already has an original keeps it. Automatic archiving and cleanup apply as for Frappe's own mails, and the origin goes into the meta.
+
+### Meta
+
+For correspondence types the `.meta.json` gets a `correspondence` section (`null` for other types): channel, direction, time, `thread_key` and, for e-mail, a `mail` section with Message-ID, `In-Reply-To`, References, From, To, Cc, subject, the sender's `Date`, account and origin (and, for mails rebuilt after sending, the note on recipients' copies).
+
+### Behaviour change: `source_name`
+
+`source_name` on Business Document is now a Data field instead of a Dynamic Link. Archived documents therefore no longer block deleting their source record (for example a Communication). The document, its file and its archived copies stay.
 
 ## Upload API
 

@@ -37,6 +37,24 @@ function einvoice_html(data) {
 		.join("")}</table>`;
 }
 
+function add_correspondence_buttons(frm) {
+	const doc = frm.doc;
+	if ((doc.file || "").toLowerCase().endsWith(".eml")) {
+		frm.add_custom_button(__("Show e-mail"), () => docarchive.show_mail(doc.name));
+	}
+	if (doc.thread_key) {
+		frm.add_custom_button(__("Show thread"), () => docarchive.show_thread(doc.name));
+	}
+	const mail = doc.source_doctype === "Communication" || doc.source_system === "email";
+	if (mail && !doc.archive_started_at && !doc.hold_on_archive && frm.perm[0].write) {
+		frm.add_custom_button(__("Discard"), () =>
+			docarchive.discard_documents([doc.name], (result) => {
+				if (result.discarded.includes(doc.name)) frappe.set_route("List", "Business Document");
+			}),
+		);
+	}
+}
+
 frappe.ui.form.on("Business Document", {
 	setup(frm) {
 		frappe.xcall("docarchive.counterparty.doctypes").then((doctypes) => {
@@ -57,6 +75,7 @@ frappe.ui.form.on("Business Document", {
 				frm.save();
 			});
 		}
+		add_correspondence_buttons(frm);
 		const status = frm.doc.archive_status || "Pending";
 		frm.page.set_indicator(__(status), ARCHIVE_COLORS[status]);
 		if (!frm.doc.archive_started_at && frm.perm[0].write && !frm.is_dirty()) {

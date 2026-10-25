@@ -540,3 +540,37 @@ of,von
 {0} objects could not be verified. See Mismatch Details.,{0} Objekte konnten nicht geprüft werden. Siehe Details zu Abweichungen.
 Main,Hauptdatei
 Documents marked for legal hold cannot be discarded.,"Dokumente, die für einen Legal Hold vorgemerkt sind, können nicht verworfen werden."
+Archive e-mails,E-Mails archivieren
+Archive it anyway?,Trotzdem archivieren?
+Archived as {0},Archiviert als {0}
+Checksum does not match,Prüfsumme stimmt nicht überein
+Checksum matches,Prüfsumme stimmt überein
+Discard,Verwerfen
+Discard {0} document(s) and their captured e-mails? This cannot be undone. Archived documents are kept.,{0} Dokument(e) und die erfassten E-Mails verwerfen? Das kann nicht rückgängig gemacht werden. Archivierte Dokumente bleiben erhalten.
+{0} document(s) discarded.,{0} Dokument(e) verworfen.
+{0} e-mail file(s) will be archived as correspondence.,{0} E-Mail-Datei(en) werden als Korrespondenz archiviert.
+File as document,Als Dokument ablegen
+Gap,Lücke
+"In Frappe, no original","In Frappe, ohne Original"
+Load images,Bilder laden
+Not in Frappe,Nicht in Frappe
+Only a Business Document can be the source of an upload.,Nur ein Geschäftsdokument kann die Quelle eines Uploads sein.
+Origin: {0},Herkunft: {0}
+Original available,Original vorhanden
+Read from the mailbox by mailsync,Von mailsync aus dem Postfach gelesen
+Rebuilt by Frappe after sending,Von Frappe nach dem Versand neu aufgebaut
+Received by Frappe,Von Frappe empfangen
+Received or sent at,Empfangen oder gesendet am
+Remote images are blocked.,Externe Bilder sind blockiert.
+Sender or recipient,Absender oder Empfänger
+Show e-mail,E-Mail anzeigen
+Show thread,Verlauf anzeigen
+The attachment could not be loaded.,Der Anhang konnte nicht geladen werden.
+This document has no thread.,Dieses Dokument hat keinen Verlauf.
+"This e-mail looks automated, e.g. a newsletter or an automatic reply.","Diese E-Mail sieht automatisch erzeugt aus, z. B. ein Newsletter oder eine automatische Antwort."
+This e-mail only has internal addresses.,Diese E-Mail hat nur interne Adressen.
+Thread,Verlauf
+Upload .eml,.eml hochladen
+Upload e-mails,E-Mails hochladen
+Uploaded as .eml by a person,Von einer Person als .eml hochgeladen
+Received through Frappe Mail,Über Frappe Mail empfangen

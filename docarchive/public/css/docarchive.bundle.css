@@ -134,3 +134,30 @@
 	margin: 0;
 	font-size: var(--text-sm);
 }
+
+.docarchive-mail-body {
+	width: 100%;
+	height: 60vh;
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius-md);
+	background: #fff;
+	resize: vertical;
+}
+
+.docarchive-mail-text {
+	max-height: 60vh;
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.docarchive-mail-headers td {
+	padding: 2px var(--padding-sm) 2px 0;
+	overflow-wrap: anywhere;
+}
+
+.docarchive-mail-integrity {
+	display: flex;
+	gap: var(--padding-sm);
+	align-items: center;
+}

@@ -64,7 +64,7 @@ class TestViewer(MailArchivingTestCase):
 			},
 		)
 		self.assertEqual((r["text"].strip(), r["html"], r["remote_images"]), ("Hello there", None, False))
-		self.assertEqual((r["attachments"], r["sha256_ok"]), ([], True))
+		self.assertEqual((r["attachments"], r["sha256_ok"], r["origin"]), ([], True, "t"))
 
 	def test_script_removed_and_remote_images_blocked(self):
 		r = viewer.render(

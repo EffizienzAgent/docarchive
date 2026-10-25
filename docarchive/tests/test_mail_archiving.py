@@ -296,6 +296,14 @@ class TestDeskApi(MailArchivingTestCase):
 		self.assertIn(comm.name, result["refused"])
 		self.assertFalse(frappe.db.exists(DOCUMENT, {"source_name": comm.name}))
 
+	def test_refused_archive_leaves_no_message(self):
+		comm = self.communication()
+		self.capture(comm=comm)
+		make_settings(default_own_company=None)
+		frappe.clear_messages()
+		archiving.archive_communications([comm.name])
+		self.assertEqual(frappe.local.message_log, [])
+
 	def test_archive_communications_needs_create_permission(self):
 		comm = self.communication()
 		self.capture(comm=comm)

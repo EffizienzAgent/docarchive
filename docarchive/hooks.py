@@ -9,6 +9,8 @@ required_apps = ["s3storage"]
 
 app_include_js = "docarchive.bundle.js"
 app_include_css = "docarchive.bundle.css"
+doctype_js = {"Communication": "public/js/communication.js"}
+doctype_list_js = {"Communication": "public/js/communication_list.js"}
 
 after_install = "docarchive.setup.apply_defaults"
 after_migrate = "docarchive.setup.apply_defaults"

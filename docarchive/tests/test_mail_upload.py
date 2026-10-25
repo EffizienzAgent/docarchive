@@ -160,3 +160,24 @@ class TestArchiveUpload(IntegrationTestCase):
 	def test_upload_refuses_non_mail(self):
 		file = upload(PDF, "mail.eml")
 		self.assertRaises(frappe.ValidationError, archiving.archive_upload, file.file_url, "Incoming")
+
+	def test_upload_sets_passed_counterparty(self):
+		party = make_party()
+		name = archiving.archive_upload(
+			upload(self.raw).file_url, "Incoming", counterparty_type="Contact", counterparty=party.name
+		)
+		self.assertEqual(frappe.db.get_value(DOCUMENT, name, "counterparty"), party.name)
+
+	def test_upload_counterparty_must_be_readable(self):
+		party = make_party()
+		frappe.set_user(make_manager("uploader-party@example.test"))
+		self.addCleanup(frappe.set_user, "Administrator")
+		file = upload(self.raw)
+		self.assertRaises(
+			frappe.PermissionError,
+			archiving.archive_upload,
+			file.file_url,
+			"Incoming",
+			counterparty_type="Contact",
+			counterparty=party.name,
+		)

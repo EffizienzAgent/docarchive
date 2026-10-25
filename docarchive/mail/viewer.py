@@ -13,6 +13,7 @@ from docarchive import content
 from docarchive.mail import headers
 
 DOCUMENT = "Business Document"
+ORIGINAL = "Mail Original"
 HEADERS = {"from": "From", "to": "To", "cc": "Cc", "date": "Date", "subject": "Subject"}
 BLOCKED_TAGS = {
 	"audio",
@@ -80,6 +81,7 @@ def render(name: str) -> dict:
 			for index, part in enumerate(message.iter_attachments())
 		],
 		"sha256_ok": content.sha256(raw) == doc.content_sha256,
+		"origin": frappe.db.get_value(ORIGINAL, {"business_document": name}, "origin"),
 	}
 
 
