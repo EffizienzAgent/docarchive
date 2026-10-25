@@ -207,3 +207,13 @@ class TestFollowUpJob(FollowThreadCase):
 			self.assertEqual(archiving.follow_up(["DOC-1"]), 0)
 		log_error.assert_called_once()
 		self.assertEqual(len(frappe.local.message_log), messages)
+
+
+class TestSameMessageId(FollowThreadCase):
+	def test_copy_of_a_filed_automated_mail_is_linked(self):
+		bulk_id = message_id()
+		headers = {"Message-ID": f"<{bulk_id}>", "List-Unsubscribe": "<mailto:x@example.test>"}
+		comm, bulk = self.mail("2026-03-10 09:00:00", **headers)
+		archiving.archive_communications([comm.name])
+		_, copy = self.mail("2026-03-10 09:00:00", **headers)
+		self.assertEqual(self.document(copy), self.document(bulk))

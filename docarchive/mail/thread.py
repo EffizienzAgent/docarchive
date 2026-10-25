@@ -231,8 +231,6 @@ def follows(original_name: str, row) -> bool:
 	)
 	if not (original and original.thread_key and original.mail_at):
 		return False
-	if original.automated or (original.internal and not row.archive_internal):
-		return False
 	own_company = _own_company(original, row)
 	if not own_company:
 		return False
@@ -240,6 +238,8 @@ def follows(original_name: str, row) -> bool:
 		DOCUMENT, {"own_company": own_company, "mail_message_id": original.message_id}
 	):
 		return True
+	if original.automated or (original.internal and not row.archive_internal):
+		return False
 	documents = thread_documents(own_company, original.thread_key, _original_ids(original))
 	return any(get_datetime(doc.correspondence_at) <= get_datetime(original.mail_at) for doc in documents[:1])
 
