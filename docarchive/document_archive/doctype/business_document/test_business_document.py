@@ -1,4 +1,5 @@
 import hashlib
+from unittest.mock import patch
 
 import frappe
 import frappe.utils.response as response
@@ -533,6 +534,23 @@ class TestBusinessDocumentFiles(BusinessDocumentTestCase):
 			self.assertEqual(
 				content.read_bytes("/private/files/anything.pdf"), b"stored:/private/files/anything.pdf"
 			)
+
+	def test_read_bytes_reads_from_s3storage_when_active(self):
+		with (
+			patch("s3storage.storage.is_active", return_value=True),
+			patch("s3storage.storage.get", return_value=b"from s3") as get,
+		):
+			self.assertEqual(content.read_bytes("/private/files/only-in-s3.pdf"), b"from s3")
+			self.assertIsNone(content.read_bytes("/private/files/../../site_config.json"))
+		get.assert_called_once_with("private/files/only-in-s3.pdf")
+
+	def test_read_bytes_falls_back_to_local_files_with_s3storage(self):
+		local = make_file(PDF)
+		with (
+			patch("s3storage.storage.is_active", return_value=True),
+			patch("s3storage.storage.get", return_value=None),
+		):
+			self.assertEqual(content.read_bytes(local.file_url), PDF)
 
 
 class TestBusinessDocumentHardening(IntegrationTestCase):
