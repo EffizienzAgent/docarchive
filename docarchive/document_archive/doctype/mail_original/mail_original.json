@@ -240,7 +240,8 @@
    "fieldtype": "Data",
    "label": "Audit Pending",
    "read_only": 1,
-   "hidden": 1
+   "hidden": 1,
+   "search_index": 1
   }
  ],
  "permissions": [

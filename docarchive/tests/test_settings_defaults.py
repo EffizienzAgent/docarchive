@@ -69,3 +69,17 @@ class TestSettingsDefaults(IntegrationTestCase):
 			self.assertTrue(export_package.brand()["credit"], value)
 		store("export_show_credit", "0")
 		self.assertFalse(export_package.brand()["credit"])
+
+
+class TestMailOriginalIndexes(IntegrationTestCase):
+	def indexes(self):
+		return {row[2] for row in frappe.db.sql("show index from `tabMail Original`")}
+
+	def test_audit_pending_is_indexed(self):
+		self.assertIn("audit_pending_index", self.indexes())
+
+	def test_stale_index_is_dropped(self):
+		from docarchive.patches import drop_stale_mail_index
+
+		drop_stale_mail_index.execute()
+		self.assertNotIn(drop_stale_mail_index.STALE, self.indexes())
