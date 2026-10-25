@@ -25,13 +25,28 @@ class TestKeys(IntegrationTestCase):
 	def test_key_layout(self):
 		self.assertEqual(
 			keys.object_key(doc(), "outgoing-invoice", "PDF"),
-			"acme-gmbh/2026/outgoing-invoice/org-00042/2026-03-15_re-2026-017_doc-2026-00001.pdf",
+			"acme-gmbh/2026/outgoing-invoice/org-00042/DOC-2026-00001_2026-03-15_RE-2026-017.pdf",
 		)
 
-	def test_placeholders(self):
+	def test_without_number_the_title_is_used(self):
 		self.assertEqual(
-			keys.object_key(doc(counterparty=None, document_number=None), "bank-statement", "pdf"),
-			"acme-gmbh/2026/bank-statement/ohne-gegenpartei/2026-03-15_ohne-nummer_doc-2026-00001.pdf",
+			keys.object_key(
+				doc(counterparty=None, document_number=None, title="Re: Archivtest Ärger"),
+				"correspondence",
+				"eml",
+			),
+			"acme-gmbh/2026/correspondence/ohne-gegenpartei/DOC-2026-00001_2026-03-15_re-archivtest-aerger.eml",
+		)
+		self.assertTrue(
+			keys.object_key(doc(document_number=None, title="x" * 200), "contract", "pdf").endswith(
+				"_2026-03-15_" + "x" * keys.MAX_TITLE + ".pdf"
+			)
+		)
+
+	def test_without_number_and_title_only_id_and_date(self):
+		self.assertEqual(
+			keys.object_key(doc(document_number=None, title=None), "bank-statement", "pdf"),
+			"acme-gmbh/2026/bank-statement/org-00042/DOC-2026-00001_2026-03-15.pdf",
 		)
 
 	def test_segments_are_sanitized(self):
@@ -39,7 +54,7 @@ class TestKeys(IntegrationTestCase):
 			doc(counterparty="../Müller & Söhne/..", document_number="  ä/ö\\ü:ß  "), "contract", "p/df"
 		)
 		self.assertEqual(
-			key, "acme-gmbh/2026/contract/mueller-soehne/2026-03-15_ae-oe-ue-ss_doc-2026-00001.p-df"
+			key, "acme-gmbh/2026/contract/mueller-soehne/DOC-2026-00001_2026-03-15_ae-oe-ue-ss.p-df"
 		)
 		self.assertNotIn("..", key)
 

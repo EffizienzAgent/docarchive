@@ -1,3 +1,4 @@
+import base64
 import email
 import email.policy
 import io
@@ -304,7 +305,134 @@ class TestMailPreview(ExportTestCase):
 		self.assertIn("Plain body", archive.read("previews/a/mail.eml.html").decode())
 
 
+PNG = base64.b64decode(
+	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+)
+
+
+class TestMailRendering(ExportTestCase):
+	def parse(self, raw):
+		return email.message_from_bytes(raw, policy=email.policy.default)
+
+	def test_inline_image_of_apple_mail_becomes_a_data_uri(self):
+		raw = (
+			b"From: Alice <alice@example.com>\r\nTo: bob@example.com\r\nSubject: Logo\r\n"
+			b"MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary=R\r\n\r\n"
+			b"--R\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
+			b'<p>Siehe Logo</p><img src="cid:logo@apple"><img src="https://t.example/p.gif">\r\n'
+			b"--R\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\n"
+			b"Content-ID: <logo@apple>\r\nContent-Disposition: inline; filename=logo.png\r\n\r\n"
+			+ base64.b64encode(PNG)
+			+ b"\r\n--R--\r\n"
+		)
+		body, attachments = export_package.render_mail(self.parse(raw))
+		self.assertIn('src="data:image/png;base64,' + base64.b64encode(PNG).decode() + '"', body)
+		self.assertNotIn("cid:logo@apple", body)
+		self.assertIn("img-src data:", body)
+		self.assertEqual(attachments, [])
+
+	def test_attachment_is_extracted(self):
+		raw = (
+			b"From: a@example.com\r\nSubject: Rechnung\r\nMIME-Version: 1.0\r\n"
+			b"Content-Type: multipart/mixed; boundary=M\r\n\r\n"
+			b"--M\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nAnbei die Rechnung.\r\n"
+			b"--M\r\nContent-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\n"
+			b'Content-Disposition: attachment; filename="rechnung.pdf"\r\n\r\n'
+			+ base64.b64encode(b"%PDF-1.7 test")
+			+ b"\r\n--M--\r\n"
+		)
+		body, attachments = export_package.render_mail(self.parse(raw))
+		self.assertIn("Anbei die Rechnung.", body)
+		self.assertEqual(attachments, [("rechnung.pdf", b"%PDF-1.7 test")])
+
+	def test_transfer_encodings_and_encoded_headers(self):
+		raw = (
+			b"From: =?utf-8?q?J=C3=BCrgen_M=C3=BCller?= <j@example.com>\r\n"
+			b"Subject: =?utf-8?b?w4RuZGVydW5nIGRlciBSZWNobnVuZw==?=\r\nMIME-Version: 1.0\r\n"
+			b"Content-Type: multipart/alternative; boundary=A\r\n\r\n"
+			b"--A\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n"
+			b"Gr=C3=BC=C3=9Fe\r\n"
+			b"--A\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+			+ base64.b64encode("<p>Grüße aus Köln</p>".encode())
+			+ b"\r\n--A--\r\n"
+		)
+		body, _ = export_package.render_mail(self.parse(raw))
+		self.assertIn("Grüße aus Köln", body)
+		self.assertIn("Jürgen Müller", body)
+		self.assertIn("Änderung der Rechnung", body)
+
+	def test_plain_text_only_is_escaped_and_labels_always_show(self):
+		raw = b"From: a@example.com\r\nSubject: Hinweis\r\n\r\n<b>kein HTML</b>\r\nZeile 2"
+		body, attachments = export_package.render_mail(self.parse(raw))
+		self.assertIn("&lt;b&gt;kein HTML&lt;/b&gt;", body)
+		self.assertIn("<pre>", body)
+		self.assertIn("white-space:pre-wrap", body)
+		for label in ("Subject", "From", "To", "Cc", "Date"):
+			self.assertIn(f"<th>{label}</th>", body)
+		self.assertEqual(attachments, [])
+
+	def test_package_lists_mail_attachments_for_the_viewer(self):
+		doc = self.archived()
+		raw = (
+			b"From: a@example.com\r\nSubject: Hi\r\nMIME-Version: 1.0\r\n"
+			b"Content-Type: multipart/mixed; boundary=M\r\n\r\n"
+			b"--M\r\nContent-Type: text/plain\r\n\r\nBody\r\n"
+			b'--M\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename="../../evil name.txt"\r\n\r\n'
+			b"data\r\n--M--\r\n"
+		)
+		path = frappe.get_site_path("private", "files", "export-attachment.eml")
+		with open(path, "wb") as f:
+			f.write(raw)
+		buffer = io.BytesIO()
+		package = export_package.Package(buffer, {"export": "x"})
+		item = {"key": doc.object_key.rsplit(".", 1)[0] + ".eml", "version_id": "v", "sha256": None}
+		package.pending[doc.name] = {"objects": {}, "metas": {}, "previews": {}}
+		package.add_object(doc, item, {"sha256": "s", "stored_sha256": "s", "size": len(raw), "path": path})
+		entry = package.pending[doc.name]
+		[listed] = entry["mail_attachments"][item["key"]]
+		self.assertEqual((listed["name"], listed["size"]), ("evil name.txt", 4))
+		self.assertTrue(listed["download_script"].endswith("/1-evil name.txt.js"))
+		package.close()
+		script = zipfile.ZipFile(buffer).read(listed["download_script"]).decode()
+		self.assertEqual(
+			script, f'window.docarchiveDownload("evil name.txt", "{base64.b64encode(b"data").decode()}");\n'
+		)
+
+
 class TestPaths(ExportTestCase):
+	def test_old_scheme_documents_get_the_new_export_names(self):
+		doc = frappe._dict(
+			name="DOC-1",
+			object_key="acme/2026/invoice/org-1/2026-03-15_inv-1_doc-1.pdf",
+			archive_meta=json.dumps({"document": {"id": "DOC-1", "date": "2026-03-15", "number": "INV 1"}}),
+		)
+		base = "acme/2026/invoice/org-1/DOC-1_2026-03-15_INV-1"
+		for old, new in (
+			(doc.object_key, f"{base}.pdf"),
+			("acme/2026/invoice/org-1/2026-03-15_inv-1_doc-1__att-1-x.xml", f"{base}__att-1-x.xml"),
+			(doc.object_key + ".meta.json", f"{base}.pdf.meta.json"),
+			(doc.object_key + ".meta.2.json", f"{base}.pdf.meta.2.json"),
+			("other/key.pdf", "other/key.pdf"),
+		):
+			self.assertEqual(export_package.export_key(doc, old), new)
+
+	def test_eml_gets_a_download_script(self):
+		doc = self.archived()
+		raw = b"From: a@example.com\r\nSubject: Hi\r\n\r\nBody"
+		path = frappe.get_site_path("private", "files", "export-download.eml")
+		with open(path, "wb") as f:
+			f.write(raw)
+		buffer = io.BytesIO()
+		package = export_package.Package(buffer, {"export": "x"})
+		item = {"key": "a/mail.eml", "version_id": "v", "sha256": None}
+		package.add_object(doc, item, {"sha256": "s", "stored_sha256": "s", "size": len(raw), "path": path})
+		script = package.pending[doc.name]["downloads"]["a/mail.eml"]
+		package.close()
+		self.assertEqual(script, "previews/a/mail.eml.download.js")
+		body = zipfile.ZipFile(buffer).read(script).decode()
+		self.assertIn(base64.b64encode(raw).decode(), body)
+		self.assertTrue(body.startswith('window.docarchiveDownload("mail.eml", "'))
+
 	def test_archive_paths_stay_inside_the_package(self):
 		self.assertEqual(export_package.archive_path("../../etc/passwd"), "documents/etc/passwd")
 		self.assertEqual(export_package.preview_path("a/b.eml"), "previews/a/b.eml.html")

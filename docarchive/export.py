@@ -28,6 +28,7 @@ STALE_HOURS = 7
 TEMP_PREFIX = "docarchive-export-"
 DEFAULT_EXPIRY_DAYS = 7
 META_SIZE = 64 * 1024
+MAIL_OVERHEAD = 2.5
 
 
 class ExportError(frappe.ValidationError):
@@ -116,7 +117,8 @@ def copy_on(doc, target_name):
 
 def planned_size(doc) -> int:
 	files = (doc.archive_size or 0) + sum(row.archive_size or 0 for row in doc.get("attachments") or [])
-	return files + META_SIZE * (2 + (doc.retention_extensions or 0))
+	mail = (doc.archive_size or 0) * MAIL_OVERHEAD if (doc.object_key or "").lower().endswith(".eml") else 0
+	return files + int(mail) + META_SIZE * (2 + (doc.retention_extensions or 0))
 
 
 def part_limit() -> int:

@@ -240,6 +240,19 @@
 	border-radius: var(--border-radius-md);
 }
 
+.docarchive-preview-mail {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: auto;
+}
+
+.docarchive-preview-mail .docarchive-mail-body {
+	flex: 1;
+	min-height: 320px;
+}
+
 .docarchive-preview-image {
 	object-fit: contain;
 	background: var(--subtle-fg);

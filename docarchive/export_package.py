@@ -9,13 +9,15 @@ import json
 import re
 import zipfile
 from pathlib import Path, PurePosixPath
+from urllib.parse import unquote
 
 import frappe
 from frappe import _
 from frappe.utils import cint, get_datetime, now_datetime
 from frappe.utils.html_utils import sanitize_html
 
-from docarchive import content, counterparty, retention, run, settings
+from docarchive import content, counterparty, keys, retention, run, settings
+from docarchive.mail import viewer as mail_viewer
 
 VIEWER = Path(__file__).with_name("export_viewer.html")
 VIEWER_CORE = Path(__file__).with_name("export_viewer_core.js")
@@ -41,6 +43,8 @@ HEX_COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 STORED = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".tif", ".tiff", ".zip", ".gz", ".docx", ".xlsx"}
 SIDECAR = re.compile(r"\.meta\.(\d+)\.json$")
 MAIL_PREVIEW_LIMIT = 50 * 1024 * 1024
+DOWNLOAD_CHUNK = 3 * 1024 * 1024
+CID_REFERENCE = re.compile(r"""cid:([^"'\s)>]+)""", re.IGNORECASE)
 SCRIPT_UNSAFE = ("&", "<", ">", "\u2028", "\u2029")
 MAIL_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
 CSV_FIELDS = (
@@ -93,6 +97,31 @@ def audit_path(key) -> str:
 	return "audit/" + archive_path(key).removeprefix("documents/").removeprefix("_audit/")
 
 
+def export_key(doc, key) -> str:
+	"""Key under the current file name scheme, also for documents archived under an older one.
+	The name comes from the frozen archive metadata, so it does not change after archiving."""
+	if not doc.get("object_key"):
+		return key
+	base = doc.object_key.rpartition(".")[0] or doc.object_key
+	if not key.startswith(base) or not key[len(base) :].startswith((".", "__att-")):
+		return key
+	document = (json.loads(doc.archive_meta) if doc.get("archive_meta") else {}).get("document") or {}
+	name = keys.file_base(
+		document.get("id") or doc.name,
+		document.get("date") or doc.document_date,
+		document.get("number"),
+		document.get("title"),
+	)
+	folder = base.rpartition("/")[0]
+	return f"{folder}/{name}{key[len(base) :]}" if folder else f"{name}{key[len(base) :]}"
+
+
+def file_chunks(source):
+	with open(source, "rb") as f:
+		while chunk := f.read(DOWNLOAD_CHUNK):
+			yield chunk
+
+
 def preview_path(key) -> str:
 	return "previews/" + archive_path(key).removeprefix("documents/") + ".html"
 
@@ -124,14 +153,14 @@ class Package:
 			)
 		path = None
 		if result.get("path"):
-			path = archive_path(key)
+			path = archive_path(export_key(doc, key))
 			suffix = PurePosixPath(key).suffix.lower()
 			compress = zipfile.ZIP_STORED if suffix in STORED else zipfile.ZIP_DEFLATED
 			self.zip.write(result["path"], path, compress_type=compress)
 			if key == doc.meta_key or SIDECAR.search(key):
 				entry["metas"][key] = json.loads(Path(result["path"]).read_bytes())
-			elif suffix == ".eml" and result["size"] <= MAIL_PREVIEW_LIMIT:
-				self.add_mail_preview(entry, key, result["path"])
+			elif suffix == ".eml":
+				self.add_mail(entry, key, path, result["path"], result["size"])
 		entry["objects"][key] = {
 			"key": key,
 			"path": path,
@@ -141,15 +170,37 @@ class Package:
 			"verified": error is None,
 		}
 
-	def add_mail_preview(self, entry, key, source):
+	def add_mail(self, entry, key, path, source, size):
+		"""Download script for an .eml at package path `path`, and its preview with attachments."""
+		stem = preview_path(path.removeprefix("documents/")).removesuffix(".html")
+		self.write_download(f"{stem}.download.js", PurePosixPath(path).name, file_chunks(source))
+		entry.setdefault("downloads", {})[key] = f"{stem}.download.js"
+		if size > MAIL_PREVIEW_LIMIT:
+			return
 		try:
 			with open(source, "rb") as f:
 				message = email.message_from_binary_file(f, policy=email.policy.default)
-			body = mail_preview(message)
+			body, attachments = render_mail(message)
 		except Exception:
 			return
-		self.zip.writestr(preview_path(key), body, compress_type=zipfile.ZIP_DEFLATED)
-		entry["previews"][key] = preview_path(key)
+		self.zip.writestr(f"{stem}.html", body, compress_type=zipfile.ZIP_DEFLATED)
+		entry["previews"][key] = f"{stem}.html"
+		listed = []
+		for number, (name, data) in enumerate(attachments, 1):
+			script = f"{stem}.files/{number}-{safe_file_name(name, number)}.js"
+			self.write_download(script, name, [data])
+			listed.append({"name": name, "size": len(data), "download_script": script})
+		entry.setdefault("mail_attachments", {})[key] = listed
+
+	def write_download(self, target, name, chunks):
+		"""A script the viewer loads on click to save the bytes through a Blob. Browsers ignore
+		`download` on file: links and would open mails as text or run active attachments."""
+		with self.zip.open(target, "w", force_zip64=True) as out:
+			out.write(f'window.docarchiveDownload({json.dumps(name)}, "'.encode())
+			for chunk in chunks:
+				for start in range(0, len(chunk), DOWNLOAD_CHUNK):
+					out.write(base64.b64encode(chunk[start : start + DOWNLOAD_CHUNK]))
+			out.write(b'");\n')
 
 	def finish_document(self, doc, copy):
 		entry = self.pending.pop(doc.name)
@@ -231,6 +282,13 @@ def fallback_meta(doc) -> dict:
 	return json.loads(doc.archive_meta) if doc.archive_meta else {}
 
 
+def shown_name(described, found) -> str | None:
+	"""Mail originals are stored under generated names; the package name tells more."""
+	if found.get("path") and str(found["path"]).lower().endswith(".eml"):
+		return PurePosixPath(found["path"]).name
+	return described.get("name")
+
+
 def document_row(doc, copy, entry) -> dict:
 	meta = latest_meta(entry, doc) or fallback_meta(doc)
 	document = meta.get("document") or {}
@@ -241,11 +299,13 @@ def document_row(doc, copy, entry) -> dict:
 		files.append(
 			{
 				**found,
-				"name": described.get("name"),
+				"name": shown_name(described, found),
 				"role": described.get("role"),
 				"role_label": _(described.get("role")) if described.get("role") else None,
 				"title": described.get("title"),
 				"preview": entry["previews"].get(described.get("key")),
+				"mail_attachments": entry.get("mail_attachments", {}).get(described.get("key"), []),
+				"download_script": entry.get("downloads", {}).get(described.get("key")),
 			}
 		)
 	described_keys = {file["key"] for file in files}
@@ -355,6 +415,8 @@ def labels() -> dict:
 		"open_original": _("Open original"),
 		"download_original": _("Download original"),
 		"rendered_preview": _("Rendered preview for reading only. The archived original is the file above."),
+		"mail_attachments": _("Attachments"),
+		"download_blocked": _("The browser blocked the download. The mail is in the package at {0}."),
 		"no_preview": _("No preview for this file type. Open or download the original."),
 		"download_only": _("This file type is only offered as a download, so it cannot run in the viewer."),
 		"date": _("Document Date"),
@@ -467,30 +529,47 @@ def viewer(data, brand=None) -> str:
 
 
 def mail_preview(message) -> str:
+	return render_mail(message)[0]
+
+
+def safe_file_name(name, number) -> str:
+	cleaned = re.sub(r"[^\w.\- ]", "_", PurePosixPath(name or "").name).strip(" .")
+	return cleaned[:120] or f"attachment-{number}"
+
+
+def mail_attachments(message) -> list[tuple[str, bytes]]:
+	"""Attachments, without the inline images the HTML body shows."""
+	html_body = mail_viewer._text(message.get_body(preferencelist=("html",))) or ""
+	shown = {unquote(cid) for cid in CID_REFERENCE.findall(html_body)}
+	result = []
+	for index, part in enumerate(message.iter_attachments()):
+		cid = str(part.get("Content-ID") or "").strip().strip("<>")
+		if cid and cid in shown and part.get_content_maintype() == "image":
+			continue
+		result.append((mail_viewer._file_name(part, index), mail_viewer._bytes(part)))
+	return result
+
+
+def render_mail(message) -> tuple[str, list[tuple[str, bytes]]]:
+	"""Preview page of a mail and its attachments. Remote content stays blocked by the CSP."""
 	rows = "".join(
-		f"<tr><th>{html.escape(label)}</th><td>{html.escape(str(message.get(header) or ''))}</td></tr>"
+		f"<tr><th>{html.escape(label)}</th><td>{html.escape(str(message.get(header) or '')) or '&ndash;'}</td></tr>"
 		for header, label in (
+			("Subject", _("Subject")),
 			("From", _("From")),
 			("To", _("To")),
 			("Cc", _("Cc")),
 			("Date", _("Date")),
-			("Subject", _("Subject")),
 		)
-		if message.get(header)
 	)
-	part = message.get_body(preferencelist=("html", "plain"))
-	if part is None:
-		body = ""
-	elif part.get_content_type() == "text/html":
-		body = sanitize_html(
-			part.get_content(), always_sanitize=True, disallowed_tags={"html", "head", "meta", "link", "body"}
+	body = mail_viewer._html(message)[0]
+	if body is None:
+		body = (
+			f"<pre>{html.escape(mail_viewer._text(message.get_body(preferencelist=('plain',))) or '')}</pre>"
 		)
-	else:
-		body = f"<pre>{html.escape(part.get_content())}</pre>"
-	names = [p.get_filename() for p in message.iter_attachments() if p.get_filename()]
-	label = html.escape(_("Attachments"))
-	attachments = f"<p class='attachments'>{label}: {html.escape(', '.join(names))}</p>" if names else ""
-	return f"""<!doctype html>
+	attachments = mail_attachments(message)
+	return (
+		f"""<!doctype html>
 <html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="{MAIL_CSP}">
 <style>
@@ -498,9 +577,11 @@ body{{font:14px/1.5 system-ui,sans-serif;margin:16px;color:#1f2328;background:#f
 table{{border-collapse:collapse;margin-bottom:12px}}
 th{{text-align:left;padding:2px 12px 2px 0;color:#59636e;font-weight:500;vertical-align:top}}
 pre{{white-space:pre-wrap;font:inherit}}
-.attachments{{color:#59636e}}
+img{{max-width:100%}}
 hr{{border:0;border-top:1px solid #d1d9e0}}
 </style></head><body>
-<table>{rows}</table>{attachments}<hr>
+<table>{rows}</table><hr>
 {body}
-</body></html>"""
+</body></html>""",
+		attachments,
+	)
