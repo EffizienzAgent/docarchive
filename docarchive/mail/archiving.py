@@ -111,12 +111,34 @@ def status(communication: str) -> dict:
 		)
 		or frappe._dict()
 	)
+	document = original.business_document
 	return {
 		"original": bool(original.name),
-		"business_document": original.business_document or None,
+		"archived": bool(document),
+		"business_document": document
+		if document and frappe.has_permission(DOCUMENT, "read", document)
+		else None,
 		"automated": bool(original.automated),
 		"internal": bool(original.internal),
 		"reason": refusal(original.name),
+	}
+
+
+@frappe.whitelist()
+def warnings(names) -> dict:
+	names = _names(names)
+	for name in names:
+		frappe.has_permission(COMMUNICATION, "read", name, throw=True)
+	rows = frappe.get_all(
+		ORIGINAL,
+		filters={"communication": ("in", names or [""]), "business_document": ("is", "not set")},
+		fields=["communication", "automated", "internal"],
+	)
+	order = {name: index for index, name in enumerate(names)}
+	rows.sort(key=lambda row: order[row.communication])
+	return {
+		"automated": [row.communication for row in rows if row.automated],
+		"internal": [row.communication for row in rows if row.internal and not row.automated],
 	}
 
 
@@ -152,24 +174,30 @@ def archive_upload(
 	own_company: str | None = None,
 	counterparty_type: str | None = None,
 	counterparty: str | None = None,
+	source_doctype: str | None = None,
+	source_name: str | None = None,
 ) -> str:
+	from docarchive.documents import check_source
 	from docarchive.mail import originals
 
 	frappe.has_permission(DOCUMENT, "create", throw=True)
 	if counterparty_type and counterparty:
 		frappe.has_permission(counterparty_type, "read", counterparty, throw=True)
+	check_source(source_doctype, source_name)
 	if direction not in DIRECTIONS:
 		frappe.throw(_("The direction must be Incoming or Outgoing."))
 	file_name = _upload_name(file_url)
 	raw = content.read_bytes(file_url)
 	if raw is None:
-		frappe.throw(_("File {0} does not exist.").format(file_url))
+		frappe.throw(_("File {0} does not exist.").format(frappe.utils.escape_html(file_url)))
 	parsed = headers.parse(raw)
 	if not (parsed.sender or parsed.message_id or parsed.date_header):
 		frappe.throw(_("This file is not an e-mail."))
 	if gap_message_id and parsed.message_id != gap_message_id:
 		frappe.throw(
-			_("This e-mail is not the missing one: its Message-ID is {0}.").format(parsed.message_id or "-")
+			_("This e-mail is not the missing one: its Message-ID is {0}.").format(
+				frappe.utils.escape_html(parsed.message_id or "-")
+			)
 		)
 	thread = _gap_thread(gap_message_id) if gap_message_id and not own_company else frappe._dict()
 	company = settings.own_company_for(originals.mail_time(parsed), own_company or thread.own_company)
@@ -178,7 +206,7 @@ def archive_upload(
 		original = originals.create_upload(raw, parsed, direction)
 		name = archive(original, company)
 		party = frappe._dict(counterparty_type=counterparty_type, counterparty=counterparty)
-		_set_counterparty(name, party if counterparty_type and counterparty else thread)
+		_complete(name, party if counterparty_type and counterparty else thread, source_doctype, source_name)
 	frappe.delete_doc("File", file_name, ignore_permissions=True)
 	return name
 
@@ -230,11 +258,15 @@ def _gap_thread(message_id):
 	return frappe._dict()
 
 
-def _set_counterparty(name, thread):
-	if not thread.counterparty:
+def _complete(name, party, source_doctype, source_name):
+	if not (party.counterparty or source_doctype):
 		return
 	doc = frappe.get_doc(DOCUMENT, name)
-	doc.counterparty_type, doc.counterparty = thread.counterparty_type, thread.counterparty
+	if party.counterparty:
+		doc.counterparty_type, doc.counterparty = party.counterparty_type, party.counterparty
+	if source_doctype:
+		doc.source_doctype, doc.source_name = source_doctype, source_name
+		doc.flags.archive_write = True
 	doc.save(ignore_permissions=True)
 
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { is_eml, mail_document, size_label } from "./mail_core.js";
+import { escape_html, is_eml, mail_document, mail_title, safe_file_name, size_label } from "./mail_core.js";
 
 test("remote images are blocked by policy until asked for", () => {
 	assert.match(mail_document("<p>Hi</p>"), /img-src data:"/);
@@ -23,4 +23,17 @@ test("eml detection and sizes", () => {
 	assert.equal(size_label(512), "512 B");
 	assert.equal(size_label(2048), "2.0 KB");
 	assert.equal(size_label(3 * 1024 * 1024), "3.0 MB");
+});
+
+test("the dialog title escapes the subject", () => {
+	const title = mail_title("<img src=x onerror=alert(1)>", "(no subject)");
+	assert.equal(title, "&lt;img src=x onerror=alert(1)&gt;");
+	assert.equal(mail_title("", "(no <subject>)"), "(no &lt;subject&gt;)");
+	assert.equal(escape_html(`"'&`), "&quot;&#39;&amp;");
+});
+
+test("attachment file names lose markup characters", () => {
+	assert.equal(safe_file_name('<img src=x onerror="alert(1)">.pdf'), "img src=x onerror=alert(1).pdf");
+	assert.equal(safe_file_name("Rechnung 2026.pdf"), "Rechnung 2026.pdf");
+	assert.equal(safe_file_name("<>"), "attachment");
 });

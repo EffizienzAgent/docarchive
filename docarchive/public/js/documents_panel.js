@@ -469,6 +469,8 @@ docarchive.upload_documents = function ({
 		if (!emls.length) return details();
 		docarchive.archive_emls(emls, {
 			...party,
+			source_doctype: defaults?.source_name ? defaults.source_doctype : undefined,
+			source_name: defaults?.source_name,
 			on_saved: (names) => {
 				if (names.length && on_saved) on_saved();
 				details();

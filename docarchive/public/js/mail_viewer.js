@@ -97,7 +97,7 @@ function file_attachment(name, source, file) {
 			docarchive.upload_documents({
 				counterparty_type: source.counterparty_type,
 				counterparty: source.counterparty,
-				files: [new File([blob], file.file_name, { type: file.content_type })],
+				files: [new File([blob], core.safe_file_name(file.file_name), { type: file.content_type })],
 				defaults: {
 					source_doctype: DOCUMENT,
 					source_name: name,
@@ -115,7 +115,7 @@ docarchive.show_mail = function (name) {
 	]).then(([mail, { message: source }]) => {
 		const can_file = frappe.model.can_create(DOCUMENT) && source.counterparty;
 		const dialog = new frappe.ui.Dialog({
-			title: mail.headers.subject || __("(no subject)"),
+			title: core.mail_title(mail.headers.subject, __("(no subject)")),
 			size: "extra-large",
 			fields: [{ fieldname: "mail", fieldtype: "HTML" }],
 		});
@@ -217,7 +217,29 @@ function report(lines, title) {
 	frappe.msgprint({ title, message: lines.join("<br>"), indicator: "blue" });
 }
 
+function warning_text(names, { automated, internal }) {
+	if (names.length === 1) {
+		const single = automated.length
+			? __("This e-mail looks automated, e.g. a newsletter or an automatic reply.")
+			: __("This e-mail only has internal addresses.");
+		return `${single} ${__("Archive it anyway?")}`;
+	}
+	return __(
+		"Of {0} selected e-mails, {1} look automated and {2} only have internal addresses. Archive them anyway?",
+		[names.length, automated.length, internal.length],
+	);
+}
+
 docarchive.archive_communications = function (names, on_done) {
+	return frappe.xcall(`${ARCHIVING}.warnings`, { names }).then((found) => {
+		if (!found.automated.length && !found.internal.length) return archive_mails(names, on_done);
+		return new Promise((resolve) =>
+			frappe.confirm(warning_text(names, found), () => resolve(archive_mails(names, on_done))),
+		);
+	});
+};
+
+function archive_mails(names, on_done) {
 	return frappe
 		.call({ method: `${ARCHIVING}.archive_communications`, args: { names }, freeze: true })
 		.then(({ message: result }) => {
@@ -240,7 +262,7 @@ docarchive.archive_communications = function (names, on_done) {
 			on_done && on_done(result);
 			return result;
 		});
-};
+}
 
 docarchive.discard_documents = function (names, on_done) {
 	frappe.confirm(
@@ -306,7 +328,7 @@ function ask_direction(count, on_direction, on_cancel) {
 
 docarchive.archive_emls = function (
 	files,
-	{ counterparty_type, counterparty, gap_message_id, on_saved },
+	{ counterparty_type, counterparty, gap_message_id, source_doctype, source_name, on_saved },
 ) {
 	const file_urls = files.map((file) => file.file_url);
 	const discard = () => frappe.xcall("docarchive.documents.discard_uploads", { file_urls });
@@ -323,6 +345,8 @@ docarchive.archive_emls = function (
 							gap_message_id,
 							counterparty_type,
 							counterparty,
+							source_doctype,
+							source_name,
 						}),
 					);
 				} catch {

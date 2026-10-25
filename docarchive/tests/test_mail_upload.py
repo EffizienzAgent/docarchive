@@ -181,3 +181,27 @@ class TestArchiveUpload(IntegrationTestCase):
 			counterparty_type="Contact",
 			counterparty=party.name,
 		)
+
+	def test_upload_keeps_source_document(self):
+		source = make_business_document()
+		name = archiving.archive_upload(
+			upload(self.raw).file_url,
+			"Incoming",
+			source_doctype=DOCUMENT,
+			source_name=source.name,
+		)
+		self.assertEqual(
+			frappe.db.get_value(DOCUMENT, name, ["source_doctype", "source_name", "source_system"]),
+			(DOCUMENT, source.name, "email"),
+		)
+
+	def test_upload_source_must_be_a_business_document(self):
+		file = upload(self.raw)
+		self.assertRaises(
+			frappe.ValidationError,
+			archiving.archive_upload,
+			file.file_url,
+			"Incoming",
+			source_doctype="Contact",
+			source_name="x",
+		)

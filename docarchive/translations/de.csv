@@ -574,3 +574,5 @@ Upload .eml,.eml hochladen
 Upload e-mails,E-Mails hochladen
 Uploaded as .eml by a person,Von einer Person als .eml hochgeladen
 Received through Frappe Mail,Über Frappe Mail empfangen
+"Of {0} selected e-mails, {1} look automated and {2} only have internal addresses. Archive them anyway?",Von {0} ausgewählten E-Mails sehen {1} automatisch erzeugt aus und {2} haben nur interne Adressen. Trotzdem archivieren?
+This e-mail is archived.,Diese E-Mail ist archiviert.

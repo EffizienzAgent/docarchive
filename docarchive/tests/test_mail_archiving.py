@@ -250,6 +250,7 @@ class TestDeskApi(MailArchivingTestCase):
 			archiving.status(comm.name),
 			{
 				"original": False,
+				"archived": False,
 				"business_document": None,
 				"automated": False,
 				"internal": False,
@@ -261,6 +262,7 @@ class TestDeskApi(MailArchivingTestCase):
 			archiving.status(comm.name),
 			{
 				"original": True,
+				"archived": True,
 				"business_document": name,
 				"automated": True,
 				"internal": False,
@@ -274,6 +276,35 @@ class TestDeskApi(MailArchivingTestCase):
 		self.addCleanup(frappe.set_user, "Administrator")
 		with self.assertRaises(frappe.PermissionError):
 			archiving.status(comm.name)
+
+	def test_status_hides_unreadable_document(self):
+		comm = self.communication()
+		archiving.archive(self.capture(comm=comm))
+		user = make_outsider(address("status-reader"))
+		frappe.share.add("Communication", comm.name, user, read=1)
+		frappe.set_user(user)
+		self.addCleanup(frappe.set_user, "Administrator")
+		status = archiving.status(comm.name)
+		self.assertEqual((status["archived"], status["business_document"]), (True, None))
+
+	def test_warnings_list_automated_and_internal_mails(self):
+		automated, internal, plain, archived = (self.communication() for _ in range(4))
+		self.capture(eml(Precedence="bulk"), automated)
+		self.capture(eml(From="colleague@acme.test"), internal)
+		self.capture(comm=plain)
+		archiving.archive(self.capture(eml(Precedence="bulk"), archived))
+		names = [automated.name, internal.name, plain.name, archived.name]
+		self.assertEqual(
+			archiving.warnings(frappe.as_json(names)),
+			{"automated": [automated.name], "internal": [internal.name]},
+		)
+
+	def test_warnings_need_read_permission(self):
+		comm = self.communication()
+		frappe.set_user(make_outsider(address("warnings-outsider")))
+		self.addCleanup(frappe.set_user, "Administrator")
+		with self.assertRaises(frappe.PermissionError):
+			archiving.warnings([comm.name])
 
 	def test_archive_communications(self):
 		comm = self.communication()

@@ -17,3 +17,16 @@ export function size_label(bytes) {
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+
+export const escape_html = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
+
+export const mail_title = (subject, fallback) => escape_html(subject || fallback);
+
+export function safe_file_name(file_name, fallback = "attachment") {
+	const name = String(file_name || "")
+		.replace(/[\u0000-\u001f\u007f<>"'&`]/g, "")
+		.trim();
+	return name || fallback;
+}
