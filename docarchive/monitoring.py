@@ -114,6 +114,15 @@ def mail_originals() -> list[dict]:
 	return [row for row in rows if row.status == "Failed" or get_datetime(row.creation) <= stuck]
 
 
+def can_see_mail_originals() -> bool:
+	"""Mail Originals have no own company, so users restricted to own companies do not see them."""
+	from frappe.permissions import get_user_permissions
+
+	return bool(frappe.has_permission("Mail Original", "read")) and not get_user_permissions(
+		frappe.session.user
+	).get("Own Company")
+
+
 def mail_problem(row) -> str:
 	return ": ".join(part for part in (row.name, _(row.status), first_line(row.error)) if part)
 
@@ -131,7 +140,10 @@ def check_mail_originals():
 
 def daily():
 	"""Scheduled check that also notices a nightly run that did not finish."""
-	check_mail_originals()
+	try:
+		check_mail_originals()
+	except Exception:
+		frappe.log_error(title="docarchive monitoring: mail originals")
 	if not settings.get().enabled:
 		return
 	last = frappe.db.get_single_value("Archive Settings", "last_run_finished_at")
@@ -211,10 +223,11 @@ def problems(filters=None) -> list[dict]:
 		for doc in docs:
 			problem, since, details = found[doc.name]
 			rows.append({**doc, "problem": problem, "since": since, "details": details})
-	if not (filters.document_type or filters.own_company):
+	if not (filters.document_type or filters.own_company) and can_see_mail_originals():
 		rows += [
 			{
 				"name": None,
+				"mail_original": row.name,
 				"title": row.subject,
 				"document_type": None,
 				"own_company": None,
