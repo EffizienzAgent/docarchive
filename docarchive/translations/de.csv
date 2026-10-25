@@ -204,3 +204,5 @@ Retention Extensions,Verlängerungen der Aufbewahrung
 Pending Extension Until (UTC),Ausstehende Verlängerung bis (UTC)
 Retention History,Verlauf der Aufbewahrung
 Pending Extension Metadata,Metadaten der ausstehenden Verlängerung
+Skipped,Übersprungen
+The recorded version of {0} is missing on the storage target.,Die gespeicherte Version von {0} fehlt auf dem Speicherziel.

@@ -237,6 +237,20 @@ class TestContractExtension(ArchiveRunTestCase):
 		self.move_end(ok, "2030-06-30")
 		self.assertEqual([doc.name for doc, _until in run.extensions({"primary", "secondary"})], [ok.name])
 
+	def test_failing_new_target_does_not_block_the_extension(self):
+		doc = self.archived(contract_end_date="2026-12-31")
+		self.configure(["primary", "secondary", "third"])
+		self.fakes["archive-third"] = LockedFakeS3(fail={"put_object"})
+		self.move_end(doc, "2030-06-30")
+		run.nightly()
+		doc.reload()
+		self.assertEqual(doc.archive_status, "Failed")
+		copies = {c.target_name: c for c in doc.archive_copies}
+		for name in ("primary", "secondary"):
+			self.assertEqual(str(copies[name].retain_until), "2041-01-02 00:00:00")
+		self.assertEqual(copies["third"].status, "Failed")
+		self.assertEqual(str(doc.retain_until), "2041-01-02 00:00:00")
+
 	def test_invoices_are_never_extended(self):
 		self.type = make_document_type(default_retention_years=8)
 		self.archived()

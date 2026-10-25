@@ -78,6 +78,13 @@ def violations(modules):
 		functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
 		for node in ast.walk(tree):
 			line = getattr(node, "lineno", 0)
+			client_attr = (
+				isinstance(node, ast.Attribute)
+				and isinstance(node.value, ast.Attribute)
+				and node.value.attr == "_client"
+			)
+			if client_attr and node.attr not in CLIENT_CALLS:
+				found.append((path, None, f"_client.{node.attr}"))
 			owner = next((f.name for f in functions if f.lineno <= line <= (f.end_lineno or f.lineno)), None)
 			for name in names_in(node):
 				module = name.removeprefix("import:")
@@ -85,7 +92,7 @@ def violations(modules):
 					found.append((path, owner, name))
 				elif name in CLIENT_CALLS and (path, owner) != ("store.py", CLIENT_CALLS[name]):
 					found.append((path, owner, name))
-				elif name == "_client" and path != "store.py":
+				elif name in ("_client", "_client_for") and path != "store.py":
 					found.append((path, owner, name))
 				elif name.startswith("import:") and module.startswith(CLIENT_MODULES) and path != "store.py":
 					found.append((path, owner, name))
@@ -243,6 +250,8 @@ class TestStore(IntegrationTestCase):
 			"client module": ("run.py", "from s3storage import client\n"),
 			"boto3": ("api.py", "import boto3\n"),
 			"raw client": ("run.py", "def f(t):\n    return t._client\n"),
+			"client factory": ("run.py", "def f(c):\n    return store._client_for(c)\n"),
+			"unlisted method": ("store.py", "def head(t):\n    t._client.list_object_versions(Bucket='b')\n"),
 		}
 		for case, (path, source) in samples.items():
 			with self.subTest(case):
