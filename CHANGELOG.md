@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/EffizienzAgent/docarchive/compare/v0.3.0...v0.4.0) (2026-10-25)
+
+
+### Features
+
+* export the archive with an offline viewer ([fdbb2e3](https://github.com/EffizienzAgent/docarchive/commit/fdbb2e3007050fdbfd3d4a858a8c5cb7280ae329))
+* export the archive with an offline viewer ([4e279bd](https://github.com/EffizienzAgent/docarchive/commit/4e279bddf266c0bd4a92cf868eb4f69bd1801fae)), closes [#19](https://github.com/EffizienzAgent/docarchive/issues/19)
+
 ## [0.3.0](https://github.com/EffizienzAgent/docarchive/compare/v0.2.0...v0.3.0) (2026-10-25)
 
 
