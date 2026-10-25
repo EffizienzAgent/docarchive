@@ -4,7 +4,7 @@ from frappe.utils import get_datetime, getdate
 
 from docarchive import content, counterparty, settings
 from docarchive.document_types import CORRESPONDENCE, INTERNAL_CORRESPONDENCE
-from docarchive.mail import accounts, headers
+from docarchive.mail import accounts, events, headers
 
 DOCUMENT = "Business Document"
 ORIGINAL = "Mail Original"
@@ -47,7 +47,7 @@ def refusal(original_name: str | None) -> str | None:
 
 def auto_archive(original_name: str, raw=None) -> str | None:
 	original = frappe.db.get_value(
-		ORIGINAL, original_name, ["email_account", "automated", "internal"], as_dict=True
+		ORIGINAL, original_name, ["email_account", "automated", "internal", "communication"], as_dict=True
 	)
 	row = accounts.account_settings(original.email_account)
 	if (
@@ -57,7 +57,9 @@ def auto_archive(original_name: str, raw=None) -> str | None:
 		or (original.internal and not row.archive_internal)
 	):
 		return None
-	return archive(original_name, raw=raw)
+	name = archive(original_name, raw=raw)
+	events.changed("archived", [original_name], [original.communication])
+	return name
 
 
 def remove_document(name: str) -> None:
@@ -172,21 +174,29 @@ def archive_communications(names) -> dict:
 	frappe.has_permission(DOCUMENT, "create", throw=True)
 	for name in names:
 		frappe.has_permission(COMMUNICATION, "read", name, throw=True)
+	return archive_each(
+		[(name, frappe.db.get_value(ORIGINAL, {"communication": name}), name) for name in names]
+	)
+
+
+def archive_each(items) -> dict:
 	result = {"archived": {}, "refused": {}}
-	for name in names:
-		original = frappe.db.get_value(ORIGINAL, {"communication": name})
+	archived = []
+	for key, original, communication in items:
 		reason = refusal(original)
 		if reason:
-			result["refused"][name] = reason
+			result["refused"][key] = reason
 			continue
 		messages = len(frappe.local.message_log)
 		try:
 			frappe.db.savepoint(SAVEPOINT)
-			result["archived"][name] = archive(original, check_permission=True)
+			result["archived"][key] = archive(original, check_permission=True)
+			archived.append((original, communication))
 		except (frappe.ValidationError, frappe.PermissionError) as error:
 			frappe.db.rollback(save_point=SAVEPOINT)
 			del frappe.local.message_log[messages:]
-			result["refused"][name] = str(error)
+			result["refused"][key] = str(error)
+	events.changed("archived", [o for o, _c in archived], [c for _o, c in archived])
 	return result
 
 
@@ -383,41 +393,63 @@ def _attach(original, document, raw=None):
 
 
 def _candidates(doc):
-	row = accounts.account_row(doc.get("source_account")) or frappe._dict(
-		email_account=doc.get("source_account")
-	)
-	domains = accounts.internal_domains(row)
-	found = []
-	for link in frappe.get_all(
-		"Communication Link",
-		filters={"parenttype": COMMUNICATION, "parent": doc.source_name},
-		fields=["link_doctype", "link_name"],
-		order_by="idx",
-	):
-		if link.link_doctype == "Contact":
-			found.extend(_contact_parties(link.link_name, domains, row.contacts_as_counterparty))
-		else:
-			found.append((link.link_doctype, link.link_name))
-	allowed = counterparty.doctypes()
-	return [party for party in dict.fromkeys(found) if not allowed or party[0] in allowed]
+	return parties({doc.source_name: doc.get("source_account")})[doc.source_name]
 
 
-def _contact_parties(contact, domains, contacts_count):
-	if _internal_contact(contact, domains):
-		return []
+def parties(communications: dict) -> dict[str, list[tuple[str, str]]]:
 	links = frappe.get_all(
-		"Dynamic Link",
-		filters={"parenttype": "Contact", "parentfield": "links", "parent": contact},
-		fields=["link_doctype", "link_name"],
+		"Communication Link",
+		filters={"parenttype": COMMUNICATION, "parent": ("in", list(communications) or [""])},
+		fields=["parent", "link_doctype", "link_name"],
 		order_by="idx",
 	)
-	if links:
-		return [(link.link_doctype, link.link_name) for link in links]
-	return [("Contact", contact)] if contacts_count else []
-
-
-def _internal_contact(contact, domains):
-	emails = frappe.get_all(
-		"Contact Email", filters={"parenttype": "Contact", "parent": contact}, pluck="email_id"
+	contacts = list({link.link_name for link in links if link.link_doctype == "Contact"})
+	contact_links = _by_parent(
+		frappe.get_all(
+			"Dynamic Link",
+			filters={"parenttype": "Contact", "parentfield": "links", "parent": ("in", contacts or [""])},
+			fields=["parent", "link_doctype", "link_name"],
+			order_by="idx",
+		)
 	)
-	return bool(emails) and all(email.rpartition("@")[2].lower() in domains for email in emails)
+	emails = _by_parent(
+		frappe.get_all(
+			"Contact Email",
+			filters={"parenttype": "Contact", "parent": ("in", contacts or [""])},
+			fields=["parent", "email_id"],
+		)
+	)
+	rows = {}
+	found = {name: [] for name in communications}
+	for link in links:
+		if link.link_doctype != "Contact":
+			found[link.parent].append((link.link_doctype, link.link_name))
+			continue
+		account = communications[link.parent]
+		if account not in rows:
+			row = accounts.account_row(account) or frappe._dict(email_account=account)
+			rows[account] = (row, accounts.internal_domains(row))
+		row, domains = rows[account]
+		if _internal_contact(emails.get(link.link_name, []), domains):
+			continue
+		links_of_contact = contact_links.get(link.link_name)
+		if links_of_contact:
+			found[link.parent].extend((item.link_doctype, item.link_name) for item in links_of_contact)
+		elif row.contacts_as_counterparty:
+			found[link.parent].append(("Contact", link.link_name))
+	allowed = counterparty.doctypes()
+	return {
+		name: [party for party in dict.fromkeys(items) if not allowed or party[0] in allowed]
+		for name, items in found.items()
+	}
+
+
+def _by_parent(rows):
+	grouped = {}
+	for row in rows:
+		grouped.setdefault(row.parent, []).append(row)
+	return grouped
+
+
+def _internal_contact(emails, domains):
+	return bool(emails) and all(row.email_id.rpartition("@")[2].lower() in domains for row in emails)
