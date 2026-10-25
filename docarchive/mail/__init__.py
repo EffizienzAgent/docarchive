@@ -1,1 +1,1 @@
-from docarchive.mail.originals import capture  # noqa: F401
+from docarchive.mail.originals import capture
