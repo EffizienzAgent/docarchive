@@ -4,7 +4,7 @@ from frappe.model.document import Document
 from frappe.utils import add_days, add_years, getdate, today
 from frappe.utils.data import cast
 
-from docarchive import assignment, content, counterparty, einvoice, file_names, settings
+from docarchive import assignment, audit, content, counterparty, einvoice, file_names, settings
 
 SOURCE_FIELDS = (
 	"source_system",
@@ -182,6 +182,21 @@ class BusinessDocument(Document):
 
 	def on_update(self):
 		self.attach_files()
+		self.log_changes()
+
+	def log_changes(self):
+		before = self.get_doc_before_save()
+		if not before or before.archive_started_at or self.archive_started_at:
+			return
+		changed = [field for field in LOCKED_FIELDS if self.changed(before, field)]
+		if attachment_rows(self) != attachment_rows(before):
+			changed.append("attachments")
+		if changed:
+			audit.log(
+				audit.DOCUMENT_CHANGED,
+				details={"fields": changed},
+				documents=[(self.doctype, self.name, "changed")],
+			)
 
 	def on_trash(self):
 		if self.archive_started_at:

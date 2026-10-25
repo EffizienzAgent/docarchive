@@ -2,7 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, now_datetime
 
-from docarchive import run, store
+from docarchive import audit, run, store
 from docarchive.archive_now import names_of
 from docarchive.permissions import ADMIN_ROLE
 
@@ -73,7 +73,7 @@ def set_legal_hold(names, reason=None) -> dict:
 		refusal = admin_refusal(doc, by_name)
 		if refusal:
 			frappe.throw(f"{name}: {refusal}")
-	return {name: locked(name, hold_document, reason, by_name) for name in names}
+	return audited(audit.LEGAL_HOLD_SET, names, hold_document, reason, by_name)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -90,7 +90,17 @@ def release_legal_hold(names, reason=None, confirm=None) -> dict:
 		refusal = admin_refusal(doc, by_name)
 		if refusal:
 			frappe.throw(f"{name}: {refusal}")
-	return {name: locked(name, release_document, reason, by_name) for name in names}
+	return audited(audit.LEGAL_HOLD_RELEASED, names, release_document, reason, by_name)
+
+
+def audited(action, names, apply, reason, by_name) -> dict:
+	results = {}
+	with audit.batch(action) as documents:
+		for name in names:
+			documents.start(DOCUMENT, name)
+			results[name] = locked(name, apply, reason, by_name)
+			documents.done(DOCUMENT, name, results[name]["status"])
+	return results
 
 
 def locked(name, action, reason, by_name) -> dict:

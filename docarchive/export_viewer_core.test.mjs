@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const ViewerCore = createRequire(import.meta.url)("./export_viewer_core.js");
-const { action, escape, move, cycle, typing, control, meta } = ViewerCore;
+const { action, escape, move, cycle, typing, control, meta, outcomeOf, auditRows, entriesOf } = ViewerCore;
 
 const key = (value, extra = {}) => ({ key: value, ...extra });
 
@@ -89,4 +89,25 @@ test("metadata always lists the same fields", () => {
 	assert.deepEqual(empty.filter(([, , v]) => v).map(([k]) => k), ["status"]);
 	assert.deepEqual(full.find(([k]) => k === "legal_hold")[2], "yes");
 	assert.deepEqual(full.find(([k]) => k === "counterparty")[2], "ACME");
+});
+
+const entries = [
+	{ id: "a", at: "2026-01-02T00:00:00Z", user: "x@example.test", action: "archive.run", documents: [{ id: "DOC-1", outcome: "archived" }, { id: "DOC-2", outcome: "failed", reason: "checksum" }] },
+	{ id: "b", at: "2026-03-01T00:00:00Z", user: "y@example.test", action: "legal_hold.set", documents: [{ id: "DOC-1", outcome: "held" }] },
+	{ id: "c", at: "2026-02-01T00:00:00Z", user: "x@example.test", action: "settings.changed", documents: [] },
+];
+
+test("audit rows are filtered and newest first", () => {
+	assert.deepEqual(auditRows(entries).map((e) => e.id), ["b", "c", "a"]);
+	assert.deepEqual(auditRows(entries, { action: "archive.run" }).map((e) => e.id), ["a"]);
+	assert.deepEqual(auditRows(entries, { search: "doc-2" }).map((e) => e.id), ["a"]);
+	assert.deepEqual(auditRows(entries, { search: "y@" }).map((e) => e.id), ["b"]);
+});
+
+test("a document links to its entries and their outcome", () => {
+	const doc = { id: "DOC-1", audit: ["a", "b", "missing"] };
+	assert.deepEqual(entriesOf(doc, entries).map((e) => e.id), ["b", "a"]);
+	assert.equal(outcomeOf(entries[0], "DOC-2"), "failed: checksum");
+	assert.equal(outcomeOf(entries[0], "DOC-9"), "");
+	assert.deepEqual(entriesOf({ id: "DOC-3" }, entries), []);
 });

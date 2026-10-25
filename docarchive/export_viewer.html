@@ -84,6 +84,17 @@ kbd { font: 12px ui-monospace, monospace; padding: 1px 6px; border: 1px solid va
 .overlay td { padding: 4px 0; vertical-align: top; }
 .overlay td:first-child { white-space: nowrap; padding-right: 16px; }
 ul.plain { margin: 0; padding-left: 18px; }
+.views { display: flex; gap: 6px; margin-top: 8px; }
+.views button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.audit { flex: 1; min-height: 0; overflow: auto; padding: 16px; }
+.audit .filters { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 0 12px; border: 0; }
+.audit .filters input, .audit .filters select { width: auto; min-width: 220px; }
+table.log { border-collapse: collapse; width: 100%; background: var(--panel); }
+table.log th, table.log td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.log th { color: var(--muted); font-weight: 500; }
+table.log tr.active td { background: var(--accent-bg); }
+a.doc { color: var(--accent); cursor: pointer; margin-right: 8px; }
+[hidden] { display: none !important; }
 @media (max-width: 760px) {
 	body { height: auto; }
 	main { grid-template-columns: 1fr; }
@@ -102,8 +113,10 @@ ul.plain { margin: 0; padding-left: 18px; }
 		<button class="help-button" id="help-button" type="button" aria-haspopup="dialog">?</button>
 	</div>
 	<div id="banner"></div>
+	<nav class="views" id="views" role="tablist"></nav>
 </header>
-<main>
+<section class="audit" id="audit" hidden></section>
+<main id="documents">
 	<aside>
 		<div class="filters" id="filters"></div>
 		<div class="count" id="count"></div>
@@ -125,6 +138,8 @@ const CREDIT_URL = "https://github.com/EffizienzAgent/docarchive";
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const LOGO_URI = /^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+\/]+={0,2}$/;
 const state = { search: "", type: "", party: "", company: "", year: "", held: false, problems: false, shown: PAGE, current: null, cursor: null, file: 0 };
+const entries = DATA.audit || [];
+const log = { view: "documents", search: "", action: "", entry: null };
 
 function h(tag, attrs, ...children) {
 	const el = document.createElement(tag);
@@ -355,8 +370,91 @@ function show(id, file = 0) {
 			h("div", { class: "body" }, h("ul", { class: "plain" }, doc.metadata.map((file) =>
 				h("li", {}, file.path ? h("a", { href: href(file.path), target: "_blank", rel: "noopener" }, file.key) : file.key,
 					file.verified ? null : h("span", { class: "pill bad" }, L.problem)))))),
+		auditCard(doc),
 	].flat().filter(Boolean));
 	detail.scrollTop = 0;
+}
+
+function renderViews() {
+	document.getElementById("views").replaceChildren(
+		...[["documents", L.documents_tab], ["audit", `${L.audit_tab} (${entries.length})`]].map(([view, label]) =>
+			h("button", { type: "button", role: "tab", "aria-selected": String(log.view === view), onclick: () => showView(view) }, label)),
+	);
+}
+
+function showView(view) {
+	log.view = view;
+	document.getElementById("documents").hidden = view !== "documents";
+	document.getElementById("audit").hidden = view !== "audit";
+	renderViews();
+	if (view === "audit") renderAudit();
+}
+
+function openDocument(id) {
+	showView("documents");
+	show(id);
+}
+
+function openEntry(id) {
+	Object.assign(log, { entry: id, search: "", action: "" });
+	showView("audit");
+	const row = document.getElementById(`entry-${id}`);
+	if (row) row.scrollIntoView({ block: "center" });
+}
+
+function entryState(entry) {
+	if (entry.pending) return h("span", { class: "pill hold" }, L.audit_pending);
+	return entry.verified ? null : h("span", { class: "pill bad" }, L.problem);
+}
+
+function documentLinks(entry) {
+	return entry.documents.map((row) => {
+		const label = ViewerCore.outcomeOf(entry, row.id) ? `${row.id} (${ViewerCore.outcomeOf(entry, row.id)})` : row.id;
+		return byId.has(row.id)
+			? h("a", { class: "doc", onclick: () => openDocument(row.id) }, label)
+			: h("span", { class: "muted", title: L.not_in_export }, `${label} `);
+	});
+}
+
+function renderAudit() {
+	const search = h("input", { type: "search", placeholder: L.audit_search, "aria-label": L.audit_search, value: log.search });
+	search.addEventListener("input", () => { log.search = search.value; renderAuditTable(); });
+	const action = h("select", { "aria-label": L.action }, options(unique(entries.map((entry) => entry.action)), L.all_actions));
+	action.value = log.action;
+	action.addEventListener("input", () => { log.action = action.value; renderAuditTable(); });
+	document.getElementById("audit").replaceChildren(h("div", { class: "filters" }, search, action), h("div", { id: "audit-table" }));
+	renderAuditTable();
+}
+
+function renderAuditTable() {
+	const rows = ViewerCore.auditRows(entries, log);
+	const table = document.getElementById("audit-table");
+	if (!rows.length) return table.replaceChildren(h("p", { class: "muted" }, L.no_entries));
+	table.replaceChildren(
+		h("p", { class: "muted" }, `${rows.length} ${L.entries}`),
+		h("table", { class: "log" },
+			h("tr", {}, [L.at, L.user, L.action, L.documents, ""].map((label) => h("th", {}, label))),
+			rows.map((entry) => h("tr", { id: `entry-${entry.id}`, class: entry.id === log.entry ? "active" : null },
+				h("td", {}, entry.at),
+				h("td", {}, entry.user),
+				h("td", {}, entry.action, entryState(entry)),
+				h("td", {}, documentLinks(entry)),
+				h("td", {}, h("a", { href: href(entry.path), target: "_blank", rel: "noopener" }, L.stored_entry))))),
+	);
+}
+
+function auditCard(doc) {
+	const own = ViewerCore.entriesOf(doc, entries);
+	if (!own.length) return null;
+	return h("div", { class: "card" },
+		h("div", { class: "head" }, h("span", { class: "name" }, L.audit_tab)),
+		h("div", { class: "body" }, h("table", { class: "log" },
+			h("tr", {}, [L.at, L.user, L.action, L.outcome].map((label) => h("th", {}, label))),
+			own.map((entry) => h("tr", {},
+				h("td", {}, h("a", { class: "doc", onclick: () => openEntry(entry.id) }, entry.at)),
+				h("td", {}, entry.user),
+				h("td", {}, entry.action),
+				h("td", {}, ViewerCore.outcomeOf(entry, doc.id)))))));
 }
 
 function closePreview() {
@@ -403,7 +501,7 @@ document.addEventListener("keydown", (event) => {
 		typing: ViewerCore.typing(target),
 		control: ViewerCore.control(target),
 	});
-	if (!todo) return;
+	if (!todo || (log.view !== "documents" && !["help", "close_help"].includes(todo))) return;
 	event.preventDefault();
 	if (todo === "close_help") toggleHelp(false);
 	if (todo === "help") toggleHelp(true);
@@ -419,6 +517,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 renderHeader();
+renderViews();
 renderBrand();
 renderHelp();
 renderFilters();

@@ -8,7 +8,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, get_system_timezone, now_datetime
 
-from docarchive import assignment, content, keys, retention, settings, storage_targets, store
+from docarchive import assignment, audit, content, keys, retention, settings, storage_targets, store
 from docarchive.document_archive.doctype.business_document.business_document import (
 	extension,
 	file_name,
@@ -38,7 +38,9 @@ CANDIDATE_FIELDS = [
 
 
 class ArchiveError(frappe.ValidationError):
-	pass
+	def __init__(self, message, code="archive"):
+		super().__init__(message)
+		self.code = code
 
 
 def schedule():
@@ -66,10 +68,13 @@ def nightly(dry_run=False) -> dict:
 			],
 		}
 	reassign()
-	results = {ARCHIVED: [], FAILED: [], SKIPPED: []}
-	for name in eligible({t.name for t in targets}):
-		results[archive_document(name, targets)].append(name)
-	extended = extend_retention(targets)
+	results, outcomes = {ARCHIVED: [], FAILED: [], SKIPPED: []}, {}
+	with audit.batch(audit.ARCHIVE_RUN) as documents:
+		for name in eligible({t.name for t in targets}):
+			documents.start(DOCUMENT, name)
+			results[archive_document(name, targets, outcomes)].append(name)
+			documents.done(DOCUMENT, name, *outcomes[name])
+		extended = extend_retention(targets, documents)
 	summary = {
 		"status": "done",
 		"archived": len(results[ARCHIVED]),
@@ -77,9 +82,24 @@ def nightly(dry_run=False) -> dict:
 		"extended": len(extended[ARCHIVED]),
 		"extension_failed": extended[FAILED],
 		"skipped": results[SKIPPED],
+		"audit": audit_nightly(targets),
 	}
 	frappe.logger("docarchive").info(summary)
 	return summary
+
+
+def audit_nightly(targets) -> dict:
+	try:
+		return audit.nightly(targets)
+	except Exception as e:
+		frappe.db.rollback()
+		frappe.log_error(title="docarchive: audit nightly")
+		return {"ok": False, "error": safe_error(e)}
+
+
+def reason_code(error) -> str:
+	code = store.error_code(error)
+	return f"storage:{code}" if code else getattr(error, "code", None) or type(error).__name__
 
 
 def archive_types() -> list[str]:
@@ -168,14 +188,18 @@ def document_lock(name):
 	return frappe.cache.lock(frappe.cache.make_key(f"docarchive:document:{name}"), timeout=LOCK_SECONDS)
 
 
-def archive_document(name, targets) -> str:
+def archive_document(name, targets, outcomes=None) -> str:
+	"""Archive one document. Fills outcomes[name] with (outcome, reason code) for the audit log."""
+	outcomes = {} if outcomes is None else outcomes
 	lock = document_lock(name)
 	if not lock.acquire(blocking=False):
+		outcomes[name] = ("skipped", "busy")
 		return SKIPPED
 	try:
-		return archive_locked(name, targets)
+		status = archive_locked(name, targets, outcomes)
 	finally:
 		release(lock)
+	return status
 
 
 def release(lock):
@@ -185,8 +209,9 @@ def release(lock):
 		pass
 
 
-def archive_locked(name, targets) -> str:
+def archive_locked(name, targets, outcomes) -> str:
 	doc = frappe.get_doc(DOCUMENT, name)
+	held_before = doc.legal_hold
 	frappe.db.savepoint(SAVEPOINT)
 	try:
 		data, ext = file_bytes(doc)
@@ -200,17 +225,25 @@ def archive_locked(name, targets) -> str:
 		frappe.db.rollback(save_point=SAVEPOINT)
 		doc = frappe.get_doc(DOCUMENT, name)
 		doc.archive_error = safe_error(e)
+		doc.flags.audit_reason = reason_code(e)
 		log(doc, None, doc.archive_error)
-	return finish(doc, targets)
+	status = finish(doc, targets)
+	if status == ARCHIVED:
+		outcomes[name] = ("archived_with_hold" if doc.legal_hold and not held_before else "archived", None)
+	else:
+		outcomes[name] = ("failed", doc.flags.audit_reason or "save")
+	return status
 
 
 def file_bytes(doc):
 	data, ext = content.content_for(doc)
 	if data is None:
-		raise ArchiveError(_("The file of document {0} cannot be read.").format(doc.name))
+		raise ArchiveError(_("The file of document {0} cannot be read.").format(doc.name), "unreadable")
 	sha256 = content.sha256(data)
 	if sha256 != doc.content_sha256 or (doc.archive_sha256 and sha256 != doc.archive_sha256):
-		raise ArchiveError(_("The file of document {0} no longer matches its checksum.").format(doc.name))
+		raise ArchiveError(
+			_("The file of document {0} no longer matches its checksum.").format(doc.name), "checksum"
+		)
 	return data, ext
 
 
@@ -219,10 +252,13 @@ def attachment_bytes(doc) -> list[bytes]:
 	for row in doc.get("attachments") or []:
 		data = content.read_bytes(row.file)
 		if data is None:
-			raise ArchiveError(_("Attachment {0} of document {1} cannot be read.").format(row.idx, doc.name))
+			raise ArchiveError(
+				_("Attachment {0} of document {1} cannot be read.").format(row.idx, doc.name), "unreadable"
+			)
 		if content.sha256(data) != row.content_sha256:
 			raise ArchiveError(
-				_("Attachment {0} of document {1} no longer matches its checksum.").format(row.idx, doc.name)
+				_("Attachment {0} of document {1} no longer matches its checksum.").format(row.idx, doc.name),
+				"checksum",
 			)
 		result.append(data)
 	return result
@@ -337,6 +373,7 @@ def copy_to(doc, target, data, attachments=()):
 			copy.legal_hold = "On"
 	except Exception as e:
 		copy.update({"status": FAILED, "error": safe_error(e)})
+		doc.flags.audit_reason = doc.flags.audit_reason or reason_code(e)
 		log(doc, target, copy.error)
 
 
@@ -373,11 +410,13 @@ def ensure(target, key, body, until, content_type, copy, version_field, record=N
 	store.validate_lock(mode, until)
 	existing = store.head(target, key, known_version)
 	if existing is None and known_version:
-		raise ArchiveError(_("The recorded version of {0} is missing on the storage target.").format(key))
+		raise ArchiveError(
+			_("The recorded version of {0} is missing on the storage target.").format(key), "missing_version"
+		)
 	if existing is None:
 		version_id = store.put_locked(target, key, body, mode, until, content_type, legal_hold)["version_id"]
 	elif (existing.get("Metadata") or {}).get("sha256") != sha256:
-		raise ArchiveError(_("{0} already exists with different content.").format(key))
+		raise ArchiveError(_("{0} already exists with different content.").format(key), "conflict")
 	else:
 		version_id = known_version or existing.get("VersionId")
 	record.set(version_field, version_id)
@@ -655,15 +694,19 @@ def extend_copy(doc, copy, target, until):
 	copy.update({"retain_until": retention.to_db(until), "error": None})
 
 
-def extend_retention(targets) -> dict:
+def extend_retention(targets, documents=None) -> dict:
 	by_name = {target.name: target for target in targets}
 	results = {ARCHIVED: [], FAILED: []}
+	documents = audit.Batch() if documents is None else documents
 	for doc, until in extensions(set(by_name)):
 		lock = document_lock(doc.name)
 		if not lock.acquire(blocking=False):
 			continue
 		try:
-			results[ARCHIVED if extend_document(doc, until, by_name) else FAILED].append(doc.name)
+			documents.start(DOCUMENT, doc.name)
+			done = extend_document(doc, until, by_name)
+			results[ARCHIVED if done else FAILED].append(doc.name)
+			documents.done(DOCUMENT, doc.name, "extended" if done else "extension_failed")
 		finally:
 			release(lock)
 	return results

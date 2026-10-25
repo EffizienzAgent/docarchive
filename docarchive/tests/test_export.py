@@ -12,7 +12,7 @@ from unittest.mock import patch
 import frappe
 from frappe.utils import now_datetime
 
-from docarchive import export, export_package, run
+from docarchive import audit, export, export_package, legal_hold, run
 from docarchive.permissions import ADMIN_ROLE
 from docarchive.tests.factories import (
 	eml,
@@ -111,6 +111,43 @@ class TestExportPackage(ExportTestCase):
 		self.assertNotIn("</script><script>alert(1)", viewer)
 		self.assertIn(doc.name, viewer)
 		self.assertNotIn(export_package.DATA_MARKER, viewer)
+
+	def test_audit_entries_are_exported_with_links_both_ways(self):
+		doc, other = self.archived(), self.archived()
+		frappe.set_user("Administrator")
+		legal_hold.set_legal_hold([doc.name], "x")
+		frappe.db.after_commit.run()
+		held = frappe.get_all(audit.LOG, filters={"action": audit.LEGAL_HOLD_SET}, pluck="name")[0]
+		pending = audit.log("test.pending", documents=[(run.DOCUMENT, doc.name, "changed")])
+		lost = audit.log("test.lost", documents=[(run.DOCUMENT, doc.name, "changed")], write=True)
+		frappe.db.after_commit.run()
+		frappe.db.delete("Archive Audit Copy", {"parent": lost, "target_name": "primary"})
+		frappe.set_user(ADMIN)
+		result = self.export(counterparty_type=doc.counterparty_type, counterparty=doc.counterparty)
+		self.assertEqual(result.mismatches, 1)
+		self.assertEqual(
+			json.loads(result.mismatch_details)[0]["error"], "Not written to this storage target"
+		)
+		[archive] = self.zips(result)
+		manifest = self.manifest(archive)
+		rows = {row["id"]: row for row in manifest["documents"]}
+		self.assertEqual(set(rows[doc.name]["audit"]), {held, pending, lost})
+		self.assertEqual(rows[other.name]["audit"], [])
+		entries = {entry["id"]: entry for entry in manifest["audit"]}
+		self.assertEqual(set(entries), {held, pending, lost})
+		self.assertEqual((entries[lost]["verified"], entries[lost]["pending"]), (False, False))
+		self.assertEqual(entries[held]["documents"], [{"id": doc.name, "outcome": "held", "reason": None}])
+		self.assertTrue(entries[held]["verified"])
+		self.assertEqual((entries[pending]["verified"], entries[pending]["pending"]), (False, True))
+		stored = self.fake("primary").body(
+			"archive-primary", frappe.db.get_value(audit.LOG, held, "object_key")
+		)
+		self.assertEqual(archive.read(entries[held]["path"]), stored)
+		self.assertTrue(entries[held]["path"].startswith("audit/"))
+		self.assertIn("audit_tab", archive.read("index.html").decode())
+		[completed] = frappe.get_all(audit.LOG, filters={"action": audit.EXPORT_COMPLETED}, pluck="name")
+		outcomes = {r.document_name: r.outcome for r in frappe.get_doc(audit.LOG, completed).documents}
+		self.assertEqual(outcomes, {doc.name: "exported", other.name: "exported"})
 
 	def test_filters_by_counterparty(self):
 		mine = self.archived()

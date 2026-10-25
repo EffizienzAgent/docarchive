@@ -3,7 +3,7 @@ import hashlib
 import frappe
 from frappe import _
 
-from docarchive import retention, run, settings, store
+from docarchive import audit, retention, run, settings, store
 from docarchive.document_archive.doctype.business_document.business_document import missing_fields
 
 DOCUMENT = run.DOCUMENT
@@ -83,12 +83,27 @@ def archive_now(names) -> dict:
 
 def run_job(names, user=None):
 	targets = store.targets() if settings.get().enabled else None
-	for name in names:
-		doc = frappe.get_doc(DOCUMENT, name)
-		if not targets or doc.archive_status == run.ARCHIVED or (refusal(doc) and not doc.archive_started_at):
-			status = doc.archive_status
-		else:
-			status = run.archive_document(name, targets)
-		frappe.publish_realtime(
-			EVENT, {"name": name, "status": status}, user=user, doctype=DOCUMENT, docname=name
-		)
+	outcomes = {}
+	with audit.batch(audit.ARCHIVE_NOW) as documents:
+		for name in names:
+			documents.start(DOCUMENT, name)
+			doc = frappe.get_doc(DOCUMENT, name)
+			if (
+				not targets
+				or doc.archive_status == run.ARCHIVED
+				or (refusal(doc) and not doc.archive_started_at)
+			):
+				status = doc.archive_status
+				outcomes[name] = ("skipped", skip_reason(doc, targets))
+			else:
+				status = run.archive_document(name, targets, outcomes)
+			documents.done(DOCUMENT, name, *outcomes[name])
+			frappe.publish_realtime(
+				EVENT, {"name": name, "status": status}, user=user, doctype=DOCUMENT, docname=name
+			)
+
+
+def skip_reason(doc, targets) -> str:
+	if not targets:
+		return "not_configured"
+	return "already_archived" if doc.archive_status == run.ARCHIVED else "refused"

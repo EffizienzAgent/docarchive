@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import shutil
@@ -10,7 +11,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, add_to_date, cint, getdate, now_datetime
 
-from docarchive import export_package, run, store
+from docarchive import audit, export_package, run, store
 from docarchive.legal_hold import is_admin, targets_by_name
 from docarchive.permissions import ADMIN_ROLE
 
@@ -18,7 +19,7 @@ EXPORT = "Archive Export"
 DOCUMENT = run.DOCUMENT
 QUEUED, RUNNING, COMPLETED, FAILED, EXPIRED = "Queued", "Running", "Completed", "Failed", "Expired"
 EVENT = "docarchive_export"
-FILTERS = ("own_company", "document_type", "date_from", "date_to", "counterparty_type", "counterparty")
+FILTERS = export_package.FILTERS
 WORKERS = 4
 ATTEMPTS = 3
 DEFAULT_PART_MB = 2048
@@ -178,6 +179,19 @@ def run_export(name):
 			}
 		)
 		export.save(ignore_permissions=True)
+		audit.log(
+			audit.EXPORT_COMPLETED,
+			EXPORT,
+			name,
+			details={
+				**export_scope(export),
+				"parts": len(parts),
+				"skipped": skipped,
+				"mismatches": len(mismatches),
+			},
+			documents=[(DOCUMENT, entry["doc"], "exported") for entry in entries],
+			write=True,
+		)
 		frappe.db.commit()
 	except Exception as e:
 		frappe.db.rollback()
@@ -198,7 +212,13 @@ def fail(name, error):
 		frappe.db.rollback()
 		frappe.log_error(title=f"docarchive: export {name}")
 	frappe.db.set_value(EXPORT, name, {"status": FAILED, "error": error})
+	export = frappe.get_doc(EXPORT, name)
+	audit.log(audit.EXPORT_FAILED, EXPORT, name, details=export_scope(export), write=True)
 	frappe.db.commit()
+
+
+def export_scope(export) -> dict:
+	return {**export_package.filters_of(export), "target_name": export.target_name}
 
 
 def check_space(workdir, part_size):
@@ -291,6 +311,7 @@ def build_part(export, target, part, number, count, workdir, progress) -> dict:
 		if not remaining[item["doc"]]:
 			package.finish_document(docs[item["doc"]], copies[item["doc"]])
 			progress.step()
+	add_audit(package, export, target, list(docs), number == 1)
 	package.close()
 	size = os.path.getsize(path)
 	file = store_file(export, path, f"{label}.zip")
@@ -302,6 +323,40 @@ def build_part(export, target, part, number, count, workdir, progress) -> dict:
 	current.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"mismatches": package.mismatches, "size": size}
+
+
+def add_audit(package, export, target, names, first_part):
+	"""Entries of the part's documents; entries without documents in the date range go into part 1."""
+	dates = (export.date_from, export.date_to) if first_part else (None, None)
+	found = audit.entries_for_export(names, *dates)
+	versions = dict(
+		frappe.get_all(
+			"Archive Audit Copy",
+			filters={
+				"parenttype": audit.LOG,
+				"target_name": target.name,
+				"parent": ("in", [entry.name for entry in found] or [""]),
+			},
+			fields=["parent", "version_id"],
+			as_list=True,
+			limit_page_length=0,
+		)
+	)
+	for entry in found:
+		package.add_audit(entry, fetch_entry(target, entry, versions.get(entry.name)))
+
+
+def fetch_entry(target, entry, version_id) -> dict:
+	if not version_id:
+		if entry.status == audit.PENDING:
+			return {"pending": True}
+		return {"error": _("Not written to this storage target")}
+	out = io.BytesIO()
+	try:
+		store.download(target, entry.object_key, version_id, out)
+	except Exception as e:
+		return {"error": run.safe_error(e)}
+	return {"data": out.getvalue()}
 
 
 def store_file(export, path, file_name):
