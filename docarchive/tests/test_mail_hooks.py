@@ -1,4 +1,3 @@
-import os
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -86,7 +85,7 @@ class TestMailHooks(IntegrationTestCase):
 		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
 			comm = self.receive().process()
 		self.assertEqual(comm.name, self.received())
-		self.assertEqual(self.pending(comm), ("Pending", None))
+		self.assertEqual(self.pending(comm), ("Failed", None))
 
 	def test_receive_logs_and_continues_when_capture_raises(self):
 		with (
@@ -232,7 +231,6 @@ class TestMailHooks(IntegrationTestCase):
 		with patch("docarchive.mail.originals.schedule", side_effect=scheduled.append):
 			self.send(comm)
 		[name] = scheduled
-		self.addCleanup(originals.remove_spool, name)
 		return name
 
 	def stored(self, name):
@@ -340,8 +338,9 @@ class TestMailEndToEnd(IntegrationTestCase):
 
 		comm = self.receive()
 		name = frappe.db.get_value("Mail Original", {"communication": comm.name})
-		self.addCleanup(originals.remove_spool, name)
-		self.assertEqual(frappe.db.get_value("Mail Original", name, "status"), "Pending")
+		status, file = frappe.db.get_value("Mail Original", name, ["status", "file"])
+		self.assertEqual(status, "Pending")
+		self.assertEqual(content.read_bytes(file), self.raw)
 		with patch("frappe.enqueue", side_effect=run_now) as enqueue:
 			frappe.db.after_commit.run()
 			frappe.db.after_commit.run()
@@ -350,14 +349,18 @@ class TestMailEndToEnd(IntegrationTestCase):
 		self.assertEqual(original.status, "Stored")
 		self.assertEqual(content.read_bytes(original.file), self.raw)
 		self.assertTrue(original.business_document)
-		self.assertFalse(os.path.exists(originals.spool_path(name)))
+		self.assertEqual(original.file, file)
 
-	def test_failing_spool_write_does_not_stop_receiving(self):
+	def test_failing_file_write_does_not_stop_receiving(self):
 		with (
-			patch("docarchive.mail.originals.write_spool", side_effect=OSError("disk full")),
+			patch("docarchive.mail.originals.store_file", side_effect=OSError("S3 down")),
 			patch("frappe.log_error") as log_error,
 		):
 			comm = self.receive()
 		self.assertTrue(frappe.db.exists("Communication", comm.name))
-		self.assertFalse(frappe.db.exists("Mail Original", {"communication": comm.name}))
+		status, error = frappe.db.get_value(
+			"Mail Original", {"communication": comm.name}, ["status", "error"]
+		)
+		self.assertEqual(status, "Failed")
+		self.assertIn("S3 down", error)
 		log_error.assert_called_with(title="docarchive mail capture")

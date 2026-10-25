@@ -245,8 +245,4 @@ def restrict_to_own_company(user, own_company):
 def store_mail_inline(case):
 	from docarchive.mail import originals
 
-	def run(name):
-		originals.store(name)
-		case.addCleanup(originals.remove_spool, name)
-
-	case.enterContext(patch("docarchive.mail.originals.schedule", side_effect=run))
+	case.enterContext(patch("docarchive.mail.originals.schedule", side_effect=originals.store))

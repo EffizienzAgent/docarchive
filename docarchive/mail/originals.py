@@ -1,5 +1,3 @@
-import os
-import time
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 
@@ -16,6 +14,7 @@ SAVEPOINT = "docarchive_mail_capture"
 AUTO_SAVEPOINT = "docarchive_mail_auto_archive"
 SEND_SAVEPOINT = "docarchive_mail_capture_sent"
 STORE_SAVEPOINT = "docarchive_mail_store"
+WRITE_SAVEPOINT = "docarchive_mail_write"
 TRASH_SAVEPOINT = "docarchive_mail_release"
 MAX_LENGTH = 500
 SENT_FOLDER = "Sent Folder"
@@ -23,8 +22,6 @@ UPLOAD_ORIGIN = "manual-upload"
 PENDING, STORED, FAILED = "Pending", "Stored", "Failed"
 MAX_ATTEMPTS = 5
 JOB = "docarchive.mail.originals.store"
-SPOOL = ("private", "docarchive", "mail-spool")
-ORPHAN_SECONDS = 86400
 ERROR_LENGTH = 500
 REBUILD_WINDOW = timedelta(hours=1)
 
@@ -43,28 +40,35 @@ def capture(communication, raw: bytes | str, origin: str) -> str | None:
 	except Exception:
 		fail(SAVEPOINT)
 		return None
-	if name:
+	if name and frappe.db.get_value(ORIGINAL, name, "status") == PENDING:
 		schedule(name)
 	return name
 
 
 def _revive(name, raw, origin):
-	if frappe.db.get_value(ORIGINAL, name, "status") == FAILED:
-		write_spool(name, raw)
-		frappe.db.set_value(
-			ORIGINAL,
-			name,
-			{
-				"status": PENDING,
-				"attempts": 0,
-				"error": None,
-				"origin": origin,
-				"email_queue": None,
-				"rebuilt_at": None,
-			},
-			update_modified=False,
-		)
-		schedule(name)
+	if frappe.db.get_value(ORIGINAL, name, "status") != FAILED:
+		return name
+	old_files = frappe.get_all(
+		"File", filters={"attached_to_doctype": ORIGINAL, "attached_to_name": name}, pluck="name"
+	)
+	if not _write(frappe.get_doc(ORIGINAL, name), raw):
+		return name
+	for file in old_files:
+		frappe.delete_doc("File", file, ignore_permissions=True)
+	frappe.db.set_value(
+		ORIGINAL,
+		name,
+		{
+			"status": PENDING,
+			"attempts": 0,
+			"error": None,
+			"origin": origin,
+			"email_queue": None,
+			"rebuilt_at": None,
+		},
+		update_modified=False,
+	)
+	schedule(name)
 	return name
 
 
@@ -130,12 +134,11 @@ def store(original: str) -> None:
 	try:
 		frappe.db.savepoint(STORE_SAVEPOINT)
 		original = frappe.get_doc(ORIGINAL, name)
-		_complete(original, _rebuilt(original) if original.email_queue else read_spool(name))
+		_complete(original, _rebuilt(original) if original.email_queue else _kept(original))
 	except Exception as error:
 		fail(STORE_SAVEPOINT)
 		_attempted(name, error)
 		return
-	frappe.db.after_commit.add(lambda: remove_spool(name))
 	_auto_archive(name)
 
 
@@ -184,6 +187,15 @@ def _rebuilt(original):
 	ctx.email_account_doc = queue.get_email_account(raise_error=True)
 	raw = _as_bytes(ctx.build_message(recipient.recipient))
 	original.rebuilt_at = datetime.now(UTC).replace(tzinfo=None)
+	return raw
+
+
+def _kept(original):
+	if not original.file:
+		raise Unavailable("The raw bytes of this mail were not kept. Hand the mail in again to retry.")
+	raw = content.read_bytes(original.file)
+	if raw is None:
+		raise Unavailable(f"The file {original.file} of this original is missing.")
 	return raw
 
 
@@ -256,68 +268,17 @@ def fail(savepoint=None):
 		pass
 
 
-def spool_path(name: str) -> str:
-	return frappe.get_site_path(*SPOOL, f"{name}.eml")
-
-
-def write_spool(name: str, raw: bytes) -> None:
-	path = spool_path(name)
-	folder = os.path.dirname(path)
-	os.makedirs(folder, mode=0o700, exist_ok=True)
-	os.chmod(folder, 0o700)
-	descriptor = os.open(f"{path}.tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-	with os.fdopen(descriptor, "wb") as f:
-		f.write(raw)
-	os.replace(f"{path}.tmp", path)
-
-
-def read_spool(name: str) -> bytes:
-	try:
-		with open(spool_path(name), "rb") as f:
-			return f.read()
-	except FileNotFoundError:
-		raise FileNotFoundError(f"The spool file of Mail Original {name} is missing.") from None
-
-
-def remove_spool(name: str) -> None:
-	try:
-		os.remove(spool_path(name))
-	except FileNotFoundError:
-		pass
-	except OSError:
-		fail()
-
-
-def sweep_spool() -> int:
-	folder = frappe.get_site_path(*SPOOL)
-	if not os.path.isdir(folder):
-		return 0
-	waiting = set(frappe.get_all(ORIGINAL, filters={"status": ("in", (PENDING, FAILED))}, pluck="name"))
-	removed = 0
-	for entry in os.scandir(folder):
-		try:
-			name = entry.name.removesuffix(".tmp").removesuffix(".eml")
-			if (
-				entry.is_file(follow_symlinks=False)
-				and name not in waiting
-				and time.time() - entry.stat().st_mtime > ORPHAN_SECONDS
-			):
-				os.remove(entry.path)
-				removed += 1
-		except OSError:
-			fail()
-	return removed
-
-
-def store_file(original, raw: bytes) -> str:
+def store_file(original, raw: bytes, name_hint: str | None = None) -> str:
 	file_doc = frappe.get_doc(
 		{
 			"doctype": "File",
-			"file_name": slug(original.message_id or original.communication or original.name) + ".eml",
+			"file_name": slug(name_hint or original.message_id or original.communication or original.name)
+			+ ".eml",
 			"content": raw,
 			"is_private": 1,
 			"attached_to_doctype": ORIGINAL,
 			"attached_to_name": original.name,
+			"attached_to_field": "file",
 		}
 	).insert(ignore_permissions=True)
 	return file_doc.file_url
@@ -339,8 +300,34 @@ def _pend(communication, origin, raw=None, email_queue=None):
 		}
 	).insert(ignore_permissions=True)
 	if raw is not None:
-		write_spool(original.name, raw)
+		_write(original, raw)
 	return original.name
+
+
+def _write(original, raw) -> bool:
+	try:
+		frappe.db.savepoint(WRITE_SAVEPOINT)
+		original.db_set("file", store_file(original, raw, _message_id(original)), update_modified=False)
+		return True
+	except Exception as error:
+		fail(WRITE_SAVEPOINT)
+		frappe.db.set_value(
+			ORIGINAL,
+			original.name,
+			{
+				"status": FAILED,
+				"attempts": (original.attempts or 0) + 1,
+				"error": f"The original could not be written: {error or type(error).__name__}"[:ERROR_LENGTH],
+			},
+			update_modified=False,
+		)
+		return False
+
+
+def _message_id(original):
+	if original.communication:
+		return frappe.db.get_value("Communication", original.communication, "message_id")
+	return None
 
 
 def _complete(original, raw):
@@ -351,7 +338,8 @@ def _complete(original, raw):
 		{**_header_fields(raw, parsed), "internal": int(internal), "status": STORED, "error": None}
 	)
 	original.save(ignore_permissions=True)
-	original.db_set("file", store_file(original, raw))
+	if not original.file:
+		original.db_set("file", store_file(original, raw))
 
 
 def create_upload(raw: bytes, parsed, direction: str) -> str:

@@ -17,11 +17,10 @@ def run() -> dict:
 		cutoff = add_days(now_datetime(), -(keep.get(account) or DEFAULT_KEEP_DAYS))
 		result["originals"] += _remove(_old_originals(account, cutoff), _remove_original)
 		result["documents"] += _remove(_old_documents(account, cutoff), _remove_document)
-	for step in (originals.retry_pending, originals.sweep_spool):
-		try:
-			step()
-		except Exception:
-			frappe.log_error(title="docarchive mail cleanup")
+	try:
+		originals.retry_pending()
+	except Exception:
+		frappe.log_error(title="docarchive mail cleanup")
 	return result
 
 
