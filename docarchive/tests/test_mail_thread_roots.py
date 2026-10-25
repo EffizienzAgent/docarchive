@@ -78,6 +78,16 @@ class TestThreadRoots(MailArchivingTestCase):
 		self.assertEqual(len(self.roots(*docs)), 1)
 		self.assertIsNotNone(self.roots(*docs).pop())
 
+	def test_backfill_does_not_join_through_unarchived_mails(self):
+		x_id = message_id()
+		first = archiving.archive(self.mail("2026-03-10 09:00:00", mime(text="a", In_Reply_To=f"<{x_id}>")))
+		second = archiving.archive(
+			self.mail("2026-03-11 09:00:00", mime(text="b", References=references(x_id)))
+		)
+		frappe.db.set_value(DOCUMENT, second, "thread_key", "other")
+		join_mail_threads.execute()
+		self.assertEqual(len(self.roots(first, second)), 2)
+
 	def test_saving_a_loaded_document_keeps_a_later_merge(self):
 		doc = frappe.get_doc(DOCUMENT, archiving.archive(self.capture()))
 		frappe.db.set_value(DOCUMENT, doc.name, "thread_root", "merged", update_modified=False)
