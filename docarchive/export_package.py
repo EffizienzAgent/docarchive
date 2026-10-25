@@ -1,3 +1,4 @@
+import base64
 import csv
 import email
 import email.policy
@@ -13,10 +14,21 @@ from frappe import _
 from frappe.utils import now_datetime
 from frappe.utils.html_utils import sanitize_html
 
-from docarchive import retention, run
+from docarchive import content, retention, run, settings
 
 VIEWER = Path(__file__).with_name("export_viewer.html")
+VIEWER_CORE = Path(__file__).with_name("export_viewer_core.js")
 DATA_MARKER = "/*DOCARCHIVE_DATA*/"
+CORE_MARKER = "/*DOCARCHIVE_CORE*/"
+LOGO_LIMIT = 200 * 1024
+LOGO_TYPES = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
+LOGO_MAGIC = (
+	(b"\x89PNG\r\n\x1a\n", "image/png"),
+	(b"\xff\xd8\xff", "image/jpeg"),
+	(b"GIF87a", "image/gif"),
+	(b"GIF89a", "image/gif"),
+)
+HEX_COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 STORED = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".tif", ".tiff", ".zip", ".gz", ".docx", ".xlsx"}
 SIDECAR = re.compile(r"\.meta\.(\d+)\.json$")
 MAIL_PREVIEW_LIMIT = 50 * 1024 * 1024
@@ -145,7 +157,7 @@ class Package:
 		manifest = json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True)
 		self.zip.writestr("manifest.json", manifest, compress_type=zipfile.ZIP_DEFLATED)
 		self.zip.writestr("manifest.csv", manifest_csv(self.documents), compress_type=zipfile.ZIP_DEFLATED)
-		self.zip.writestr("index.html", viewer(data), compress_type=zipfile.ZIP_DEFLATED)
+		self.zip.writestr("index.html", viewer(data, brand()), compress_type=zipfile.ZIP_DEFLATED)
 		self.zip.close()
 
 
@@ -281,14 +293,74 @@ def labels() -> dict:
 		"date_from": _("From Date"),
 		"date_to": _("To Date"),
 		"counterparty_type": _("Counterparty Type"),
+		"empty": _("Select a document to preview it."),
+		"shortcuts": _("Keyboard shortcuts"),
+		"key_move": _("Move through the list"),
+		"key_open": _("Open the preview"),
+		"key_search": _("Search"),
+		"key_escape": _("Clear the search or close"),
+		"key_files": _("Switch between attachments"),
+		"key_help": _("Show the shortcuts"),
+		"close": _("Close"),
+		"credit": _("Made with docarchive"),
+		"status": _("Status"),
+		"yes": _("Yes"),
+		"title_label": _("Title"),
 	}
 
 
-def viewer(data) -> str:
-	payload = json.dumps({**data, "labels": labels()}, ensure_ascii=False)
+def logo_type(data) -> str | None:
+	if not data or len(data) > LOGO_LIMIT:
+		return None
+	if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+		return "image/webp"
+	return next((mime for magic, mime in LOGO_MAGIC if data.startswith(magic)), None)
+
+
+def logo_error(file_url, data) -> str | None:
+	extension = (file_url or "").rsplit(".", 1)[-1].lower() if "." in (file_url or "") else ""
+	if extension not in LOGO_TYPES:
+		return _("The logo must be a PNG, JPEG, GIF or WebP image.")
+	if data is None:
+		return _("The logo file could not be read.")
+	if len(data) > LOGO_LIMIT:
+		return _("The logo may be at most {0} KB.").format(LOGO_LIMIT // 1024)
+	if logo_type(data) != LOGO_TYPES[extension]:
+		return _("The logo file is not a valid {0} image.").format(extension.upper())
+	return None
+
+
+def logo_uri(file_url) -> str | None:
+	if not file_url:
+		return None
+	data = content.read_bytes(file_url)
+	if logo_error(file_url, data):
+		return None
+	return f"data:{logo_type(data)};base64,{base64.b64encode(data).decode()}"
+
+
+def valid_color(value) -> bool:
+	return bool(HEX_COLOR.match(value or ""))
+
+
+def brand() -> dict:
+	config = settings.get()
+	color = (config.get("export_brand_color") or "").strip()
+	return {
+		"name": (config.get("export_brand_name") or "").strip() or None,
+		"logo": logo_uri(config.get("export_brand_logo")),
+		"color": color if valid_color(color) else None,
+		"credit": bool(config.get("export_show_credit")),
+	}
+
+
+def viewer(data, brand=None) -> str:
+	payload = json.dumps({**data, "brand": brand or {}, "labels": labels()}, ensure_ascii=False)
 	for char in SCRIPT_UNSAFE:
 		payload = payload.replace(char, f"\\u{ord(char):04x}")
-	return VIEWER.read_text(encoding="utf-8").replace(DATA_MARKER, payload)
+	template = VIEWER.read_text(encoding="utf-8")
+	template = template.replace(CORE_MARKER, VIEWER_CORE.read_text(encoding="utf-8"), 1)
+	return template.replace(DATA_MARKER, payload, 1)
 
 
 def mail_preview(message) -> str:

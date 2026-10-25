@@ -477,6 +477,30 @@ Part {0} of {1},Teil {0} von {1}
 Parts,Teile
 Please choose the counterparty type.,Bitte die Art der Gegenpartei wählen.
 Previous,Zurück
+Select a document to preview it.,Wählen Sie ein Dokument für die Vorschau.
+Keyboard shortcuts,Tastenkürzel
+Move through the list,In der Liste bewegen
+Open the preview,Vorschau öffnen
+Clear the search or close,Suche leeren oder schließen
+Switch between attachments,Zwischen Anhängen wechseln
+Show the shortcuts,Tastenkürzel anzeigen
+Made with docarchive,Erstellt mit docarchive
+Close,Schließen
+Search,Suchen
+Yes,Ja
+Export Viewer,Export-Viewer
+"Shown in the offline viewer (index.html) of every export. Leave empty for a neutral viewer.","Wird im Offline-Viewer (index.html) jedes Exports angezeigt. Leer lassen für einen neutralen Viewer."
+Brand Name,Markenname
+Brand Logo,Markenlogo
+"PNG, JPEG, GIF or WebP, at most 200 KB. It is embedded into the viewer, so nothing loads from the internet.","PNG, JPEG, GIF oder WebP, höchstens 200 KB. Es wird in den Viewer eingebettet, es wird also nichts aus dem Internet geladen."
+Brand Color,Markenfarbe
+"Hex color, for example #1a7f37.","Hex-Farbe, zum Beispiel #1a7f37."
+"Show ""Made with docarchive""","„Erstellt mit docarchive“ anzeigen"
+"The logo must be a PNG, JPEG, GIF or WebP image.","Das Logo muss ein PNG-, JPEG-, GIF- oder WebP-Bild sein."
+The logo file could not be read.,Die Logodatei konnte nicht gelesen werden.
+The logo may be at most {0} KB.,Das Logo darf höchstens {0} KB groß sein.
+The logo file is not a valid {0} image.,Die Logodatei ist kein gültiges {0}-Bild.
+The brand color must be a hex color like #1a7f37.,Die Markenfarbe muss eine Hex-Farbe wie #1a7f37 sein.
 Progress,Fortschritt
 Queued,In Warteschlange
 Rendered preview for reading only. The archived original is the file above.,Gerenderte Vorschau nur zum Lesen. Maßgeblich ist das archivierte Original oben.
