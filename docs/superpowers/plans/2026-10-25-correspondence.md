@@ -49,7 +49,8 @@
   - Doctype **Mail Original** (module Document Archive, not submittable, `track_changes` off, permissions: System Manager read/delete only), fields: `communication` (Link Communication, reqd, unique), `email_account` (Link Email Account), `origin` (Data), `file` (Attach), `sha256` (Data), `size` (Int), `direction` (Select `Incoming\nOutgoing`), `message_id` (Data, search index), `in_reply_to` (Data), `mail_references` (Long Text), `thread_key` (Data, search index), `sender` (Data), `to` (Small Text), `cc` (Small Text), `subject` (Small Text), `date_header` (Data), `mail_at` (Datetime), `automated` (Check), `internal` (Check), `business_document` (Link Business Document). All read-only.
   - `docarchive.mail.accounts.account_settings(email_account: str | None) -> frappe._dict | None` — the row, or `None` if missing or mode `Off`.
   - `docarchive.mail.accounts.internal_domains(row) -> set[str]` — lower-case domains from the row, else the domain of the Email Account's `email_id`.
-  - `docarchive.document_types.MAIL_TYPES` (the two seeded types, values from Global Constraints), `CORRESPONDENCE = "Correspondence"`, `INTERNAL_CORRESPONDENCE = "Internal Correspondence"`, and `ensure_mail_types()` which inserts each missing type (by `type_name`) and is called from `setup.apply_defaults()` after `seed_types()`.
+  - Business Document Type gets `is_correspondence` (Check, label "Correspondence", default 0) in its requirements section (modify `business_document_type.json`).
+  - `docarchive.document_types.MAIL_TYPES` (the two seeded types, values from Global Constraints, both with `is_correspondence: 1`), `CORRESPONDENCE = "Correspondence"`, `INTERNAL_CORRESPONDENCE = "Internal Correspondence"`, and `ensure_mail_types()` which inserts each missing type (by `type_name`) and is called from `setup.apply_defaults()` after `seed_types()`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -102,31 +103,45 @@ Expected: PASS
 
 ---
 
-### Task 2: Mail fields on Business Document
+### Task 2: Correspondence fields on Business Document
 
 **Files:**
 - Modify: `docarchive/document_archive/doctype/business_document/business_document.json`, `business_document.py`
+- Modify: `docarchive/queries.py` (requirement for correspondence types)
 - Modify: `docarchive/translations/de.csv`
-- Test: `docarchive/document_archive/doctype/business_document/test_business_document.py`
+- Test: `docarchive/document_archive/doctype/business_document/test_business_document.py`, `docarchive/tests/test_queries.py`
 
 **Interfaces:**
-- Produces: fields in a collapsible section "Mail" with `depends_on: eval:doc.mail_message_id || doc.mail_thread_key`: `mail_direction` (Select `\nIncoming\nOutgoing`), `mail_message_id` (Data, search index), `mail_in_reply_to` (Data), `mail_references` (Long Text), `mail_thread_key` (Data, search index), `mail_at` (Datetime). All read-only.
-- Produces: `MAIL_FIELDS` tuple in `business_document.py`, added to both `LOCKED_FIELDS` and `PROTECTED_FIELDS`.
+- Produces: a collapsible section "Correspondence" with `depends_on: eval:doc.correspondence_channel || doc.mail_message_id`, fields: `correspondence_channel` (Select `\nE-mail\nLetter\nFax\nOther`), `correspondence_direction` (Select `\nIncoming\nOutgoing`), `correspondence_at` (Datetime), `thread_key` (Data, search index, read-only), `mail_message_id` (Data, search index, read-only), `mail_in_reply_to` (Data, read-only), `mail_references` (Long Text, read-only).
+- Produces in `business_document.py`: `CORRESPONDENCE_FIELDS = ("correspondence_channel", "correspondence_direction", "correspondence_at")`, `MAIL_FIELDS = ("thread_key", "mail_message_id", "mail_in_reply_to", "mail_references")`. Both go into `LOCKED_FIELDS`; `MAIL_FIELDS` always into `PROTECTED_FIELDS`; `CORRESPONDENCE_FIELDS` are restored like protected fields only when `source_doctype == "Communication"` (so users can set them on uploaded letters and faxes, but not change a mail's).
+- Produces: `missing_fields(doc)` adds `"Channel"` and `"Direction"` when the type has `is_correspondence` and the field is empty; `queries.REQUIREMENTS` gets the matching `("is_correspondence", ...)` entries so `documents_to_assign` lists them.
 - Produces: `validate_file` accepts the extension `eml` when `source_doctype == "Communication"`, regardless of Allowed File Types.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
 def test_mail_fields_are_server_only(self):
-	doc = make_business_document(mail_message_id="a@b")   # archive_write False
-	self.assertFalse(doc.mail_message_id)
+	doc = make_business_document(mail_message_id="a@b", thread_key="a@b")   # archive_write False
+	self.assertFalse(doc.mail_message_id or doc.thread_key)
 
-def test_mail_fields_locked_after_archive_start(self):
-	doc = make_business_document(archive_write=True, mail_message_id="a@b")
+def test_user_sets_channel_and_direction_on_letter(self):
+	doc = make_business_document(correspondence_channel="Letter", correspondence_direction="Incoming")
+	self.assertEqual((doc.correspondence_channel, doc.correspondence_direction), ("Letter", "Incoming"))
+
+def test_mail_direction_not_changeable_by_user(self):
+	doc = make_business_document(archive_write=True, source_doctype="Communication", source_name=comm.name, correspondence_direction="Incoming", ...)
+	doc.correspondence_direction = "Outgoing"; doc.flags.archive_write = False; doc.save()
+	self.assertEqual(doc.reload().correspondence_direction, "Incoming")
+
+def test_correspondence_type_requires_channel_and_direction(self):
+	doc = make_business_document(document_type=make_document_type(is_correspondence=1, counterparty_required=0).name)
+	self.assertEqual(missing_fields(doc), ["Channel", "Direction"])
+
+def test_correspondence_fields_locked_after_archive_start(self):
+	doc = make_business_document(archive_write=True, correspondence_channel="Letter", mail_message_id="a@b")
 	start_archiving(doc)          # existing helper/pattern in this test file
-	doc.mail_message_id = "c@d"; doc.flags.archive_write = False
-	doc.save()
-	self.assertEqual(doc.reload().mail_message_id, "a@b")
+	doc.correspondence_channel = "Fax"
+	self.assertRaises(frappe.ValidationError, doc.save)
 
 def test_eml_allowed_for_communication_source(self):
 	file = make_file(content=EML, file_name="m.eml")
@@ -143,11 +158,11 @@ Add `EML` (a small RFC 5322 message as bytes) and `eml(**headers)` builder to `t
 
 Run: `bench --site docarchive.test run-tests --app docarchive --module docarchive.document_archive.doctype.business_document.test_business_document`
 
-- [ ] **Step 3: Add fields, `MAIL_FIELDS`, the `eml` rule, translations**
+- [ ] **Step 3: Add fields, the field tuples, the requirement, the `eml` rule, translations**
 
-- [ ] **Step 4: Run the business document tests, `test_guards`, `test_translations`** — Expected: PASS
+- [ ] **Step 4: Run the business document tests, `test_queries`, `test_guards`, `test_translations`** — Expected: PASS
 
-- [ ] **Step 5: Commit** — `feat: mail fields on business documents`
+- [ ] **Step 5: Commit** — `feat: correspondence fields on business documents`
 
 ---
 
@@ -277,7 +292,7 @@ def test_deleting_communication_keeps_archived_original(self): ...  # set busine
 **Interfaces:**
 - Consumes: Mail Original (Task 1), Business Document mail fields (Task 2), `capture` (Task 3).
 - Produces:
-  - `archive(original_name: str) -> str` — returns the Business Document name. Type: `INTERNAL_CORRESPONDENCE` if `original.internal`, else `CORRESPONDENCE`. Own company: `settings.own_company_for(mail_at, row.own_company)`. Dedupe: an existing Business Document with the same own company and `mail_message_id` (or, without Message-ID, the same `content_sha256` and `source_doctype = "Communication"`) is returned and linked in `original.business_document`. Otherwise inserts with `flags.archive_write = True`: `document_date = getdate(mail_at)`, `title = subject or _("(no subject)")` (max 140 chars), `source_system = "email"`, `source_account = email_account`, `source_doctype = "Communication"`, `source_name`, `source_party_email` = sender for Incoming, first `to` address for Outgoing, the `mail_*` fields from the original; then attaches a new private File with the same bytes to the document, sets `file`, saves, and sets `original.business_document`.
+  - `archive(original_name: str) -> str` — returns the Business Document name. Type: `INTERNAL_CORRESPONDENCE` if `original.internal`, else `CORRESPONDENCE`. Own company: `settings.own_company_for(mail_at, row.own_company)`. Dedupe: an existing Business Document with the same own company and `mail_message_id` (or, without Message-ID, the same `content_sha256` and `source_doctype = "Communication"`) is returned and linked in `original.business_document`. Otherwise inserts with `flags.archive_write = True`: `document_date = getdate(mail_at)`, `title = subject or _("(no subject)")` (max 140 chars), `source_system = "email"`, `source_account = email_account`, `source_doctype = "Communication"`, `source_name`, `source_party_email` = sender for Incoming, first `to` address for Outgoing, `correspondence_channel = "E-mail"`, `correspondence_direction = original.direction`, `correspondence_at = original.mail_at`, `thread_key`, `mail_message_id`, `mail_in_reply_to`, `mail_references` from the original; then attaches a new private File with the same bytes to the document, sets `file`, saves, and sets `original.business_document`.
   - `refusal(original_name: str | None) -> str | None` — `_("No original was captured for this e-mail.")` if none; else `None`.
   - `auto_archive(original_name: str) -> str | None` — only for mode `Automatic`, not `automated`, and (`archive_internal` or not `internal`); calls `archive`. Runs inside the caller's savepoint.
   - `assign(doc)` — `docarchive_assign` hook. Does nothing unless `doc.source_doctype == "Communication"` and no counterparty. Candidates from the Communication's `timeline_links`: drop Contacts whose every e-mail address is internal (`accounts.internal_domains` of the account in `doc.source_account`); a Contact with dynamic links is replaced by those links; a Contact without links counts only if the row's `contacts_as_counterparty` is on; keep only doctypes allowed by `counterparty.doctypes()` (empty = any); dedupe. Exactly one left → set `counterparty_type`, `counterparty`.
@@ -291,7 +306,7 @@ def test_deleting_communication_keeps_archived_original(self): ...  # set busine
 def test_archive_creates_document(self):
 	name = archiving.archive(original)
 	doc = frappe.get_doc("Business Document", name)
-	self.assertEqual((doc.document_type, doc.mail_direction, doc.source_doctype), ("Correspondence", "Incoming", "Communication"))
+	self.assertEqual((doc.document_type, doc.correspondence_channel, doc.correspondence_direction, doc.source_doctype), ("Correspondence", "E-mail", "Incoming", "Communication"))
 	self.assertEqual(content.read_bytes(doc.file), EML)
 	self.assertEqual(frappe.db.get_value("Mail Original", original, "business_document"), name)
 
@@ -337,7 +352,7 @@ def test_discard_refuses_archived(self):
 - Consumes: Mail Original, `archiving.discard` logic (reuse the deleting helper, not the whitelisted wrapper).
 - Produces:
   - `cleanup.run() -> dict` — `{"originals": n, "documents": m}`. Per configured account, cutoff = now − `keep_days`: deletes Mail Originals with `creation < cutoff` and no `business_document`; deletes Business Documents with `source_doctype = "Communication"`, `source_account` = the account, `archive_started_at` not set, `counterparty` not set, `creation < cutoff`, together with their Mail Original. Accounts with mode Off are skipped too (their originals stay until the account is configured again; my call, keeps a switch-off from wiping data).
-  - `run.meta(doc, years, until)` gets `"mail": mail_meta(doc)`, `None` for non-mail documents. `mail_meta` reads the Mail Original with `business_document = doc.name` and returns `direction, message_id, in_reply_to, references (list), thread_key, from, to, cc, subject, date_header, received_or_sent_at (UTC ISO via utc_iso), account, origin` and, for origin `frappe-send`, `"note": "Copies to other recipients differ only in tracking and unsubscribe links."`. Format string stays `docarchive-meta/1`.
+  - `run.meta(doc, years, until)` gets `"correspondence": correspondence_meta(doc)`, `None` unless the type has `is_correspondence`. It returns `{"channel", "direction", "at" (UTC ISO via utc_iso or None), "thread_key", "mail": mail_meta(doc)}`. `mail_meta` reads the Mail Original with `business_document = doc.name` (None if there is none, e.g. a letter) and returns `message_id, in_reply_to, references (list), from, to, cc, subject, date_header, account, origin` and, for origin `frappe-send`, `"note": "Copies to other recipients differ only in tracking and unsubscribe links."`. Format string stays `docarchive-meta/1`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -351,11 +366,14 @@ def test_started_document_kept(self):
 
 # test_run.py
 def test_meta_has_mail_section(self):
-	meta = run.meta(doc, 6, until)
+	meta = run.meta(doc, 6, until)["correspondence"]
+	self.assertEqual((meta["channel"], meta["direction"]), ("E-mail", "Incoming"))
 	self.assertEqual(meta["mail"]["message_id"], MESSAGE_ID)
-	self.assertEqual(meta["mail"]["direction"], "Incoming")
-def test_meta_without_mail_is_none(self):
-	self.assertIsNone(run.meta(plain_doc, 8, until)["mail"])
+def test_meta_letter_has_no_mail(self):
+	meta = run.meta(letter_doc, 6, until)["correspondence"]
+	self.assertEqual(meta["channel"], "Letter"); self.assertIsNone(meta["mail"])
+def test_meta_invoice_has_no_correspondence(self):
+	self.assertIsNone(run.meta(plain_doc, 8, until)["correspondence"])
 ```
 
 - [ ] **Step 2: Run and see them fail** — `--module docarchive.tests.test_mail_cleanup`
@@ -372,11 +390,11 @@ def test_meta_without_mail_is_none(self):
 - Test: `docarchive/tests/test_mail_viewer.py`
 
 **Interfaces:**
-- Consumes: Business Document `file`, `content_sha256`, `mail_*` fields; `content.read_bytes`.
+- Consumes: Business Document `file`, `content_sha256`, `thread_key`, `correspondence_*` and `mail_*` fields; `content.read_bytes`.
 - Produces:
   - `@frappe.whitelist() viewer.render(name: str) -> dict` — requires read on the Business Document and a `.eml` file. Returns `{"headers": {"from", "to", "cc", "date", "subject", "message_id"}, "html": str | None, "text": str | None, "remote_images": bool, "attachments": [{"index": int, "file_name": str, "content_type": str, "size": int}], "sha256_ok": bool}`. HTML: preferred `text/html` part, passed through `frappe.utils.html_utils.sanitize_html`; `cid:` references replaced by `data:` URIs of the related parts; `src` of remote images (`http:`/`https:`) moved to `data-remote-src`. `attachments` come from `msg.iter_attachments()` in order; `index` is the position.
   - `@frappe.whitelist() viewer.attachment(name: str, index: int)` — same permission; sets `frappe.response.filename`, `filecontent`, `type = "download"`.
-  - `@frappe.whitelist() thread.thread(name: str) -> list[dict]` — Business Documents (via `frappe.get_list`) with the same `mail_thread_key` and own company, ordered by `mail_at`. Items: `{"kind": "mail", "name", "title", "direction", "mail_at", "sender"}`; for each `mail_in_reply_to` not among the listed Message-IDs one `{"kind": "gap", "message_id", "communication": str | None}` placed before the replying mail, where `communication` is set if a Mail Original with that Message-ID exists without `business_document` and the user can read its Communication.
+  - `@frappe.whitelist() thread.thread(name: str) -> list[dict]` — Business Documents (via `frappe.get_list`) with the same `thread_key` and own company, ordered by `correspondence_at`; empty list when the document has no `thread_key`. Items: `{"kind": "mail", "name", "title", "channel", "direction", "at", "sender"}` (sender = `source_party_email`); for each `mail_in_reply_to` not among the listed Message-IDs one `{"kind": "gap", "message_id", "communication": str | None}` placed before the replying mail, where `communication` is set if a Mail Original with that Message-ID exists without `business_document` and the user can read its Communication.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -414,7 +432,7 @@ def test_thread_orders_and_shows_gap(self):
 - Test: `docarchive/tests/test_translations.py` (existing), manual check in the desk
 
 **Interfaces:**
-- Consumes: `archiving.status`, `archiving.archive_communications`, `archiving.discard`, `viewer.render`, `viewer.attachment`, `thread.thread`, `docarchive.upload_documents` (existing, extended with optional `source_doctype`, `source_name`, `document_date` defaults; `documents.create_documents` gets matching optional parameters and sets them with `flags.archive_write` only for `source_doctype == "Business Document"` the user can read).
+- Consumes: `archiving.status`, `archiving.archive_communications`, `archiving.discard`, `viewer.render`, `viewer.attachment`, `thread.thread`, `docarchive.upload_documents` (existing, extended with optional `source_doctype`, `source_name`, `document_date` defaults; `documents.create_documents` gets matching optional parameters and sets them with `flags.archive_write` only for `source_doctype == "Business Document"` the user can read). The upload dialog shows "Channel" and "Direction" when the chosen type has `is_correspondence` (fetch the flag with the type list), and `create_documents` gets optional `correspondence_channel`, `correspondence_direction`, `correspondence_at` parameters.
 - Produces:
   - Communication form: button "Archive" (disabled with `reason` when there is no original; warning dialog when `automated` or `internal`), and a link "Archived as {0}" when `business_document` is set.
   - Communication list: bulk action "Archive" that reports refused mails in one message.
@@ -423,7 +441,8 @@ def test_thread_orders_and_shows_gap(self):
   - Business Document form: buttons "Show e-mail" and "Show thread" for correspondence documents, "Discard" while archiving has not started; list view bulk action "Discard" (confirm dialog).
   - README: a "Correspondence" section covering account settings, modes, automated and internal mails, cleanup, the viewer, and `docarchive.mail.capture(communication, raw, origin)` for host apps.
 
-- [ ] **Step 1: Write the JS and the README section, add every new string to `de.csv`**
+- [ ] **Step 1: Write the failing test for the upload parameters** — in `tests/test_documents.py`: `create_documents(..., document_type=<correspondence type>, correspondence_channel="Letter", correspondence_direction="Outgoing")` stores both; `source_doctype="Business Document"` for a document the user cannot read raises `frappe.PermissionError`. Run `--module docarchive.tests.test_documents`, expect FAIL, implement, expect PASS.
+- [ ] **Step 1b: Write the JS and the README section, add every new string to `de.csv`**
 - [ ] **Step 2: Run `test_translations`** — Expected: PASS
 - [ ] **Step 3: Build and check in the desk** — `bench build --app docarchive`; with a Manual-mode account, receive a test mail, archive it from the Communication form, open "Show e-mail" (script stripped, images blocked until clicked, attachment downloads), open "Show thread", discard a second unarchived document.
 - [ ] **Step 4: Run the full suite** — `bench --site docarchive.test run-tests --app docarchive` — Expected: all PASS

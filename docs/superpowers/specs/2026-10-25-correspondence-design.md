@@ -30,7 +30,11 @@ Checked against secondary sources (KPMG, DATEV, Bitkom, IHK) as of October 2026;
 5. Show an archived mail readably from the archived bytes themselves, with its thread and its attachments.
 6. Let other apps (e.g. mailsync) hand in original bytes for the Communications they create.
 
+7. Record letters and faxes (uploaded scans) as correspondence with channel and direction.
+
 ## Non-goals
+
+- Messenger channels such as WhatsApp. The neutral fields and the meta layout leave room for them; capture, original format and viewer would be their own feature.
 
 - Mails that were in Frappe before the feature was enabled. If needed later, a journal mailbox import (route the old mailboxes into a mailbox that docarchive reads) is a separate feature.
 - A PDF rendering of mails.
@@ -86,8 +90,9 @@ A mail counts as automated if it has `List-Unsubscribe`, `Auto-Submitted` other 
 - Automatic (decided with the user): right after capture, if the mail is not automated and (internal mails are on, or the mail is not internal), a Business Document is created. If the counterparty resolves, the nightly run archives it as usual. If not, it waits without a counterparty: a person has the keep period (default 90 days) to assign one, which can be followed by the existing "archive now" or the nightly run. When the keep period ends without a counterparty, the document is removed together with its original (see Cleanup). So spam and private mail never reach WORM storage unless someone assigns them.
 - Discard (decided with the user): an action "Discard" on a correspondence document whose archiving has not started, also as a bulk action. It removes the document and its captured original. Document Managers may use it, through a server method, since they have no delete permission in general. Archived documents can never be discarded.
 - The Business Document: type "Correspondence", `document_date` = date the mail was received or sent in Frappe (`communication_date`), `title` = subject, `source_doctype` = Communication, `source_name`, `source_system` = `email`, `source_account` = the account.
-- New fields on Business Document, in a "Mail" section shown only when they are set: `direction` (Incoming / Outgoing, from `sent_or_received`), `message_id`, `in_reply_to`, `references`, `thread_key`. They are server-only and locked after archiving starts, like the other source fields.
-- `thread_key` = the first Message-ID in `References`, else `In-Reply-To`, else the mail's own Message-ID.
+- Channel-neutral fields on Business Document (decided with the user, so letters, faxes and later messengers such as WhatsApp fit without a rebuild), in a "Correspondence" section: `correspondence_channel` (E-mail, Letter, Fax, Other), `correspondence_direction` (Incoming / Outgoing), `correspondence_at` (when it was received or sent), `thread_key`. Mail-specific fields next to them: `mail_message_id`, `mail_in_reply_to`, `mail_references`. All are locked after archiving starts. For documents whose source is a Communication they are server-only (direction from `sent_or_received`); for uploaded letters and faxes, channel, direction and date can be entered by the user, `thread_key` stays server-only.
+- Business Document Type gets a flag "Correspondence". For such types, channel and direction are required before archiving (they join the existing missing-fields check), and the upload dialog asks for them. Both seeded correspondence types have the flag.
+- `thread_key` (mail) = the first Message-ID in `References`, else `In-Reply-To`, else the mail's own Message-ID. Other channels set their own thread key later (e.g. a chat id); letters have none in this version.
 - Dedupe: one Business Document per own company and Message-ID; for mails without a Message-ID, per own company and SHA-256. Archiving an already archived mail opens the existing document. (A mail sent from Frappe to an internal colleague whose inbox is also connected yields two captures with the same Message-ID; the first wins.)
 - The seeded type "Correspondence": 6 years, counted from the document date, counterparty required, number not required. Editable like the other seeded types.
 - Internal mails (when the account allows them) get a second seeded type "Internal Correspondence": 6 years, counterparty not required. (My call: internal mails have no external party, and a required counterparty would block them forever.)
@@ -104,7 +109,7 @@ A daily job deletes captured `.eml` Files on Communications that are older than 
 
 ### Meta
 
-The `.meta.json` gets a `mail` section: `direction`, `message_id`, `in_reply_to`, `references`, `thread_key`, `from`, `to`, `cc`, `subject`, `date_header` (the sender's `Date`), `received_or_sent_at` (Frappe's time), `account`, `origin`, and for outgoing mails a note that recipients' copies differ in tracking links. (Whether this bumps the format version is the builder's call.)
+The `.meta.json` gets a `correspondence` section for correspondence types (`null` otherwise): `channel`, `direction`, `at`, `thread_key`, and a channel-specific sub-section. For e-mail that is `mail`: `message_id`, `in_reply_to`, `references`, `from`, `to`, `cc`, `subject`, `date_header` (the sender's `Date`), `account`, `origin`, and for outgoing mails a note that recipients' copies differ in tracking links. A later messenger channel adds its own sub-section next to `mail`. (Whether this bumps the format version is the builder's call.)
 
 ### Viewer (decided with the user, details my call)
 
