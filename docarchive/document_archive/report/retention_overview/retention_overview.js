@@ -22,5 +22,6 @@ frappe.query_reports["Retention Overview"] = {
 		},
 		{ fieldname: "ending_within_months", label: __("Ends within (months)"), fieldtype: "Int" },
 		{ fieldname: "failed_copies", label: __("Only failed copies"), fieldtype: "Check" },
+		{ fieldname: "legal_hold", label: __("Only under legal hold"), fieldtype: "Check" },
 	],
 };

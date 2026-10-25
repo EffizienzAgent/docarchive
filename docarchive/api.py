@@ -51,6 +51,7 @@ def upload_document(
 	source_party_email: str | None = None,
 	source_key: str | None = None,
 	attachments: list | str | None = None,
+	legal_hold: str | None = None,
 ) -> dict:
 	frappe.only_for(ALLOWED_ROLES)
 	doc_type = document_type_for(document_type)
@@ -67,6 +68,7 @@ def upload_document(
 		"source_party_id": clean(source_party_id),
 		"source_party_name": clean(source_party_name),
 		"source_party_email": clean(source_party_email),
+		"hold_on_archive": parse_flag(legal_hold, "legal_hold"),
 	}
 	check_required(doc_type, fields)
 	name, data = read_upload(file_name, content_base64)
@@ -158,6 +160,15 @@ def document_type_for(slug):
 	if not name:
 		fail(_("Unknown document type {0}.").format(slug))
 	return frappe.get_cached_doc("Business Document Type", name)
+
+
+def parse_flag(value, label) -> int:
+	value = (clean(str(value)) if value is not None else "") or ""
+	if value.lower() in ("", "0", "false", "no"):
+		return 0
+	if value.lower() in ("1", "true", "yes"):
+		return 1
+	fail(_("{0} must be true or false.").format(label))
 
 
 def parse_date(value, label, required=False):
@@ -327,5 +338,6 @@ def response(name, status):
 			for row in doc.attachments
 		],
 		"archive_status": doc.archive_status,
+		"legal_hold": doc.hold_on_archive,
 		"missing": missing_fields(doc),
 	}

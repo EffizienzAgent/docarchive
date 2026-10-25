@@ -15,6 +15,7 @@ FIELDS = [
 	"retention_mode",
 	"retain_until",
 	"archive_status",
+	"legal_hold",
 ]
 
 
@@ -25,7 +26,12 @@ def execute(filters=None):
 
 
 def conditions(filters) -> list:
-	result = [] if filters.failed_copies else [["archive_status", "=", "Archived"]]
+	status = (
+		["archive_status", "!=", "Deleted"] if filters.failed_copies else ["archive_status", "=", "Archived"]
+	)
+	result = [status]
+	if filters.legal_hold:
+		result.append(["legal_hold", "=", 1])
 	for field in ("document_type", "own_company", "counterparty_type", "counterparty"):
 		if filters.get(field):
 			result.append([field, "=", filters[field]])
@@ -82,6 +88,7 @@ def columns():
 			"width": 150,
 		},
 		{"fieldname": "title", "label": _("Title"), "fieldtype": "Data", "width": 220},
+		{"fieldname": "legal_hold", "label": _("Legal Hold"), "fieldtype": "Check", "width": 90},
 		{
 			"fieldname": "document_type",
 			"label": _("Business Document Type"),

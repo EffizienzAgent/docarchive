@@ -6,7 +6,7 @@ docarchive files business documents such as invoices, contracts and bank stateme
 
 ## Status
 
-This version has the document model, the locks, the storage configuration, the upload API and the nightly archive run to Object Lock storage. Archiving is off until a System Manager enables it in Archive Settings. Until then, nothing leaves the site.
+This version has the document model, the locks, the storage configuration, the upload API, the nightly archive run to Object Lock storage, legal holds, and the deletion of expired documents. Archiving is off until a System Manager enables it in Archive Settings. Until then, nothing leaves the site.
 
 ## No compliance promise
 
@@ -17,7 +17,7 @@ docarchive is a technical tool. It does not make you compliant with GoBD, the GD
 - **Business Document**: one record per document, with a private file, a type, a document date, a number, an own company and a counterparty. The counterparty is a Dynamic Link (`counterparty_type` + `counterparty`), so it can point to any doctype the host app allows.
 - **Attachments**: a document has one main file (`file`, used for the preview and the title) and optional **Attachments**: further files such as annexes, the XML of an e-invoice or a proof of service. Each row has a file, a role (Attachment, Structured Invoice (XML), Proof of Service), a title (defaults to the file name) and its SHA-256. Attachments follow the same rules as the main file: private, uploaded to this document by the same user (exact URL and owner), an allowed file type, and no file twice in one document. They are archived, locked, extended and checked together with the main file. Once archiving starts, the attachment list is locked: no row can be added, removed, reordered or changed. An addendum becomes a new document, e.g. with `replaces` set by the upload API.
 - **Checksums**: when a file is attached, the app computes `content_sha256` from the raw file bytes. The archive run compares this value with the bytes it reads back from storage.
-- **Object Lock**: each archived object gets its own retention mode (GOVERNANCE or COMPLIANCE) and retain-until date. The app never deletes from an archive bucket; the only delete call is the smoke check, which tries to delete its own `_smoke/` test object and expects a refusal. Object Lock only lets retention grow, never shrink.
+- **Object Lock**: each archived object gets its own retention mode (GOVERNANCE or COMPLIANCE) and retain-until date. With the regular archive key the app never deletes from an archive bucket; its only delete call is the smoke check, which tries to delete its own `_smoke/` test object and expects a refusal. Deleting expired documents needs a separate, optional archive admin key (see [Deleting expired documents](#deleting-expired-documents)). Object Lock only lets retention grow, never shrink.
 - **Retention**: the retention period ends on January 1 after the document year plus the retention years. For contracts it can count from the contract end date instead. Years come from a rule per own company and document type in Archive Settings, or from the type's default. The seeded types (Outgoing Invoice, Incoming Invoice, Contract, Bank Statement) ship with editable defaults. Check them for your jurisdiction.
 - **Locking**: once archiving starts (`archive_started_at`), the fields that make up the object key and the source fields can no longer change: own company, type, date, number, counterparty, file, the attachments and `source_*`. The contract end date can still move later (which extends retention), but never earlier, and it cannot be cleared. Deleting the document is refused. Its file cannot be deleted, moved, made public or detached. Other File rows that share the archived object (the same `file_url` through deduplication, the same `content_hash`, or a `thumbnail_url` pointing at it) cannot change their URL, hash, thumbnail or privacy either. A counterparty linked from an archived document cannot be renamed or merged.
 - **Server-only fields**: the checksum, the archive status, keys and retention fields, and the `source_*` fields are restored on every save, unless server code sets `doc.flags.archive_write`.
@@ -27,7 +27,7 @@ docarchive is a technical tool. It does not make you compliant with GoBD, the GD
 
 ## Roles
 
-The app creates the role **Document Manager** (read, write and create documents; no delete) and the role **Document Integration** for the [upload API](#upload-api) (no desk access and no document permissions; it can only call the upload endpoint). Files attached to a Business Document can only be changed or deleted by users who may write that document, so an integration user cannot touch the files it uploaded. Only System Manager can read or change Archive Settings, so storage endpoints, buckets and key names stay hidden from document managers. To let a host role in, add it to **Archive Settings → Manager Roles** (Guest, All and Desk User are refused). The app then grants that role the same rights through Custom DocPerm and remembers which rows it created. On every save of the settings and on every migrate, it removes only those rows for roles that are no longer listed; permission rows set by an admin stay.
+The app creates the role **Document Manager** (read, write and create documents; no delete), the role **Archive Admin** (read documents, release legal holds, delete documents after their retention; see [Legal hold](#legal-hold)) and the role **Document Integration** for the [upload API](#upload-api) (no desk access and no document permissions; it can only call the upload endpoint). Files attached to a Business Document can only be changed or deleted by users who may write that document, so an integration user cannot touch the files it uploaded. Only System Manager can read or change Archive Settings, so storage endpoints, buckets and key names stay hidden from document managers. To let a host role in, add it to **Archive Settings → Manager Roles** (Guest, All and Desk User are refused). The app then grants that role the same rights through Custom DocPerm and remembers which rows it created. On every save of the settings and on every migrate, it removes only those rows for roles that are no longer listed; permission rows set by an admin stay.
 
 Custom DocPerm replaces the standard permissions of a doctype. If you edit permissions on these doctypes by hand, keep the manager rows.
 
@@ -39,6 +39,18 @@ Archive Settings has a **Storage Targets** table with one row per bucket (usuall
 - from fields on the row, with the credentials in Password fields, which Frappe stores encrypted.
 
 Credentials are never stored in plain text. Endpoints must use https, must not be private, loopback or link-local addresses or local host names, and bucket names must be valid, for site config values once they are set too. Two targets cannot point to the same endpoint and bucket. The archive can only be enabled with at least one enabled target, and only when all its site config keys are set.
+
+Each row can also name an optional **archive admin key**: in site config mode two more config key names (**Admin Access Key Config Key**, **Admin Secret Key Config Key**, e.g. `s3_archive_admin_access_key` and `s3_archive_admin_secret_key`), in fields mode two more Password fields. Both or neither must be set. Archiving never uses the archive admin key. It is only used to release legal holds and to delete documents. When it is not configured, or its site config keys are empty, those actions are hidden and refused, and everything else keeps working.
+
+### Two keys
+
+| | Archive key (`access_key`) | Archive admin key (`admin_access_key`) |
+|---|---|---|
+| Used for | archiving (optionally with a legal hold at upload), extending retention, smoke check | setting and releasing legal holds on archived objects, deleting expired documents, early GOVERNANCE delete |
+| Needs | `PutObject` (with `ObjectLockLegalHoldStatus` for a hold at upload), `PutObjectRetention`, `GetObject*`, `ListBucket` | `PutObjectLegalHold`, `DeleteObjectVersion`, `GetObject*`, `ListBucket`; `BypassGovernanceRetention` only for early deletion |
+| Never | delete, shorten retention, bypass governance, change policies | `PutObject`, `DeleteObject` without version (delete markers), `PutObjectRetention`, policy or lock changes |
+
+S3 has a single permission, `s3:PutObjectLegalHold`, for setting and releasing a hold on an existing version, and providers such as Ceph RGW (Hetzner) do not evaluate the `s3:object-lock-legal-hold` condition that could limit a key to ON. So only the archive admin key changes holds on archived objects, in both directions. The archive key can only set a hold while it uploads a new version (`PutObject` with `ObjectLockLegalHoldStatus=ON`); the AST guard keeps `put_object_legal_hold` away from the archive key.
 
 Any S3-compatible provider with Object Lock works. [docs/hetzner-example.md](docs/hetzner-example.md) shows one setup. `scripts/apply_bucket_policy.py` sets a deny-only bucket policy for the keys, and `scripts/check_object_lock.py` checks what each key can and cannot do in one bucket.
 
@@ -82,6 +94,8 @@ frappe.ui.form.on("Customer", {
 
 - `docarchive.queries.documents_to_assign()`: documents that are not archived and still lack a file or a field their type requires, or whose archiving failed. Newest first, each with a `missing` list.
 - `docarchive.queries.count_documents_to_assign()` (whitelisted): the number of those documents.
+- `docarchive.expiry.due_count()` (whitelisted): the number of documents due for deletion (the rows of **Expired Documents**). The standard number card **Documents Due for Deletion** shows it.
+- The document list (`counterparty_documents`) returns `legal_hold`, so panels can show the hold. Deleted documents are left out.
 
 ## Upload API
 
@@ -109,6 +123,7 @@ Send the file either as multipart form data (field `file`) or as JSON / form fie
 | `source_system`, `source_account`, `source_party_type`, `source_party_id` | no | Where the document comes from, e.g. `Billing`, an account ID, `client`, `42`. The host app's `docarchive_assign` hook uses them to find the counterparty. |
 | `source_party_name`, `source_party_email` | no | Shown to the people who assign the document by hand. Never used to guess a counterparty. |
 | `source_key` | no | A stable ID of the document in the source system, e.g. `billing:invoice:42`. Makes retries safe. |
+| `legal_hold` | no | `true` or `false` (default). Sets **Set Legal Hold When Archiving**: every archived object is uploaded with a legal hold. |
 
 A type with **Counterparty Required** needs at least one of `source_party_id`, `source_party_name` and `source_party_email`. A counterparty that cannot be resolved does not fail the upload; the document then appears in `documents_to_assign()`.
 
@@ -208,11 +223,47 @@ The Business Document list and the counterparty panel show `retain_until`; the p
 
 ### Object Lock writes
 
-`docarchive.run.locked_objects(doc, copy)` lists every locked object version of a copy as `(key, version_id, sha256)`: the main file, each attachment and the `.meta.json` (extension sidecars are recorded separately). Code that acts on all objects of a document, such as the retention extension and the mode sync, goes through it.
+`docarchive.run.locked_objects(doc, copy)` lists every locked object version of a copy as `(key, version_id, sha256)`: the main file, each attachment and the `.meta.json` (extension sidecars are recorded separately, in `sidecar_versions`). Code that acts on all objects of a document, such as the retention extension and the mode sync, goes through it. `run.copy_objects(copy, doc)` adds the sidecars; legal holds and deletion use it, so they cover the main file, every attachment, the `.meta.json` and every sidecar.
 
-`docarchive.store.put_locked(target, key, body, mode, retain_until)` is the only code that calls `PutObject`. Before any request it checks that the mode is `GOVERNANCE` or `COMPLIANCE` and that `retain_until` is a timezone-aware datetime in the future. It always sends `ObjectLockMode`, `ObjectLockRetainUntilDate`, `ContentMD5` and the SHA-256 as object metadata. `docarchive.store.extend_locked` is the only code that calls `PutObjectRetention`; see the retention extension above. A test parses the app's source: each S3 client method may be used in exactly one function of `store.py`, copy, multipart, presigned URL, legal hold and policy calls are banned, `BypassGovernanceRetention` is only allowed in the smoke check, and only `store.py` may import boto3, botocore or `s3storage.client`.
+`docarchive.store.put_locked(target, key, body, mode, retain_until)` is the only code that calls `PutObject`. Before any request it checks that the mode is `GOVERNANCE` or `COMPLIANCE` and that `retain_until` is a timezone-aware datetime in the future. It always sends `ObjectLockMode`, `ObjectLockRetainUntilDate`, `ContentMD5` and the SHA-256 as object metadata. `docarchive.store.extend_locked` is the only code that calls `PutObjectRetention`; see the retention extension above. A test parses the app's source: each method of each client (archive key `_client`, archive admin key `_admin_client`) may be used in exactly one function of `store.py`. The archive key never calls `PutObjectLegalHold`; `put_locked` can send `ObjectLockLegalHoldStatus=ON` at upload, and `smoke_delete` is its only delete. With the archive admin key: `_admin_hold` changes holds and is only called by `set_hold` and `release_hold`, and `_admin_delete` deletes a version and is only called by `delete_expired` and `delete_early`. The admin client may not be referenced anywhere else, so it cannot be aliased into another function. `BypassGovernanceRetention` is only allowed in `smoke_delete` and `delete_early`. Copy, multipart, presigned URL and policy calls are banned, and only `store.py` may import boto3, botocore or `s3storage.client` or touch a client.
 
-The lock mode comes from the storage target and is recorded per copy. Switch a target to COMPLIANCE once your trial is done. New documents then use COMPLIANCE. Existing objects are switched outside the app with an admin key (see [docs/hetzner-example.md](docs/hetzner-example.md)). Then run `bench --site <site> docarchive-sync-mode --target <name>`: it reads the retention of every recorded object version (main file, attachments, `.meta.json`) of every archived copy on that target. It only records an upgrade from GOVERNANCE to COMPLIANCE when all of them report COMPLIANCE, never a downgrade. Documents with any other difference are listed as mismatched, errors are listed per document, and the command exits with status 1 if there are any.
+The lock mode comes from the storage target and is recorded per copy. Switch a target to COMPLIANCE once your trial is done. New documents then use COMPLIANCE. Existing objects are switched outside the app with the offline admin key (see [docs/hetzner-example.md](docs/hetzner-example.md)). Then run `bench --site <site> docarchive-sync-mode --target <name>`: it reads the retention of every recorded object version (main file, attachments, `.meta.json`) of every archived copy on that target. It only records an upgrade from GOVERNANCE to COMPLIANCE when all of them report COMPLIANCE, never a downgrade. Documents with any other difference are listed as mismatched, errors are listed per document, and the command exits with status 1 if there are any.
+
+### Legal hold
+
+**Set Legal Hold When Archiving** ("Legal Hold beim Festschreiben setzen") is a checkbox on the document and the `legal_hold` field of the upload API. It can be changed until archiving starts. When it is set, the archive run uploads every object (file, attachments, `.meta.json`, and sidecars written later) with `ObjectLockLegalHoldStatus=ON` and checks the hold with the versioned HEAD after the upload. This works with the archive key alone, so it is the only hold option without an archive admin key.
+
+**Set Legal Hold** (form, and list action for selected documents) puts an already archived document on hold. It needs a reason and write permission on the document (or the Archive Admin role), and the archive admin key on every target with a copy; without an archive admin key the action is hidden and refused. It sets the hold to ON on the recorded version of the file, every attachment, the `.meta.json` and every extension sidecar, on every target, with the archive admin key, and reads it back with a versioned HEAD. Each copy records its own state (`Off`, `On`, `Failed`). The document counts as held (`legal_hold`, shown and filterable in the list) as soon as one copy holds. Copies added later and sidecars written by a later extension are uploaded with the hold while the document is held. Setting it again retries the copies that failed.
+
+**Release Legal Hold** is only for the role **Archive Admin**, needs a reason and a confirmation, and needs the archive admin key on every target with a copy. It sets the hold to OFF with the archive admin key and checks it. The document is released only when every copy is.
+
+Every set and release is logged in the document's **Legal Hold Log** (action, time, user, reason, result). A document under legal hold cannot be deleted, neither in the site nor through the deletion below.
+
+### Deleting expired documents
+
+The script report **Expired Documents** ("Abgelaufene Dokumente", roles Archive Admin and System Manager) lists documents that may be deleted:
+
+- every copy is archived, and the retain-until date has passed on the document, on every copy, and (for contracts) also for the current contract end date,
+- no legal hold on the document or any copy, and no retention extension in progress,
+- contracts need a contract end date; an open-ended contract never qualifies,
+- the version of every extension sidecar is recorded (sidecars written before v0.3 are recorded by a migration patch for the latest one only; documents with more than one older extension stay in place and show the reason).
+
+An Archive Admin selects rows and clicks **Delete Selected**, or uses **Delete Expired Document** on the form. A preview lists every document with the reason it cannot be deleted, then a confirmation follows. The deletion runs in the background:
+
+1. For every recorded version (file, attachments, meta, sidecars) on every target it sends a versioned HEAD and checks that the storage reports no legal hold and a retain-until date in the past. If any check fails, nothing is deleted.
+2. It deletes exactly these versions with the archive admin key (`DeleteObject` with `VersionId`, i.e. `DeleteObjectVersion`), never without a version and never with `BypassGovernanceRetention`, and checks that each version is gone. Other versions under the same key stay. An AccessDenied or lock error means "not deletable yet": the copy keeps its state and shows the error.
+3. Each copy is marked **Deleted** on its own. If a target fails, the document stays as it is and can be deleted again later; the targets that are done are skipped.
+4. When every copy is deleted, the site removes the attached Files (main file and attachments), the attachment rows, the version history, comments, assignments, tags and the global search entry, and clears all content fields (title, number, file, keys, metadata, source fields, e-invoice data) and the reasons in the legal hold log. The Business Document remains as a stripped record with status **Deleted** and its copy rows (target, version IDs, retain-until, deleted at), which cannot be changed or deleted. Keeping the record keeps the document ID reserved and links such as `replaces` intact.
+5. It writes a **Document Deletion Log** entry: document ID, type, own company, counterparty type and ID, retain-until, deleted at, deleted by, and no content. Log entries cannot be changed or deleted.
+
+### Early deletion (GOVERNANCE only)
+
+**Delete Early (GOVERNANCE only)** ("Vorzeitig löschen (nur GOVERNANCE)") lets an Archive Admin delete a document before its retention ends, for example after a justified erasure request. It is a separate form and list action:
+
+- every copy must be locked in GOVERNANCE. Copies in COMPLIANCE are refused before any request. Before deleting, a versioned HEAD on every recorded version must report GOVERNANCE and no legal hold,
+- the dialog shows "Aufbewahrungsfrist läuft noch bis <date>", needs a reason, and the user must type the document ID (or `LÖSCHEN` for several documents),
+- it deletes the same recorded versions as above, with `BypassGovernanceRetention`. The archive admin key needs `s3:BypassGovernanceRetention` for this. Without it the storage answers AccessDenied, and the copy shows that the permission is missing,
+- the deletion log records `early`, the reason and the overridden retain-until date.
 
 ### Archive now
 
@@ -249,7 +300,7 @@ bench --site <site> set-config allow_tests true
 bench --site <site> run-tests --app docarchive
 ```
 
-CI runs the suite on a Frappe v16 bench at the commits pinned in `.github/versions.env`. With `DOCARCHIVE_TEST_S3_ENDPOINT`, `DOCARCHIVE_TEST_S3_ACCESS_KEY` and `DOCARCHIVE_TEST_S3_SECRET_KEY` set, the tests also run against a real S3 server (CI uses MinIO with Object Lock buckets).
+CI runs the suite on a Frappe v16 bench at the commits pinned in `.github/versions.env`. With `DOCARCHIVE_TEST_S3_ENDPOINT`, `DOCARCHIVE_TEST_S3_ACCESS_KEY` and `DOCARCHIVE_TEST_S3_SECRET_KEY` set, the tests also run against a real S3 server (CI uses MinIO with Object Lock buckets; the MinIO root key also serves as the archive admin key).
 
 ## Professional setup & support
 

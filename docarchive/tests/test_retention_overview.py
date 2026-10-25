@@ -36,6 +36,20 @@ class TestRetentionOverview(ArchiveRunTestCase):
 		frappe.db.set_value(DOCUMENT, doc.name, "retain_until", soon, update_modified=False)
 		self.assertEqual(self.names(ending_within_months=3), [doc.name])
 
+	def test_legal_hold_column_and_filter(self):
+		held, plain = self.archived(), self.archived()
+		frappe.db.set_value(DOCUMENT, held.name, "legal_hold", 1)
+		rows = {row.name: row.legal_hold for row in retention_overview.execute({})[1]}
+		self.assertEqual(rows, {held.name: 1, plain.name: 0})
+		self.assertEqual(self.names(legal_hold=1), [held.name])
+
+	def test_deleted_documents_are_left_out(self):
+		doc = self.archived()
+		frappe.db.set_value("Archive Copy", doc.archive_copies[1].name, "status", "Failed")
+		frappe.db.set_value(DOCUMENT, doc.name, "archive_status", "Deleted")
+		self.assertEqual(self.names(), [])
+		self.assertEqual(self.names(failed_copies=1), [])
+
 	def test_failed_copies(self):
 		doc = self.archived()
 		self.assertEqual(self.names(failed_copies=1), [])

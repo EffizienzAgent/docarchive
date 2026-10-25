@@ -22,7 +22,12 @@
   "access_key_config_key",
   "secret_key_config_key",
   "access_key",
-  "secret_key"
+  "secret_key",
+  "admin_section",
+  "admin_access_key_config_key",
+  "admin_secret_key_config_key",
+  "admin_access_key",
+  "admin_secret_key"
  ],
  "fields": [
   {
@@ -112,6 +117,39 @@
    "fieldname": "secret_key",
    "fieldtype": "Password",
    "label": "Secret Key",
+   "depends_on": "eval:doc.config_source == 'Fields'"
+  },
+  {
+   "fieldname": "admin_section",
+   "fieldtype": "Section Break",
+   "label": "Admin Key",
+   "collapsible": 1,
+   "description": "Optional. Needed to release legal holds and to delete expired documents. Leave empty to switch these features off."
+  },
+  {
+   "fieldname": "admin_access_key_config_key",
+   "fieldtype": "Data",
+   "label": "Admin Access Key Config Key",
+   "depends_on": "eval:doc.config_source == 'Site Config'",
+   "description": "Name of the site config key that holds the admin access key, e.g. s3_archive_admin_access_key."
+  },
+  {
+   "fieldname": "admin_secret_key_config_key",
+   "fieldtype": "Data",
+   "label": "Admin Secret Key Config Key",
+   "depends_on": "eval:doc.config_source == 'Site Config'",
+   "description": "Name of the site config key that holds the admin secret key, e.g. s3_archive_admin_secret_key."
+  },
+  {
+   "fieldname": "admin_access_key",
+   "fieldtype": "Password",
+   "label": "Admin Access Key",
+   "depends_on": "eval:doc.config_source == 'Fields'"
+  },
+  {
+   "fieldname": "admin_secret_key",
+   "fieldtype": "Password",
+   "label": "Admin Secret Key",
    "depends_on": "eval:doc.config_source == 'Fields'"
   }
  ],
