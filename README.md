@@ -39,7 +39,7 @@ Archive Settings has a **Storage Targets** table with one row per bucket (usuall
 
 Credentials are never stored in plain text. Endpoints must use https, must not be private, loopback or link-local addresses or local host names, and bucket names must be valid, for site config values once they are set too. Two targets cannot point to the same endpoint and bucket. The archive can only be enabled with at least one enabled target, and only when all its site config keys are set.
 
-Any S3-compatible provider with Object Lock works. [docs/hetzner-example.md](docs/hetzner-example.md) shows one setup.
+Any S3-compatible provider with Object Lock works. [docs/hetzner-example.md](docs/hetzner-example.md) shows one setup. `scripts/apply_bucket_policy.py` sets a deny-only bucket policy for the keys, and `scripts/check_object_lock.py` checks what each key can and cannot do in one bucket.
 
 ## Host app hooks
 
