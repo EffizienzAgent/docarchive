@@ -192,11 +192,7 @@ class BusinessDocument(Document):
 		if attachment_rows(self) != attachment_rows(before):
 			changed.append("attachments")
 		if changed:
-			audit.log(
-				audit.DOCUMENT_CHANGED,
-				details={"fields": changed},
-				documents=[(self.doctype, self.name, "changed")],
-			)
+			audit.note_change(self.doctype, self.name, changed)
 
 	def on_trash(self):
 		if self.archive_started_at:
