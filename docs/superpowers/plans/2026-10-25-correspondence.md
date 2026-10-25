@@ -394,7 +394,7 @@ def test_meta_invoice_has_no_correspondence(self):
 - Produces:
   - `@frappe.whitelist() viewer.render(name: str) -> dict` — requires read on the Business Document and a `.eml` file. Returns `{"headers": {"from", "to", "cc", "date", "subject", "message_id"}, "html": str | None, "text": str | None, "remote_images": bool, "attachments": [{"index": int, "file_name": str, "content_type": str, "size": int}], "sha256_ok": bool}`. HTML: preferred `text/html` part, passed through `frappe.utils.html_utils.sanitize_html`; `cid:` references replaced by `data:` URIs of the related parts; `src` of remote images (`http:`/`https:`) moved to `data-remote-src`. `attachments` come from `msg.iter_attachments()` in order; `index` is the position.
   - `@frappe.whitelist() viewer.attachment(name: str, index: int)` — same permission; sets `frappe.response.filename`, `filecontent`, `type = "download"`.
-  - `@frappe.whitelist() thread.thread(name: str) -> list[dict]` — Business Documents (via `frappe.get_list`) with the same `thread_key` and own company, ordered by `correspondence_at`; empty list when the document has no `thread_key`. Items: `{"kind": "mail", "name", "title", "channel", "direction", "at", "sender"}` (sender = `source_party_email`); for each `mail_in_reply_to` not among the listed Message-IDs one `{"kind": "gap", "message_id", "communication": str | None}` placed before the replying mail, where `communication` is set if a Mail Original with that Message-ID exists without `business_document` and the user can read its Communication.
+  - `@frappe.whitelist() thread.thread(name: str) -> list[dict]` — Business Documents (via `frappe.get_list`) with the same `thread_key` and own company, ordered by `correspondence_at`; empty list when the document has no `thread_key`. Items: `{"kind": "mail", "name", "title", "channel", "direction", "at", "sender"}` (sender = `source_party_email`); for every Message-ID in a listed mail's `mail_references` and `mail_in_reply_to` that is not among the listed Message-IDs one `{"kind": "gap", "message_id", "state": "captured" | "no_original" | "unknown", "communication": str | None}`, deduplicated, placed in References order before the first mail that refers to it. `captured`: a Mail Original with that Message-ID exists without `business_document` and the user can read its Communication (`communication` set); `no_original`: a Communication with that `message_id` exists but no Mail Original; `unknown`: neither.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -413,13 +413,49 @@ def test_thread_orders_and_shows_gap(self):
 	# A (archived) ← B (not archived, original kept) ← C (archived)
 	items = thread.thread(c_doc)
 	self.assertEqual([i["kind"] for i in items], ["mail", "gap", "mail"])
-	self.assertEqual(items[1]["communication"], comm_b.name)
+	self.assertEqual((items[1]["state"], items[1]["communication"]), ("captured", comm_b.name))
+def test_thread_gaps_from_references(self):
+	# C references [A, X, B]; only C archived; X unknown, B in Frappe without original
+	self.assertEqual([(i["kind"], i.get("state")) for i in thread.thread(c_doc)], [("gap", "unknown"), ("gap", "unknown"), ("gap", "no_original"), ("mail", None)])
 ```
 
 - [ ] **Step 2: Run and see them fail** — `--module docarchive.tests.test_mail_viewer`
 - [ ] **Step 3: Implement `viewer.py`, `thread.py`**
 - [ ] **Step 4: Run `test_mail_viewer`** — Expected: PASS
 - [ ] **Step 5: Commit** — `feat: mail viewer and thread api`
+
+---
+
+### Task 7b: Closing gaps with an uploaded `.eml`
+
+**Files:**
+- Modify: `docarchive/mail/originals.py`, `docarchive/mail/archiving.py`
+- Test: `docarchive/tests/test_mail_upload.py`
+
+**Interfaces:**
+- Consumes: `headers.parse`, `store_file`, Mail Original (its `communication` is optional since Task 4), `archiving.archive`.
+- Produces: `@frappe.whitelist(methods=["POST"]) archiving.archive_upload(file_url: str, direction: str, gap_message_id: str | None = None, own_company: str | None = None) -> str` — returns the Business Document name. Requires create on Business Document; `file_url` must be a private File the user uploaded, not yet attached, with extension `eml`. Parses it; if `gap_message_id` is given, the parsed Message-ID must equal it, else `frappe.throw(_("This e-mail is not the missing one: its Message-ID is {0}."))`. `direction` must be `Incoming` or `Outgoing`. Creates a Mail Original without communication, `origin = "manual-upload"`, `email_account` empty, `mail_at` from the `Date` header (fallback: now), `automated`/`internal` as parsed (`internal` with the default own company's account domains is not knowable → False), then `archive(original_name)`. Same dedupe as captured mails: an already archived Message-ID returns the existing document. The uploaded temporary File is deleted after its bytes are stored.
+- Produces: `archive()` must not require an account row when the original has no `email_account` (own company then comes from `own_company` passed through, else the normal resolution); store `own_company` on the original or pass it as an argument — implementer's call, documented.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+def test_upload_creates_correspondence(self):
+	name = archiving.archive_upload(upload(EML).file_url, "Incoming")
+	doc = frappe.get_doc("Business Document", name)
+	self.assertEqual((doc.correspondence_channel, doc.correspondence_direction, doc.mail_message_id), ("E-mail", "Incoming", MESSAGE_ID))
+	self.assertEqual(frappe.db.get_value("Mail Original", {"business_document": name}, "origin"), "manual-upload")
+def test_upload_for_gap_must_match(self):
+	self.assertRaises(frappe.ValidationError, archiving.archive_upload, upload(EML).file_url, "Incoming", gap_message_id="other@x")
+def test_upload_of_archived_message_returns_existing(self): ...
+def test_upload_refuses_other_extensions(self): ...
+def test_upload_needs_create_permission(self): ...
+```
+
+- [ ] **Step 2: Run and see them fail** — `--module docarchive.tests.test_mail_upload`
+- [ ] **Step 3: Implement**
+- [ ] **Step 4: Run `test_mail_upload`, `test_mail_archiving`** — Expected: PASS
+- [ ] **Step 5: Commit** — `feat: close thread gaps with an uploaded eml`
 
 ---
 
@@ -437,7 +473,8 @@ def test_thread_orders_and_shows_gap(self):
   - Communication form: button "Archive" (disabled with `reason` when there is no original; warning dialog when `automated` or `internal`), and a link "Archived as {0}" when `business_document` is set.
   - Communication list: bulk action "Archive" that reports refused mails in one message.
   - `docarchive.show_mail(name)` dialog: headers, body in `<iframe sandbox>` (no `allow-scripts`) using `srcdoc`, button "Load images" that copies `data-remote-src` to `src`, attachment list with download links and "File as document", integrity line ("Checksum matches" / "Checksum does not match").
-  - `docarchive.show_thread(name)` dialog: the thread items with direction, date, sender; gaps with an "Archive" button when `communication` is set.
+  - `docarchive.show_thread(name)` dialog: the thread items with direction, date, sender; gaps show their state ("Original available", "In Frappe, no original", "Not in Frappe") with an "Archive" button for `captured` and an "Upload .eml" button for all gaps (calls `archive_upload` with `gap_message_id`, asks for the direction).
+  - The correspondence upload in the counterparty panel also accepts `.eml` files and sends them through `archive_upload`.
   - Business Document form: buttons "Show e-mail" and "Show thread" for correspondence documents, "Discard" while archiving has not started; list view bulk action "Discard" (confirm dialog).
   - README: a "Correspondence" section covering account settings, modes, automated and internal mails, cleanup, the viewer, and `docarchive.mail.capture(communication, raw, origin)` for host apps.
 

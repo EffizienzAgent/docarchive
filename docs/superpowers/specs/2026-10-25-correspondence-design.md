@@ -77,7 +77,7 @@ A table in Archive Settings with one row per e-mail account (only System Manager
 | Archive internal mails | off | whether mails where every address is internal qualify; only then are they archived at all |
 | Contacts count as counterparty | off | whether a Contact without a linked party (e.g. a private contact) may be set as counterparty automatically. Off: such mails stay without counterparty and are archived only if a person assigns one |
 | Keep unarchived originals (days) | 90 | after this, captured originals that were not archived are deleted |
-| Outgoing originals from | Frappe | Frappe: rebuilt from the Email Queue after sending. Sent folder (mailsync): nothing is captured on send; mailsync reads the IMAP Sent folder and calls its own hook `mailsync_sent_mail_read(communication, raw)` for every mail, also for Communications that already exist; docarchive registers a handler for it that calls `capture(communication, raw, "mailsync")`. Neither app imports the other, so each runs on its own. Only allowed for IMAP accounts. Worth it when the mail server stores sent SMTP mails itself (e.g. Microsoft 365, Gmail); if Frappe appends to the Sent folder itself, the copy is the same Frappe-built message. (Decided with the user.) |
+| Outgoing originals from | Frappe | Frappe: rebuilt from the Email Queue after sending. Sent folder (mailsync): nothing is captured on send; mailsync reads the IMAP Sent folder and calls its own hook `mailsync_mail_read(communication, raw, account, folder, sent_or_received)` for every mail, also for Communications that already exist; docarchive registers a handler for it that calls `capture(communication, raw, "mailsync")`. Neither app imports the other, so each runs on its own. Only allowed for IMAP accounts. Worth it when the mail server stores sent SMTP mails itself (e.g. Microsoft 365, Gmail); if Frappe appends to the Sent folder itself, the copy is the same Frappe-built message. (Decided with the user.) |
 | Own company | empty | own company for this account's mails; empty: the normal resolution |
 | Internal domains | domain of the account's address | comma-separated |
 
@@ -120,7 +120,11 @@ The `.meta.json` gets a `correspondence` section for correspondence types (`null
 
 ### Thread view
 
-On a correspondence document and in the counterparty panel: all archived mails with the same `thread_key` and own company, in time order, with direction. If an archived mail refers (`In-Reply-To`) to a Message-ID that is not archived, the view shows a gap. If that mail's original is still captured, the gap offers "Archive".
+On a correspondence document and in the counterparty panel: all archived mails with the same `thread_key` and own company, in time order, with direction. Every Message-ID in an archived mail's `References` (and `In-Reply-To`) that is not archived is shown as a gap, in the order of the References chain (decided with the user). A gap has one of three states: the original is still captured (offers "Archive"), the mail is in Frappe without an original (shows why), or the mail is unknown to Frappe (shows only the Message-ID). A gap is information, not an error: the archive makes completeness checkable, it does not claim it.
+
+### Closing gaps with an uploaded `.eml` (decided with the user)
+
+A gap (and the Correspondence upload in general) can be closed by uploading the mail as `.eml`, e.g. exported from a mail client. docarchive parses it; when uploaded for a gap, its Message-ID must match the gap, otherwise the upload is refused. The user picks the direction and the own company defaults as usual. It becomes a Mail Original without Communication, origin `manual-upload`, and is archived through the same path as captured mails (same dedupe, fields and meta). The meta and the viewer show the origin, so it stays clear that this original came from a person, not from the mail flow.
 
 ## Left to the builder
 
