@@ -73,6 +73,10 @@ frappe.ui.form.on("Customer", {
 
 `docarchive.render_documents($wrapper, { counterparty_type, counterparty })` and `docarchive.upload_documents({ counterparty_type, counterparty, files, on_saved })` are available for custom layouts. Set `docarchive.file_url = (file_url) => url` to open files in your own viewer.
 
+### Triage
+
+`docarchive.triage(names, { start, on_close })` opens a dialog that walks through documents one by one: the file on the left (PDF and images inline, other types as a download), the fields on the right, and what is still missing. "Save and next" (Ctrl/Cmd+Enter), "Skip", "Back" and Alt+Left/Right move through the list; Esc closes. Each save is a normal `doc.save()` with permission checks, and validation errors stay inline. `docarchive.triage_all()` opens it on every document that still needs work. The Business Document list has "Assign" for selected documents and "Assign all".
+
 ### Dashboard helpers
 
 - `docarchive.queries.documents_to_assign()`: documents that are not archived and still lack a file or a field their type requires, or whose archiving failed. Newest first, each with a `missing` list.
