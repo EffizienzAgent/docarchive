@@ -7,8 +7,11 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_to_date, now_datetime
 
-from docarchive import run, store
+from docarchive import mail, run, store
+from docarchive.document_types import CORRESPONDENCE
+from docarchive.mail import archiving
 from docarchive.tests.factories import (
+	eml,
 	fields_target,
 	make_business_document,
 	make_document_type,
@@ -18,6 +21,7 @@ from docarchive.tests.factories import (
 	party_fields,
 )
 from docarchive.tests.fake_s3 import LockedFakeS3
+from docarchive.tests.test_mail_archiving import MailArchivingTestCase
 
 DOCUMENT = "Business Document"
 
@@ -546,3 +550,52 @@ class TestSmoke(ArchiveRunTestCase):
 	def test_smoke_unknown_target(self):
 		with self.assertRaises(frappe.ValidationError):
 			run.smoke("nope")
+
+
+class TestCorrespondenceMeta(MailArchivingTestCase):
+	def meta(self, doc):
+		doc.archive_started_at = now_datetime()
+		return run.meta(doc, 6, datetime(2032, 3, 10, tzinfo=UTC))["correspondence"]
+
+	def test_meta_has_mail_section(self):
+		raw = eml(**{"In-Reply-To": "<a@x.test>", "References": "<a@x.test> <b@x.test>"})
+		original = mail.capture(self.communication(), raw, "frappe-receive")
+		doc = frappe.get_doc(DOCUMENT, archiving.archive(original))
+		meta = self.meta(doc)
+		message_id = frappe.db.get_value("Mail Original", original, "message_id")
+		self.assertEqual((meta["channel"], meta["direction"]), ("E-mail", "Incoming"))
+		self.assertTrue(meta["at"].endswith("Z"))
+		self.assertEqual(meta["thread_key"], doc.thread_key)
+		self.assertEqual(meta["mail"]["message_id"], message_id)
+		self.assertEqual(meta["mail"]["references"], ["a@x.test", "b@x.test"])
+		self.assertEqual(meta["mail"]["in_reply_to"], "a@x.test")
+		self.assertEqual(meta["mail"]["account"], self.account)
+		self.assertEqual(meta["mail"]["origin"], "frappe-receive")
+		self.assertNotIn("note", meta["mail"])
+
+	def test_meta_sent_mail_has_note(self):
+		original = mail.capture(self.communication("Sent"), eml(), "frappe-send")
+		doc = frappe.get_doc(DOCUMENT, archiving.archive(original))
+		self.assertIn("tracking", self.meta(doc)["mail"]["note"])
+
+	def test_meta_letter_has_no_mail(self):
+		doc = make_business_document(
+			document_type=CORRESPONDENCE,
+			counterparty_type=self.party.doctype,
+			counterparty=self.party.name,
+			correspondence_channel="Letter",
+			correspondence_direction="Outgoing",
+			correspondence_at="2026-03-15 10:00:00",
+		)
+		meta = self.meta(doc)
+		self.assertEqual(meta["channel"], "Letter")
+		self.assertIsNone(meta["mail"])
+
+	def test_meta_invoice_has_no_correspondence(self):
+		doc = make_business_document(document_type=make_document_type().name)
+		doc.archive_started_at = now_datetime()
+		self.assertIsNone(run.meta(doc, 8, datetime(2032, 3, 10, tzinfo=UTC))["correspondence"])
+
+	def setUp(self):
+		super().setUp()
+		self.party = make_party()

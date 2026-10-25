@@ -21,7 +21,10 @@ extend_doctype_class = {
 	"Email Account": ["docarchive.mail.extensions.EmailAccountArchive"],
 	"Email Queue": ["docarchive.mail.extensions.EmailQueueArchive"],
 }
-scheduler_events = {"cron": {"30 2 * * *": ["docarchive.run.schedule"]}}
+scheduler_events = {
+	"cron": {"30 2 * * *": ["docarchive.run.schedule"]},
+	"daily": ["docarchive.mail.cleanup.run"],
+}
 has_permission = {"File": "docarchive.guards.file_permission"}
 docarchive_assign = ["docarchive.mail.archiving.assign"]
 mailsync_mail_read = ["docarchive.mail.originals.from_mailsync"]

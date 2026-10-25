@@ -10,6 +10,7 @@ DOCUMENT = "Business Document"
 ORIGINAL = "Mail Original"
 COMMUNICATION = "Communication"
 SAVEPOINT = "docarchive_mail_archive"
+SEND_NOTE = "Copies to other recipients differ only in tracking and unsubscribe links."
 TITLE_LENGTH = 140
 EMAIL_LENGTH = 140
 
@@ -50,6 +51,43 @@ def remove_document(name: str) -> None:
 	for original in frappe.get_all(ORIGINAL, filters={"business_document": name}, pluck="name"):
 		frappe.delete_doc(ORIGINAL, original, ignore_permissions=True)
 	frappe.delete_doc(DOCUMENT, name, ignore_permissions=True)
+
+
+def mail_meta(doc) -> dict | None:
+	original = frappe.db.get_value(
+		ORIGINAL,
+		{"business_document": doc.name},
+		[
+			"message_id",
+			"in_reply_to",
+			"mail_references",
+			"sender",
+			"to",
+			"cc",
+			"subject",
+			"date_header",
+			"email_account",
+			"origin",
+		],
+		as_dict=True,
+	)
+	if not original:
+		return None
+	meta = {
+		"message_id": original.message_id,
+		"in_reply_to": original.in_reply_to,
+		"references": (original.mail_references or "").split(),
+		"from": original.sender,
+		"to": original.to,
+		"cc": original.cc,
+		"subject": original.subject,
+		"date_header": original.date_header,
+		"account": original.email_account,
+		"origin": original.origin,
+	}
+	if original.origin == "frappe-send":
+		meta["note"] = SEND_NOTE
+	return meta
 
 
 def assign(doc):
