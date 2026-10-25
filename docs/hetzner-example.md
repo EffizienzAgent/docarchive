@@ -23,8 +23,8 @@ Rules:
 Use three keys:
 
 - An **owner key** that you keep offline. It manages policies and does the one-time switch to COMPLIANCE. It is never stored in the site.
-- A **writer key** (the archive key) for the Frappe site. In the archive buckets it may put objects, extend retention, set a legal hold to ON, read and list. It may never delete, shorten retention, bypass governance, release a hold, or change policy, lock or versioning settings.
-- An optional **admin key** for the Frappe site. It may release legal holds (OFF), delete object versions and, if you want early deletion, bypass GOVERNANCE retention. It may read and list, but never put objects, delete without a version ID (delete markers), change retention or change policy, lock or versioning settings. Without it, the site can still archive and set holds, but cannot release holds or delete documents.
+- A **writer key** (the archive key) for the Frappe site. In the archive buckets it may put objects (with a legal hold at upload), extend retention, read and list. It may never delete, shorten retention, bypass governance, change the legal hold of an existing version, or change policy, lock or versioning settings.
+- An optional **admin key** for the Frappe site. It may set and release legal holds on existing versions, delete object versions and, if you want early deletion, bypass GOVERNANCE retention. It may read and list, but never put objects, delete without a version ID (delete markers), change retention or change policy, lock or versioning settings. Without it, the site can still archive, and set a hold at upload time, but cannot set or release holds on archived documents or delete documents.
 
 All other keys in the project get no access at all.
 
@@ -77,20 +77,19 @@ Replace `OWNER_PRINCIPAL`, `WRITER_PRINCIPAL` and `ADMIN_PRINCIPAL` with the pri
       "Resource": ["arn:aws:s3:::example-archive-fsn1", "arn:aws:s3:::example-archive-fsn1/*"]
     },
     {
-      "Sid": "WriterSetsHoldOnlyOn",
+      "Sid": "WriterCannotChangeHolds",
       "Effect": "Deny",
       "Principal": { "AWS": ["WRITER_PRINCIPAL"] },
       "Action": ["s3:PutObjectLegalHold"],
-      "Resource": ["arn:aws:s3:::example-archive-fsn1/*"],
-      "Condition": { "StringNotEquals": { "s3:object-lock-legal-hold": "ON" } }
+      "Resource": ["arn:aws:s3:::example-archive-fsn1/*"]
     }
   ]
 }
 ```
 
-The writer keeps `s3:PutObject`, `s3:PutObjectRetention`, `s3:PutObjectLegalHold` (ON), `s3:GetObject`, `s3:GetObjectVersion`, `s3:GetObjectRetention`, `s3:GetObjectLegalHold` and `s3:ListBucket`. Object Lock itself makes `PutObjectRetention` extend-only. Without `s3:BypassGovernanceRetention`, the writer cannot shorten or remove GOVERNANCE retention either. The admin key keeps `s3:PutObjectLegalHold`, `s3:DeleteObjectVersion`, `s3:BypassGovernanceRetention` and the read and list actions. Drop `s3:BypassGovernanceRetention` from its allowed actions (add it to the `AdminCannotWrite` statement) if you do not want early deletion; the site then reports the AccessDenied on the copy. Policies take effect after a few seconds.
+The writer keeps `s3:PutObject` (which includes `ObjectLockLegalHoldStatus=ON` at upload), `s3:PutObjectRetention`, `s3:GetObject`, `s3:GetObjectVersion`, `s3:GetObjectRetention`, `s3:GetObjectLegalHold` and `s3:ListBucket`. Object Lock itself makes `PutObjectRetention` extend-only. Without `s3:BypassGovernanceRetention`, the writer cannot shorten or remove GOVERNANCE retention either. The admin key keeps `s3:PutObjectLegalHold`, `s3:DeleteObjectVersion`, `s3:BypassGovernanceRetention` and the read and list actions. Drop `s3:BypassGovernanceRetention` from its allowed actions (add it to the `AdminCannotWrite` statement) if you do not want early deletion; the site then reports the AccessDenied on the copy. Policies take effect after a few seconds.
 
-S3 has one permission, `s3:PutObjectLegalHold`, for both setting and releasing a hold. Without the condition, a writer allowed to set holds could also release them; the app never does that (it releases only with the admin key), but the storage would not stop it. Whether your provider evaluates the `s3:object-lock-legal-hold` condition is not guaranteed. If it does not, the `WriterSetsHoldOnlyOn` statement denies every legal hold request from the writer (it fails closed). The site then shows "Legal Hold ist beim Speicher derzeit nicht freigegeben" and changes nothing. Check it with the routine below. Even when a provider evaluates the condition, Object Lock still refuses any delete of a held or locked version.
+**Provider limitation (tested on Hetzner fsn1):** S3 has one permission, `s3:PutObjectLegalHold`, for setting and releasing a hold on an existing version. AWS can limit it to ON with the `s3:object-lock-legal-hold` condition, but Ceph RGW does not set that condition key, so an ON-only allow never matches. The policy above therefore denies the writer `PutObjectLegalHold` completely. What works: the writer sets a hold while uploading (`PutObject` with `ObjectLockLegalHoldStatus=ON`, used by **Set Legal Hold When Archiving**), and only the admin key changes the hold of an existing version, ON or OFF. Object Lock still refuses any delete of a held or locked version.
 
 ## 4. Site configuration
 
@@ -145,13 +144,17 @@ aws s3api put-object-retention --profile writer --bucket example-archive-test --
 aws s3api put-object-retention --profile writer --bucket example-archive-test --key check/probe.txt \
   --retention Mode=GOVERNANCE,RetainUntilDate=<later date>
 
-# The writer may set a legal hold, but not release it
+# The writer can set a hold only at upload, not on an existing version (the second must fail)
+aws s3api put-object --profile writer --bucket example-archive-test --key check/held.txt \
+  --body probe.txt --content-md5 "$(openssl md5 -binary probe.txt | base64)" \
+  --object-lock-mode GOVERNANCE --object-lock-retain-until-date "$(date -u -d '+1 day' +%FT%TZ)" \
+  --object-lock-legal-hold-status ON
 aws s3api put-object-legal-hold --profile writer --bucket example-archive-test --key check/probe.txt \
   --version-id <id> --legal-hold Status=ON
-aws s3api put-object-legal-hold --profile writer --bucket example-archive-test --key check/probe.txt \
-  --version-id <id> --legal-hold Status=OFF          # must fail
 
-# The admin key releases it, but cannot write or add delete markers (the last two must fail)
+# The admin key sets and releases holds, but cannot write or add delete markers (the last two must fail)
+aws s3api put-object-legal-hold --profile admin --bucket example-archive-test --key check/probe.txt \
+  --version-id <id> --legal-hold Status=ON
 aws s3api put-object-legal-hold --profile admin --bucket example-archive-test --key check/probe.txt \
   --version-id <id> --legal-hold Status=OFF
 aws s3api put-object --profile admin --bucket example-archive-test --key check/other.txt --body probe.txt

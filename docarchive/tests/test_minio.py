@@ -143,6 +143,15 @@ class TestMinio(IntegrationTestCase):
 		store.release_hold(target, key, version)
 		self.assertEqual(store.hold_status(target, key, version), "OFF")
 
+	def test_hold_at_upload(self):
+		target = self.targets[0]
+		key = f"check/{uuid.uuid4().hex}.txt"
+		result = store.put_locked(target, key, b"held", "GOVERNANCE", self.until(), legal_hold=True)
+		self.assertEqual(store.hold_status(target, key, result["version_id"]), "ON")
+		store.verify(target, key, result["version_id"], result["sha256"], "GOVERNANCE", self.until(), True)
+		store.release_hold(target, key, result["version_id"])
+		self.assertEqual(store.hold_status(target, key, result["version_id"]), "OFF")
+
 	def test_delete_expired_only_after_expiry_and_without_hold(self):
 		target = self.targets[0]
 		key, version = self.short_lock()

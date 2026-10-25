@@ -160,6 +160,17 @@ class TestUploadApi(IntegrationTestCase):
 			with self.subTest(value=value), self.assertRaises(api.UploadError):
 				self.upload(document_date=value)
 
+	def test_legal_hold_flag(self):
+		for value, expected in (("true", 1), ("1", 1), ("false", 0), (None, 0)):
+			with self.subTest(value=value):
+				result = self.upload(legal_hold=value)
+				self.assertEqual(result["legal_hold"], expected)
+				self.assertEqual(
+					frappe.db.get_value("Business Document", result["name"], "hold_on_archive"), expected
+				)
+		with self.assertRaises(api.UploadError):
+			self.upload(legal_hold="maybe")
+
 	def test_unknown_type_rejected(self):
 		for value in (None, "no-such-type"):
 			with self.subTest(value=value), self.assertRaises(api.UploadError):

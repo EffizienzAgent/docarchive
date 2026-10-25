@@ -27,6 +27,7 @@
   "counterparty_type",
   "counterparty",
   "own_company",
+  "hold_on_archive",
   "source_section",
   "source_system",
   "source_account",
@@ -399,6 +400,13 @@
    "label": "Legal Hold Log",
    "options": "Legal Hold Log Entry",
    "read_only": 1
+  },
+  {
+   "fieldname": "hold_on_archive",
+   "fieldtype": "Check",
+   "label": "Set Legal Hold When Archiving",
+   "read_only_depends_on": "eval:doc.archive_started_at",
+   "description": "Every archived object gets a legal hold at upload. It can only be released with the admin key."
   }
  ],
  "permissions": [

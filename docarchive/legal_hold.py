@@ -55,21 +55,24 @@ def admin_refusal(doc, by_name) -> str | None:
 
 
 @frappe.whitelist()
-def admin_access() -> bool:
-	if not is_admin():
-		return False
-	return any(store.has_admin_access(target) for target in targets_by_name().values())
+def access() -> dict:
+	admin_key = any(store.has_admin_access(target) for target in targets_by_name().values())
+	may_set = is_admin() or frappe.has_permission(DOCUMENT, "write")
+	return {"set": bool(admin_key and may_set), "admin": bool(admin_key and is_admin())}
 
 
 @frappe.whitelist(methods=["POST"])
 def set_legal_hold(names, reason=None) -> dict:
 	reason = clean_reason(reason)
 	names = checked_names(names)
+	by_name = targets_by_name()
 	for name in names:
 		doc = frappe.get_doc(DOCUMENT, name)
-		if not (is_admin() or doc.has_permission("write")):
+		if not (doc.has_permission("write") or (is_admin() and doc.has_permission("read"))):
 			frappe.throw(_("You may not put {0} on legal hold.").format(name), frappe.PermissionError)
-	by_name = targets_by_name()
+		refusal = admin_refusal(doc, by_name)
+		if refusal:
+			frappe.throw(f"{name}: {refusal}")
 	return {name: locked(name, hold_document, reason, by_name) for name in names}
 
 
@@ -104,37 +107,19 @@ def hold_document(doc, reason, by_name) -> dict:
 	copies = live_copies(doc)
 	if not copies:
 		return {"status": "refused", "message": _("Only archived documents can be put on legal hold.")}
-	errors, refused = [], False
+	errors = []
 	for copy in copies:
-		target = by_name.get(copy.target_name)
-		if not target:
-			copy.legal_hold = FAILED
-			errors.append(f"{copy.target_name}: {not_configured()}")
-			continue
-		result = run.hold_copy(doc, copy, target)
-		if result == run.HOLD_REFUSED:
-			refused = True
-			errors.append(f"{copy.target_name}: {hold_refused()}")
-		elif result:
-			errors.append(f"{copy.target_name}: {result}")
+		error = run.hold_copy(doc, copy, by_name[copy.target_name])
+		if error:
+			errors.append(f"{copy.target_name}: {error}")
 	held = any(copy.legal_hold == ON for copy in copies)
 	if held:
 		doc.update({"legal_hold": 1, "legal_hold_reason": reason})
-	status = ("held" if not errors else "partial") if held else "refused"
+	status = ("held" if not errors else "partial") if held else "failed"
 	message = "\n".join(errors) or None
 	add_log(doc, SET, reason, message or _("Legal hold is set on every copy."))
 	run.save(doc)
-	if refused and not held:
-		message = hold_refused()
 	return {"status": status, "message": message}
-
-
-def not_configured() -> str:
-	return _("The storage target is not configured.")
-
-
-def hold_refused() -> str:
-	return _("Setting a legal hold is not allowed by the storage right now.")
 
 
 def release_document(doc, reason, by_name) -> dict:

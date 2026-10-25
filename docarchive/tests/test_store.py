@@ -20,18 +20,18 @@ CLIENT_CALLS = {
 	("_client", "get_object_retention"): "retention",
 	("_client", "delete_object"): "smoke_delete",
 	("_client", "put_object_retention"): "extend_locked",
-	("_client", "put_object_legal_hold"): "set_hold",
-	("_admin_client", "put_object_legal_hold"): "release_hold",
+	("_admin_client", "put_object_legal_hold"): "_admin_hold",
 	("_admin_client", "delete_object"): "_admin_delete",
 }
 GUARDED_NAMES = {
 	"BypassGovernanceRetention": {"smoke_delete", "delete_early"},
 	"_admin_delete": {"_admin_delete", "delete_expired", "delete_early"},
+	"_admin_hold": {"_admin_hold", "set_hold", "release_hold"},
 }
 CLIENTS = {client for client, _method in CLIENT_CALLS}
 CLIENT_OWNERS = {
 	"_client": {"__init__", *(f for (client, _m), f in CLIENT_CALLS.items() if client == "_client")},
-	"_admin_client": {"__init__", "has_admin_access", "release_hold", "_admin_delete"},
+	"_admin_client": {"__init__", "has_admin_access", "_admin_hold", "_admin_delete"},
 }
 ALLOWED = dict(GUARDED_NAMES)
 for (_client, method), function in CLIENT_CALLS.items():
@@ -286,10 +286,15 @@ class TestStore(IntegrationTestCase):
 				"store.py",
 				"def release_hold(t):\n    t._client.put_object_legal_hold(Bucket='b')\n",
 			),
-			"set with admin key": (
+			"set with archive key": (
+				"store.py",
+				"def set_hold(t):\n    t._client.put_object_legal_hold(Bucket='b')\n",
+			),
+			"admin hold outside helper": (
 				"store.py",
 				"def set_hold(t):\n    t._admin_client.put_object_legal_hold(Bucket='b')\n",
 			),
+			"admin hold from run": ("run.py", "def f(t):\n    store._admin_hold(t, 'k', 'v', 'OFF')\n"),
 			"admin delete elsewhere": (
 				"store.py",
 				"def delete_expired(t):\n    t._admin_client.delete_object(Bucket='b')\n",
@@ -336,23 +341,40 @@ class TestHoldAndDelete(IntegrationTestCase):
 			for version in versions:
 				version["ObjectLockRetainUntilDate"] = datetime.now(UTC) - timedelta(days=1)
 
-	def test_set_hold_uses_the_archive_key_and_verifies(self):
-		target, version = self.locked(admin=False)
+	def test_put_locked_can_set_the_hold_at_upload(self):
+		target, _version = self.locked(admin=False)
+		held = store.put_locked(target, "h", b"x", "GOVERNANCE", future(30), legal_hold=True)
+		self.assertEqual(target._client.puts()[-1]["ObjectLockLegalHoldStatus"], "ON")
+		self.assertNotIn("ObjectLockLegalHoldStatus", target._client.puts()[0])
+		self.assertEqual(store.hold_status(target, "h", held["version_id"]), "ON")
+		sha = hashlib.sha256(b"x").hexdigest()
+		store.verify(target, "h", held["version_id"], sha, "GOVERNANCE", future(29), legal_hold=True)
+		with self.assertRaises(store.VerifyError):
+			store.verify(target, "k", _version, sha, "GOVERNANCE", future(29), legal_hold=True)
+
+	def test_set_hold_uses_the_admin_key_and_verifies(self):
+		target, version = self.locked()
 		store.set_hold(target, "k", version)
 		self.assertEqual(store.hold_status(target, "k", version), "ON")
-		[(operation, kwargs)] = target._client.calls_by("archive")[1:2]
+		[(operation, kwargs)] = target._client.calls_by("admin")
 		self.assertEqual(operation, "put_object_legal_hold")
 		self.assertEqual((kwargs["VersionId"], kwargs["LegalHold"]), (version, {"Status": "ON"}))
-		self.assertEqual(target._client.calls_by("admin"), [])
+		self.assertNotIn("put_object_legal_hold", [op for op, _kw in target._client.calls_by("archive")])
 
-	def test_set_hold_needs_a_version(self):
+	def test_set_hold_needs_admin_key_and_version(self):
+		plain, plain_version = self.locked(admin=False)
+		with self.assertRaises(store.LockError):
+			store.set_hold(plain, "k", plain_version)
 		target, _version = self.locked()
 		with self.assertRaises(store.LockError):
 			store.set_hold(target, "k", None)
+		self.assertNotIn(
+			"put_object_legal_hold", [op for op, _kw in plain._client.calls + target._client.calls]
+		)
 
 	def test_release_needs_the_admin_key(self):
-		target, version = self.locked(admin=False)
-		store.set_hold(target, "k", version)
+		target = fake_target()
+		version = store.put_locked(target, "k", b"x", "GOVERNANCE", future(30), legal_hold=True)["version_id"]
 		with self.assertRaises(store.LockError):
 			store.release_hold(target, "k", version)
 		with self.assertRaises(Exception) as caught:
@@ -367,7 +389,7 @@ class TestHoldAndDelete(IntegrationTestCase):
 		store.set_hold(target, "k", version)
 		store.release_hold(target, "k", version)
 		self.assertEqual(store.hold_status(target, "k", version), "OFF")
-		[(operation, kwargs)] = target._client.calls_by("admin")
+		[_set, (operation, kwargs)] = target._client.calls_by("admin")
 		self.assertEqual((operation, kwargs["LegalHold"]), ("put_object_legal_hold", {"Status": "OFF"}))
 
 	def test_delete_expired_deletes_only_the_given_version(self):

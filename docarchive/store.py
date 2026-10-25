@@ -92,7 +92,9 @@ def validate_lock(mode, retain_until) -> datetime:
 	return retain_until.astimezone(UTC)
 
 
-def put_locked(target, key, body, mode, retain_until, content_type="application/octet-stream") -> dict:
+def put_locked(
+	target, key, body, mode, retain_until, content_type="application/octet-stream", legal_hold=False
+) -> dict:
 	retain_until = validate_lock(mode, retain_until)
 	if not key or not isinstance(body, bytes):
 		raise LockError(_("An archive object needs a key and bytes."))
@@ -106,6 +108,7 @@ def put_locked(target, key, body, mode, retain_until, content_type="application/
 		Metadata={"sha256": sha256},
 		ObjectLockMode=mode,
 		ObjectLockRetainUntilDate=retain_until,
+		**({"ObjectLockLegalHoldStatus": HOLD_ON} if legal_hold else {}),
 	)
 	return {"sha256": sha256, "version_id": response.get("VersionId")}
 
@@ -165,11 +168,13 @@ def retention(target, key, version_id) -> dict:
 	return {"mode": value.get("Mode"), "retain_until": value.get("RetainUntilDate")}
 
 
-def verify(target, key, version_id, sha256, mode, retain_until):
+def verify(target, key, version_id, sha256, mode, retain_until, legal_hold=False):
 	retain_until = validate_lock(mode, retain_until)
 	found = head(target, key, version_id)
 	if not found:
 		raise VerifyError(_("{0} is missing on the storage target.").format(key))
+	if legal_hold and found.get("ObjectLockLegalHoldStatus") != HOLD_ON:
+		raise VerifyError(_("The legal hold on {0} could not be verified.").format(key))
 	until = found.get("ObjectLockRetainUntilDate")
 	if found.get("ObjectLockMode") != mode or not until or until < retain_until:
 		raise VerifyError(_("{0} is not locked as expected.").format(key))
@@ -194,20 +199,22 @@ def hold_status(target, key, version_id) -> str:
 
 
 def set_hold(target, key, version_id):
-	target._client.put_object_legal_hold(
-		Bucket=target.bucket, Key=key, **versioned(version_id), LegalHold={"Status": HOLD_ON}
-	)
+	_admin_hold(target, key, version_id, HOLD_ON)
 	if hold_status(target, key, version_id) != HOLD_ON:
 		raise VerifyError(_("The legal hold on {0} could not be verified.").format(key))
 
 
 def release_hold(target, key, version_id):
-	require_admin(target)
-	target._admin_client.put_object_legal_hold(
-		Bucket=target.bucket, Key=key, **versioned(version_id), LegalHold={"Status": HOLD_OFF}
-	)
+	_admin_hold(target, key, version_id, HOLD_OFF)
 	if hold_status(target, key, version_id) != HOLD_OFF:
 		raise VerifyError(_("The legal hold on {0} is still set.").format(key))
+
+
+def _admin_hold(target, key, version_id, status):
+	require_admin(target)
+	target._admin_client.put_object_legal_hold(
+		Bucket=target.bucket, Key=key, **versioned(version_id), LegalHold={"Status": status}
+	)
 
 
 def deletable(target, key, version_id, early=False) -> dict | None:

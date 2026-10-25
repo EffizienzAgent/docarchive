@@ -174,7 +174,7 @@ There is no storage target named {0}.,Es gibt kein Speicherziel namens {0}.
 Archive now,Jetzt festschreiben
 Archiving started.,Archivierung gestartet.
 Archive status: {0},Archivstatus: {0}
-"After this, the file and the archived fields of {0} document(s) can no longer be changed or deleted. They are kept unchangeable until {1} (mode {2}).","Danach können die Datei und die archivierten Felder von {0} Dokument(en) nicht mehr geändert oder gelöscht werden. Sie werden bis {1} unveränderbar aufbewahrt (Modus {2})."
+"After this, the file and the archived fields of {0} document(s) can no longer be changed or deleted. They are kept unchangeable until {1} (mode {2}).",Danach können die Datei und die archivierten Felder von {0} Dokument(en) nicht mehr geändert oder gelöscht werden. Sie werden bis {1} unveränderbar aufbewahrt (Modus {2}).
 {0} selected document(s) cannot be archived yet and are skipped.,{0} der ausgewählten Dokumente können noch nicht archiviert werden und werden übersprungen.
 Archiving is switched off.,Die Archivierung ist ausgeschaltet.
 Archiving has already started.,Die Archivierung hat bereits begonnen.
@@ -338,7 +338,6 @@ Result,Ergebnis
 Retention period still runs until {0},Aufbewahrungsfrist läuft noch bis {0}
 Set,Setzen
 Set Legal Hold,Legal Hold setzen
-Setting a legal hold is not allowed by the storage right now.,Legal Hold ist beim Speicher derzeit nicht freigegeben
 Sidecar Versions,Versionen der Zusatzdateien
 Storage target {0} has no admin key.,Speicherziel {0} hat keinen Admin-Schlüssel.
 "Storage target {0} needs both admin key config keys as site config key names, or neither.",Speicherziel {0} braucht beide Admin-Schlüsselnamen als Site-Config-Schlüssel oder keinen.
@@ -365,3 +364,7 @@ You may not put {0} on legal hold.,Du darfst {0} nicht unter Legal Hold stellen.
 {0} is not locked in GOVERNANCE mode.,{0} ist nicht im GOVERNANCE-Modus gesperrt.
 {0} is under legal hold.,{0} steht unter Legal Hold.
 {0} still exists after deleting it.,{0} ist nach dem Löschen noch vorhanden.
+Set Legal Hold When Archiving,Legal Hold beim Festschreiben setzen
+Every archived object gets a legal hold at upload. It can only be released with the admin key.,Jedes archivierte Objekt bekommt beim Hochladen einen Legal Hold. Er lässt sich nur mit dem Admin-Schlüssel aufheben.
+Set when archiving.,Beim Festschreiben gesetzt.
+{0} must be true or false.,{0} muss true oder false sein.

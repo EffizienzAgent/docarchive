@@ -24,6 +24,7 @@ LOCKED_FIELDS = (
 	"counterparty_type",
 	"counterparty",
 	"file",
+	"hold_on_archive",
 	*SOURCE_FIELDS,
 )
 PROTECTED_FIELDS = (

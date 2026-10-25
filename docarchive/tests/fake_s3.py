@@ -70,7 +70,7 @@ class LockedFakeS3:
 			"ContentType": kwargs.get("ContentType"),
 			"ObjectLockMode": mode,
 			"ObjectLockRetainUntilDate": until,
-			"LegalHold": "OFF",
+			"LegalHold": kwargs.get("ObjectLockLegalHoldStatus") or "OFF",
 		}
 		self.versions.setdefault((Bucket, Key), []).append(version)
 		return {"VersionId": version["VersionId"]}
@@ -90,7 +90,7 @@ class LockedFakeS3:
 	def put_object_legal_hold(self, Bucket, Key, LegalHold, VersionId=None):
 		self.record("put_object_legal_hold", Bucket=Bucket, Key=Key, VersionId=VersionId, LegalHold=LegalHold)
 		version = self.latest(Bucket, Key, VersionId, "PutObjectLegalHold")
-		if LegalHold["Status"] == "OFF" and self.caller != ADMIN:
+		if self.caller != ADMIN:
 			raise error("AccessDenied", "PutObjectLegalHold")
 		version["LegalHold"] = LegalHold["Status"]
 		return {}

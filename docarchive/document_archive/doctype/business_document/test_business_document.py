@@ -168,6 +168,7 @@ class TestBusinessDocumentLock(BusinessDocumentTestCase):
 			"counterparty_type": "User",
 			"counterparty": user.name,
 			"file": make_file().file_url,
+			"hold_on_archive": 1,
 			**{field: "changed" for field in SOURCE_FIELDS},
 		}
 		self.assertEqual(set(values), set(LOCKED_FIELDS))

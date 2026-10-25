@@ -5,12 +5,14 @@ const EXPIRY = "docarchive.expiry";
 const BULK_WORD = "LÖSCHEN";
 const escape = (value) => frappe.utils.escape_html(value || "");
 
-docarchive.admin_access = function () {
-	if (!docarchive._admin_access) {
-		docarchive._admin_access = frappe.xcall(`${HOLD}.admin_access`);
+docarchive.hold_access = function () {
+	if (!docarchive._hold_access) {
+		docarchive._hold_access = frappe.xcall(`${HOLD}.access`);
 	}
-	return docarchive._admin_access;
+	return docarchive._hold_access;
 };
+
+docarchive.admin_access = () => docarchive.hold_access().then((access) => access.admin);
 
 function show_results(results, done) {
 	const lines = Object.entries(results)
@@ -181,13 +183,13 @@ docarchive.legal_hold_list_actions = function (listview) {
 		const names = checked();
 		if (names.length) action(names, () => listview.refresh());
 	};
-	if (frappe.model.can_write("Business Document") || frappe.user.has_role("Archive Admin")) {
-		listview.page.add_actions_menu_item(__("Set Legal Hold"), () =>
-			run(docarchive.set_legal_hold),
-		);
-	}
-	docarchive.admin_access().then((allowed) => {
-		if (!allowed) return;
+	docarchive.hold_access().then((access) => {
+		if (access.set) {
+			listview.page.add_actions_menu_item(__("Set Legal Hold"), () =>
+				run(docarchive.set_legal_hold),
+			);
+		}
+		if (!access.admin) return;
 		listview.page.add_actions_menu_item(__("Release Legal Hold"), () =>
 			run(docarchive.release_legal_hold),
 		);
@@ -238,15 +240,17 @@ frappe.ui.form.on("Business Document", {
 			);
 		}
 		const archived = copies.some((copy) => copy.status === "Archived");
-		if (archived && (frm.perm[0].write || frappe.user.has_role("Archive Admin"))) {
-			frm.add_custom_button(
-				__("Set Legal Hold"),
-				() => docarchive.set_legal_hold([frm.doc.name], () => frm.reload_doc()),
-				__("Legal Hold"),
-			);
-		}
 		if (!archived) return;
-		docarchive.admin_access().then((allowed) => allowed && add_admin_buttons(frm));
+		docarchive.hold_access().then((access) => {
+			if (access.set) {
+				frm.add_custom_button(
+					__("Set Legal Hold"),
+					() => docarchive.set_legal_hold([frm.doc.name], () => frm.reload_doc()),
+					__("Legal Hold"),
+				);
+			}
+			if (access.admin) add_admin_buttons(frm);
+		});
 		if (!frm.docarchive_deletion_listening) {
 			frm.docarchive_deletion_listening = true;
 			frappe.realtime.on("docarchive_deletion", (data) => {

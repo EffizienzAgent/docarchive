@@ -30,9 +30,6 @@ CANDIDATE_FIELDS = [
 ]
 
 
-HOLD_REFUSED = "refused"
-
-
 class ArchiveError(frappe.ValidationError):
 	pass
 
@@ -221,6 +218,17 @@ def start(doc, data, ext, targets):
 	doc.archive_sha256 = content.sha256(data)
 	doc.archive_size = len(data)
 	doc.archive_meta = json.dumps(meta(doc, years, until), sort_keys=True)
+	if doc.hold_on_archive:
+		doc.update({"legal_hold": 1, "legal_hold_reason": _("Set when archiving.")})
+		doc.append(
+			"legal_hold_log",
+			{
+				"action": "Set",
+				"at": now_datetime(),
+				"user": frappe.session.user,
+				"reason": _("Set when archiving."),
+			},
+		)
 	save(doc)
 
 
@@ -253,15 +261,15 @@ def copy_to(doc, target, data):
 		mime = mimetypes.guess_type(doc.object_key)[0] or "application/octet-stream"
 		meta_body = keys.meta_bytes(doc.archive_meta, copy.lock_mode)
 		copy.meta_sha256 = copy.meta_sha256 or content.sha256(meta_body)
-		ensure(target, doc.object_key, data, until, mime, copy, "object_version_id")
-		ensure(target, doc.meta_key, meta_body, until, "application/json", copy, "meta_version_id")
+		hold = bool(doc.legal_hold)
+		ensure(target, doc.object_key, data, until, mime, copy, "object_version_id", hold)
+		ensure(target, doc.meta_key, meta_body, until, "application/json", copy, "meta_version_id", hold)
 		copy.update({"status": ARCHIVED, "archived_at": now_datetime(), "error": None})
+		if hold:
+			copy.legal_hold = "On"
 	except Exception as e:
 		copy.update({"status": FAILED, "error": safe_error(e)})
 		log(doc, target, copy.error)
-		return
-	if doc.legal_hold:
-		hold_copy(doc, copy, target)
 
 
 def copy_objects(copy, doc) -> list[tuple[str, str]]:
@@ -286,9 +294,6 @@ def hold_copy(doc, copy, target) -> str | None:
 		for key, version in copy_objects(copy, doc):
 			store.set_hold(target, key, version)
 	except Exception as e:
-		if store.refused(e):
-			log(doc, target, safe_error(e))
-			return HOLD_REFUSED
 		copy.legal_hold = FAILED
 		log(doc, target, safe_error(e))
 		return safe_error(e)
@@ -296,7 +301,7 @@ def hold_copy(doc, copy, target) -> str | None:
 	return None
 
 
-def ensure(target, key, body, until, content_type, copy, version_field):
+def ensure(target, key, body, until, content_type, copy, version_field, legal_hold=False):
 	mode, known_version = copy.lock_mode, copy.get(version_field)
 	sha256 = content.sha256(body)
 	store.validate_lock(mode, until)
@@ -304,13 +309,13 @@ def ensure(target, key, body, until, content_type, copy, version_field):
 	if existing is None and known_version:
 		raise ArchiveError(_("The recorded version of {0} is missing on the storage target.").format(key))
 	if existing is None:
-		version_id = store.put_locked(target, key, body, mode, until, content_type)["version_id"]
+		version_id = store.put_locked(target, key, body, mode, until, content_type, legal_hold)["version_id"]
 	elif (existing.get("Metadata") or {}).get("sha256") != sha256:
 		raise ArchiveError(_("{0} already exists with different content.").format(key))
 	else:
 		version_id = known_version or existing.get("VersionId")
 	copy.set(version_field, version_id)
-	store.verify(target, key, version_id, sha256, mode, until)
+	store.verify(target, key, version_id, sha256, mode, until, legal_hold)
 
 
 def finish(doc, targets) -> str:
@@ -534,12 +539,11 @@ def extend_copy(doc, copy, target, until):
 	for key, version, sha256 in objects:
 		store.extend_locked(target, key, version, sha256, copy.lock_mode, until)
 	body = keys.meta_bytes(doc.extension_meta, copy.lock_mode)
-	ensure(target, sidecar_key(doc), body, until, "application/json", copy, "sidecar_version_id")
+	hold = bool(doc.legal_hold)
+	ensure(target, sidecar_key(doc), body, until, "application/json", copy, "sidecar_version_id", hold)
 	sidecars = json.loads(copy.sidecar_versions or "{}")
 	sidecars[sidecar_key(doc)] = copy.sidecar_version_id
 	copy.sidecar_versions = json.dumps(sidecars, sort_keys=True)
-	if doc.legal_hold:
-		store.set_hold(target, sidecar_key(doc), copy.sidecar_version_id)
 	copy.update({"retain_until": retention.to_db(until), "error": None})
 
 
