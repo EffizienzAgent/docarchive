@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.0](https://github.com/EffizienzAgent/docarchive/compare/v0.9.0...v0.10.0) (2026-10-25)
+
+
+### Features
+
+* archiving status, in-app file viewer on mobile, stacked thread view ([cc0e970](https://github.com/EffizienzAgent/docarchive/commit/cc0e9706fd169b6fbc82ef5d42ff3d8d3241e548))
+* archiving status, in-app file viewer on mobile, stacked thread view ([587dfa4](https://github.com/EffizienzAgent/docarchive/commit/587dfa44022a05f682c6f82e70167ef0bc350394))
+
+
+### Documentation
+
+* retake counterparty panel and thread screenshots ([99c717e](https://github.com/EffizienzAgent/docarchive/commit/99c717ec9b5ced96c6fee5304db5ae55748d9805))
+* retake counterparty panel and thread screenshots ([0ffef48](https://github.com/EffizienzAgent/docarchive/commit/0ffef48bb63999434ca351920dc99746cd043653))
+
 ## [0.9.0](https://github.com/EffizienzAgent/docarchive/compare/v0.8.1...v0.9.0) (2026-10-25)
 
 
