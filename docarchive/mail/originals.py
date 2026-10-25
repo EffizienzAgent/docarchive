@@ -9,6 +9,7 @@ SAVEPOINT = "docarchive_mail_capture"
 AUTO_SAVEPOINT = "docarchive_mail_auto_archive"
 SEND_SAVEPOINT = "docarchive_mail_capture_sent"
 MAX_LENGTH = 500
+SENT_FOLDER = "Sent Folder"
 
 
 def capture(communication, raw: bytes | str, origin: str) -> str | None:
@@ -24,6 +25,15 @@ def capture(communication, raw: bytes | str, origin: str) -> str | None:
 	if name:
 		_auto_archive(name)
 	return name
+
+
+def from_mailsync(communication, raw, account=None, folder=None, sent_or_received=None, **kwargs) -> None:
+	try:
+		if isinstance(communication, str):
+			communication = frappe.get_doc("Communication", communication)
+		capture(communication, raw, "mailsync")
+	except Exception:
+		fail()
 
 
 def sent_count(queue) -> int | None:
@@ -68,7 +78,8 @@ def _capturable(queue):
 
 
 def _sent_bytes(queue, communication):
-	if _existing(communication) or not accounts.account_settings(communication.email_account):
+	row = accounts.account_settings(communication.email_account)
+	if _existing(communication) or not row or row.outgoing_source == SENT_FOLDER:
 		return None
 	queue.reload()
 	recipient = next((row.recipient for row in queue.recipients if row.is_mail_sent()), None)

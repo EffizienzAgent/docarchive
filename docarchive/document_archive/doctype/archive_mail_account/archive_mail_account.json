@@ -13,6 +13,7 @@
  "field_order": [
   "email_account",
   "mode",
+  "outgoing_source",
   "archive_internal",
   "contacts_as_counterparty",
   "keep_days",
@@ -35,6 +36,14 @@
    "options": "Off\nManual\nAutomatic",
    "default": "Off",
    "in_list_view": 1
+  },
+  {
+   "fieldname": "outgoing_source",
+   "fieldtype": "Select",
+   "label": "Outgoing Originals From",
+   "options": "Frappe\nSent Folder",
+   "default": "Frappe",
+   "description": "Sent Folder: originals of sent mails come from the IMAP Sent folder through mailsync instead of being rebuilt after sending. Only for IMAP accounts."
   },
   {
    "fieldname": "archive_internal",

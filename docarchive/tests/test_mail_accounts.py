@@ -37,3 +37,10 @@ class TestMailAccounts(IntegrationTestCase):
 		settings.set("mail_accounts", [{"email_account": self.account}, {"email_account": self.account}])
 		with self.assertRaises(frappe.ValidationError):
 			settings.save(ignore_permissions=True)
+
+	def test_sent_folder_requires_imap(self):
+		with self.assertRaises(frappe.ValidationError):
+			make_mail_settings(self.account, mode="Manual", outgoing_source="Sent Folder")
+		imap = make_email_account(use_imap=1).name
+		row = make_mail_settings(imap, mode="Manual", outgoing_source="Sent Folder")
+		self.assertEqual(row.outgoing_source, "Sent Folder")

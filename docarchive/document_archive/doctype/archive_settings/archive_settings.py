@@ -33,4 +33,15 @@ class ArchiveSettings(Document):
 				frappe.throw(_("E-mail account {0} is listed more than once.").format(row.email_account))
 			if (row.keep_days or 0) < 0:
 				frappe.throw(_("Keep days must not be negative."))
+			self.validate_sent_folder(row)
 			seen.add(row.email_account)
+
+	def validate_sent_folder(self, row):
+		if row.outgoing_source == "Sent Folder" and not frappe.db.get_value(
+			"Email Account", row.email_account, "use_imap"
+		):
+			frappe.throw(
+				_("{0} does not use IMAP, so its sent mails cannot be read from the Sent folder.").format(
+					row.email_account
+				)
+			)

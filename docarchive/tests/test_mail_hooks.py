@@ -104,6 +104,40 @@ class TestMailHooks(IntegrationTestCase):
 		self.assertEqual(content.read_bytes(original.file), frappe.safe_encode(frappe.flags.sent_mail))
 		self.assertEqual((original.origin, original.direction), ("frappe-send", "Outgoing"))
 
+	def use_sent_folder(self):
+		frappe.db.set_value("Email Account", self.account.name, "use_imap", 1)
+		make_mail_settings(self.account.name, mode="Manual", outgoing_source="Sent Folder")
+
+	def test_sent_folder_source_skips_capture_on_send(self):
+		self.use_sent_folder()
+		comm = make_communication(self.account.name, "Sent")
+		self.send(comm)
+		self.assertTrue(frappe.flags.sent_mail)
+		self.assertFalse(frappe.db.exists("Mail Original", {"communication": comm.name}))
+
+	def test_mailsync_hook_captures_existing_communication(self):
+		self.use_sent_folder()
+		comm = make_communication(self.account.name, "Sent")
+		self.send(comm)
+		handlers = frappe.get_hooks("mailsync_mail_read")
+		self.assertTrue(handlers)
+		for method in handlers:
+			frappe.get_attr(method)(
+				communication=comm,
+				raw=self.raw,
+				account=self.account.name,
+				folder="Sent",
+				sent_or_received="Sent",
+			)
+		original = frappe.get_doc("Mail Original", {"communication": comm.name})
+		self.assertEqual((original.origin, original.direction), ("mailsync", "Outgoing"))
+		originals.from_mailsync(comm.name, self.raw)
+		self.assertEqual(frappe.db.count("Mail Original", {"communication": comm.name}), 1)
+
+	def test_mailsync_handler_never_raises(self):
+		with patch("docarchive.mail.originals.capture", side_effect=Exception("boom")):
+			originals.from_mailsync("missing", b"x")
+
 	def test_send_succeeds_when_capture_fails(self):
 		comm = make_communication(self.account.name, "Sent")
 		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
