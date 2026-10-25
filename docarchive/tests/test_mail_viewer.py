@@ -325,6 +325,16 @@ class TestThread(MailArchivingTestCase):
 		items = thread.thread(c_doc)
 		self.assertEqual((items[0]["state"], items[0]["communication"]), ("unknown", None))
 
+	def test_no_original_gap_needs_readable_communication(self):
+		b_id = message_id()
+		self.communication(message_id=b_id)
+		_, c = self.mail("2026-03-12 09:00:00", mime(text="c", References=references(b_id)))
+		c_doc = archiving.archive(c)
+		self.assertEqual(thread.thread(c_doc)[0]["state"], "no_original")
+		frappe.set_user(make_manager(address("manager")))
+		self.addCleanup(frappe.set_user, "Administrator")
+		self.assertEqual(thread.thread(c_doc)[0]["state"], "unknown")
+
 	def test_gap_archived_under_other_thread(self):
 		a_id = message_id()
 		_, a = self.mail("2026-03-10 09:00:00", mime(text="a", Message_ID=f"<{a_id}>"))
