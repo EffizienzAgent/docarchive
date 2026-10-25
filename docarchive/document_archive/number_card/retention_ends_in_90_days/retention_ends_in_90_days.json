@@ -1,0 +1,15 @@
+{
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "dynamic_filters_json": "[]",
+ "filters_json": "[]",
+ "function": "Count",
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Retention ends in 90 days",
+ "method": "docarchive.extension.ending_card",
+ "module": "Document Archive",
+ "name": "Retention ends in 90 days",
+ "show_percentage_stats": 0,
+ "type": "Custom"
+}

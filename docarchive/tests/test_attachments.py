@@ -498,3 +498,32 @@ class TestUploadAttachments(IntegrationTestCase):
 		self.assertEqual(self.shas(created["name"]), [content.sha256(first)])
 		again = self.json_upload(main, second)
 		self.assertEqual((again["status"], again["name"]), ("exists", replaced["name"]))
+
+
+class TestTriageAttachments(IntegrationTestCase):
+	def setUp(self):
+		make_settings(default_own_company=make_own_company().name)
+		self.doc = make_business_document(attachments=[attachment(role="Proof of Service")])
+
+	def test_item_lists_attachments(self):
+		from docarchive import triage
+
+		[row] = triage.triage_item(self.doc.name)["attachments"]
+		self.assertEqual((row["file"], row["role"]), (self.doc.attachments[0].file, "Proof of Service"))
+
+	def test_add_attachments(self):
+		from docarchive import triage
+
+		upload = make_file(attached_to_doctype=DOCUMENT, attached_to_name=self.doc.name)
+		result = triage.add_attachments(self.doc.name, json.dumps([upload.file_url]))
+		self.assertNotIn("error", result)
+		self.assertEqual(len(result["item"]["attachments"]), 2)
+		self.assertEqual(len(self.doc.reload().attachments), 2)
+
+	def test_add_attachments_refused_after_archive_start(self):
+		from docarchive import triage
+
+		start_archive(self.doc)
+		result = triage.add_attachments(self.doc.name, json.dumps([make_file().file_url]))
+		self.assertIn("error", result)
+		self.assertEqual(len(self.doc.reload().attachments), 1)

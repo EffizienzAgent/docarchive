@@ -63,6 +63,22 @@ frappe.ui.form.on("Business Document", {
 					);
 				});
 		}
+		if (frm.doc.archive_status === "Archived") {
+			docarchive.extension_options(frm.doc.name).then((options) => {
+				if (options.pending) {
+					frm.set_intro(
+						__("The retention is being extended to {0}.", [
+							docarchive.format_retain_until(options.pending),
+						]),
+						"orange",
+					);
+				}
+				if (!options.allowed) return;
+				frm.add_custom_button(__("Extend retention"), () =>
+					docarchive.extend_retention(frm.doc.name, () => frm.reload_doc()),
+				);
+			});
+		}
 		if (!frm.docarchive_listening) {
 			frm.docarchive_listening = true;
 			frappe.realtime.on("docarchive_archive_now", (data) => {

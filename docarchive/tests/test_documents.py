@@ -4,6 +4,7 @@ from frappe.tests import IntegrationTestCase
 from docarchive import documents
 from docarchive.document_archive.doctype.business_document.business_document import missing_fields
 from docarchive.tests.factories import (
+	fields_target,
 	make_business_document,
 	make_document_type,
 	make_file,
@@ -19,7 +20,8 @@ from docarchive.tests.factories import (
 
 class TestCounterpartyDocuments(IntegrationTestCase):
 	def setUp(self):
-		make_settings(default_own_company=make_own_company().name)
+		self.company = make_own_company().name
+		make_settings(default_own_company=self.company)
 		self.type = make_document_type().name
 		self.party = make_party()
 
@@ -54,19 +56,6 @@ class TestCounterpartyDocuments(IntegrationTestCase):
 		make_settings(default_own_company=make_own_company().name, default_upload_type=self.type)
 		with self.set_user(make_manager("docs-defaults@example.com")):
 			self.assertEqual(documents.upload_defaults(), {"document_type": self.type})
-
-	def test_date_from_file_name(self):
-		cases = {
-			"Rechnung_2026-03-15.pdf": "2026-03-15",
-			"scan20260401-1.pdf": "2026-04-01",
-			"Vertrag 1.2.2025 final.pdf": "2025-02-01",
-			"INV-12345678.pdf": None,
-			"2026-13-01.pdf": None,
-			"invoice.pdf": None,
-		}
-		for name, expected in cases.items():
-			with self.subTest(name):
-				self.assertEqual(documents.date_from_file_name(name), expected)
 
 	def test_dialog_date_from_file_name_or_left_empty(self):
 		with self.set_user(self.manager("docs-dates@example.com")):
@@ -139,3 +128,82 @@ class TestCounterpartyDocuments(IntegrationTestCase):
 			upload = make_file()
 			with self.assertRaisesRegex(frappe.ValidationError, "System Manager"):
 				self.create([upload.file_url])
+
+	def test_panel_marks_missing_fields_and_eligible_documents(self):
+		make_settings(default_own_company=self.company, enabled=1, targets=[fields_target()])
+		numbered = make_document_type(number_required=1).name
+		ready = make_business_document(document_type=self.type, **party_fields(self.party))
+		incomplete = make_business_document(
+			document_type=numbered, document_number=None, **party_fields(self.party)
+		)
+		panel = documents.counterparty_panel("Contact", self.party.name)
+		rows = {row["name"]: row for row in panel["documents"]}
+		self.assertTrue(panel["archiving"] and panel["can_write"] and panel["can_create"])
+		self.assertFalse(panel["truncated"])
+		self.assertEqual((rows[ready.name]["missing"], rows[ready.name]["eligible"]), ([], True))
+		self.assertEqual(
+			(rows[incomplete.name]["missing"], rows[incomplete.name]["eligible"]),
+			(["Document Number"], False),
+		)
+		self.assertEqual(rows[ready.name]["file"], ready.file)
+
+	def test_panel_without_archiving_has_no_eligible_documents(self):
+		make_business_document(document_type=self.type, **party_fields(self.party))
+		panel = documents.counterparty_panel("Contact", self.party.name)
+		self.assertFalse(panel["archiving"])
+		self.assertEqual([row["eligible"] for row in panel["documents"]], [False])
+
+	def test_panel_is_empty_for_outsiders(self):
+		make_business_document(**party_fields(self.party))
+		frappe.share.add("Contact", self.party.name, make_outsider("panel-outsider@example.com"), read=1)
+		with self.set_user("panel-outsider@example.com"):
+			panel = documents.counterparty_panel("Contact", self.party.name)
+		self.assertEqual((panel["documents"], panel["can_create"], panel["can_write"]), ([], False, False))
+
+	def test_panel_needs_counterparty_access(self):
+		with self.set_user(make_manager("panel-no-party@example.com")):
+			with self.assertRaises(frappe.PermissionError):
+				documents.counterparty_panel("Contact", self.party.name)
+
+	def test_create_documents_per_file_details(self):
+		other = make_document_type().name
+		with self.set_user(self.manager("docs-per-file@example.com")):
+			acme = frappe.generate_hash(length=8)
+			files = [
+				make_file(file_name=f"2026-08-05 Rechnung {acme}.pdf"),
+				make_file(file_name="Vertrag.pdf"),
+			]
+			names = documents.create_documents(
+				"Contact",
+				self.party.name,
+				documents=frappe.as_json(
+					[
+						{
+							"file_url": files[0].file_url,
+							"document_type": self.type,
+							"document_date": "2026-08-05",
+						},
+						{
+							"file_url": files[1].file_url,
+							"document_type": other,
+							"document_date": "2026-02-01",
+							"title": "Rahmenvertrag",
+						},
+					]
+				),
+			)
+		docs = [frappe.get_doc("Business Document", name) for name in names]
+		self.assertEqual(
+			[(d.title, d.document_type, str(d.document_date)) for d in docs],
+			[(f"Rechnung {acme}", self.type, "2026-08-05"), ("Rahmenvertrag", other, "2026-02-01")],
+		)
+
+	def test_create_documents_takes_date_from_file_name(self):
+		with self.set_user(self.manager("docs-file-date@example.com")):
+			upload = make_file(file_name=f"Rechnung_20260805_{frappe.generate_hash(length=8)}.pdf")
+			[name] = documents.create_documents(
+				"Contact", self.party.name, frappe.as_json([upload.file_url]), self.type
+			)
+		doc = frappe.get_doc("Business Document", name)
+		self.assertEqual(str(doc.document_date), "2026-08-05")
+		self.assertNotIn("2026", doc.title)

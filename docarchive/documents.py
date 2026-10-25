@@ -1,16 +1,20 @@
-import datetime
-import re
-
 import frappe
 
+from docarchive import extension, settings, storage_targets
+from docarchive.document_archive.doctype.business_document.business_document import missing_fields
+
+DOCUMENT = "Business Document"
 DOCUMENT_LIMIT = 50
-FILE_NAME_DATES = (
-	(re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)"), "ymd"),
-	(re.compile(r"(?<!\d)(\d{4})(\d{2})(\d{2})(?!\d)"), "ymd"),
-	(re.compile(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(\d{4})(?!\d)"), "dmy"),
-)
-YEARS = range(1990, 2100)
+PANEL_LIMIT = 500
 DOCUMENT_FIELDS = ["name", "title", "document_type", "document_number", "document_date", "archive_status"]
+PANEL_FIELDS = [
+	*DOCUMENT_FIELDS,
+	"file",
+	"archive_started_at",
+	"retain_until",
+	"counterparty",
+	"contract_end_date",
+]
 
 
 @frappe.whitelist()
@@ -25,6 +29,48 @@ def counterparty_documents(counterparty_type: str, counterparty: str) -> list:
 		order_by="document_date desc, creation desc",
 		limit=DOCUMENT_LIMIT,
 	)
+
+
+def archiving_on() -> bool:
+	return bool(settings.get().enabled and storage_targets.configured())
+
+
+@frappe.whitelist()
+def counterparty_panel(counterparty_type: str, counterparty: str) -> dict:
+	frappe.has_permission(counterparty_type, "read", counterparty, throw=True)
+	panel = {
+		"documents": [],
+		"truncated": False,
+		"can_create": bool(frappe.has_permission(DOCUMENT, "create")),
+		"can_write": bool(frappe.has_permission(DOCUMENT, "write")),
+		"archiving": archiving_on(),
+		"can_extend": extension.is_manager() and bool(frappe.has_permission(DOCUMENT, "write")),
+	}
+	if not frappe.has_permission(DOCUMENT, "read"):
+		return panel
+	rows = frappe.get_list(
+		DOCUMENT,
+		filters={"counterparty_type": counterparty_type, "counterparty": counterparty},
+		fields=PANEL_FIELDS,
+		order_by="document_date desc, creation desc",
+		limit=PANEL_LIMIT + 1,
+	)
+	archived_types = set(frappe.get_all("Business Document Type", filters={"archive": 1}, pluck="name"))
+	for row in rows[:PANEL_LIMIT]:
+		missing = missing_fields(row)
+		panel["documents"].append(
+			{
+				**{field: row.get(field) for field in (*DOCUMENT_FIELDS, "file", "retain_until")},
+				"missing": missing,
+				"eligible": panel["archiving"]
+				and panel["can_write"]
+				and not row.archive_started_at
+				and row.document_type in archived_types
+				and not missing,
+			}
+		)
+	panel["truncated"] = len(rows) > PANEL_LIMIT
+	return panel
 
 
 @frappe.whitelist()
@@ -42,46 +88,39 @@ def upload_defaults() -> dict:
 	return {"document_type": last[0] if last else fallback}
 
 
-def date_from_file_name(name) -> str | None:
-	for pattern, order in FILE_NAME_DATES:
-		for match in pattern.finditer(name or ""):
-			parts = dict(zip(order, map(int, match.groups()), strict=True))
-			if parts["y"] not in YEARS:
-				continue
-			try:
-				return datetime.date(parts["y"], parts["m"], parts["d"]).isoformat()
-			except ValueError:
-				continue
-	return None
-
-
-def upload_name(file_url) -> str:
-	name = frappe.db.get_value("File", {"file_url": file_url, "owner": frappe.session.user}, "file_name")
-	return name or file_url.rsplit("/", 1)[-1]
+def upload_rows(file_urls, document_type, document_date, documents):
+	if documents:
+		return frappe.parse_json(documents)
+	return [
+		{"file_url": url, "document_type": document_type, "document_date": document_date}
+		for url in frappe.parse_json(file_urls) or []
+	]
 
 
 @frappe.whitelist(methods=["POST"])
 def create_documents(
 	counterparty_type: str,
 	counterparty: str,
-	file_urls,
-	document_type: str,
+	file_urls=None,
+	document_type: str | None = None,
 	document_date: str | None = None,
+	documents=None,
 	combine: bool = False,
 ) -> list:
 	frappe.has_permission(counterparty_type, "read", counterparty, throw=True)
-	file_urls = frappe.parse_json(file_urls)
-	groups = [file_urls] if frappe.utils.cint(combine) and file_urls else [[url] for url in file_urls]
+	rows = upload_rows(file_urls, document_type, document_date, documents)
+	groups = [rows] if frappe.utils.cint(combine) and rows else [[row] for row in rows]
 	return [
 		frappe.get_doc(
 			{
-				"doctype": "Business Document",
+				"doctype": DOCUMENT,
 				"counterparty_type": counterparty_type,
 				"counterparty": counterparty,
-				"document_type": document_type,
-				"document_date": document_date or date_from_file_name(upload_name(main)),
-				"file": main,
-				"attachments": [{"file": url} for url in rest],
+				"document_type": main.get("document_type"),
+				"document_date": main.get("document_date"),
+				"title": main.get("title"),
+				"file": main["file_url"],
+				"attachments": [{"file": row["file_url"], "title": row.get("title")} for row in rest],
 			}
 		)
 		.insert()
