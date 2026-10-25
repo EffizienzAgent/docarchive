@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/EffizienzAgent/docarchive/compare/v0.4.1...v0.5.0) (2026-10-25)
+
+
+### Features
+
+* open or delete the current document from triage ([f6f83f4](https://github.com/EffizienzAgent/docarchive/commit/f6f83f41040905ca0767edb4ba73806c3edeba6f))
+* row selection, bulk bar and side preview in the documents panel ([4c9c2b3](https://github.com/EffizienzAgent/docarchive/commit/4c9c2b39d66779020462358735f834f4b5a0258a))
+
 ## [0.4.1](https://github.com/EffizienzAgent/docarchive/compare/v0.4.0...v0.4.1) (2026-10-25)
 
 
