@@ -81,8 +81,11 @@ class TestMailOriginalIndexes(IntegrationTestCase):
 	def indexes(self):
 		return {row[2] for row in frappe.db.sql("show index from `tabMail Original`")}
 
+	def indexed_columns(self):
+		return {row[4] for row in frappe.db.sql("show index from `tabMail Original`")}
+
 	def test_audit_pending_is_indexed(self):
-		self.assertIn("audit_pending_index", self.indexes())
+		self.assertIn("audit_pending", self.indexed_columns())
 
 	def test_stale_index_is_dropped(self):
 		from docarchive.patches import drop_stale_mail_index
