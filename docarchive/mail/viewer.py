@@ -58,6 +58,15 @@ FRAGMENT = re.compile(r"#[\w-]+")
 LINK = re.compile(r"(https?://|mailto:|tel:)", re.IGNORECASE)
 CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 REMOTE_CSS = re.compile(r"https?:|//", re.IGNORECASE)
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_IMAGES_BYTES = 20 * 1024 * 1024
+PLACEHOLDER_SVG = (
+	b'<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 120 80">'
+	b'<rect x="0.5" y="0.5" width="119" height="79" fill="#f3f3f3" stroke="#c8c8c8"/>'
+	b'<path d="M30 60l20-24 14 16 10-10 16 18z" fill="#c8c8c8"/><circle cx="80" cy="28" r="7" fill="#c8c8c8"/>'
+	b"</svg>"
+)
+IMAGE_PLACEHOLDER = "data:image/svg+xml;base64," + base64.b64encode(PLACEHOLDER_SVG).decode()
 
 
 @frappe.whitelist()
@@ -75,7 +84,7 @@ def render(name: str) -> dict:
 				"index": index,
 				"file_name": _file_name(part, index),
 				"content_type": part.get_content_type(),
-				"size": len(_bytes(part)),
+				"size": _size(part),
 			}
 			for index, part in enumerate(message.iter_attachments())
 		],
@@ -136,6 +145,15 @@ def _bytes(part):
 	return part.get_payload(decode=True) or b""
 
 
+def _size(part):
+	payload = part.get_payload()
+	if not isinstance(payload, str) or part.get("Content-Transfer-Encoding", "").strip().lower() != "base64":
+		return len(_bytes(part))
+	characters = len(payload) - sum(payload.count(space) for space in " \t\r\n")
+	end = payload.rstrip()
+	return max(characters * 3 // 4 - (len(end) - len(end.rstrip("="))), 0)
+
+
 def _file_name(part, index):
 	name = CONTROL.sub("", re.split(r"[/\\]", part.get_filename() or "")[-1]).strip()
 	if name not in ("", ".", ".."):
@@ -157,12 +175,18 @@ def _html(message):
 
 
 def _inline_images(message):
-	images = {}
+	images, total = {}, 0
 	for part in message.walk():
 		cid = part.get("Content-ID")
-		if cid and part.get_content_maintype() == "image":
-			data = base64.b64encode(_bytes(part)).decode()
-			images[str(cid).strip().strip("<>")] = f"data:{part.get_content_type()};base64,{data}"
+		if not cid or part.get_content_maintype() != "image":
+			continue
+		key, size = str(cid).strip().strip("<>"), _size(part)
+		if size > MAX_IMAGE_BYTES or total + size > MAX_IMAGES_BYTES:
+			images[key] = IMAGE_PLACEHOLDER
+			continue
+		total += size
+		data = base64.b64encode(_bytes(part)).decode()
+		images[key] = f"data:{part.get_content_type()};base64,{data}"
 	return images
 
 
