@@ -2,8 +2,10 @@ import frappe
 from frappe import _
 
 from docarchive import counterparty
+from docarchive.permissions import ADMIN_ROLE
 
 DOCUMENT = "Business Document"
+EXPORT = "Archive Export"
 DELETED = "Deleted"
 FILE_LINK_FIELDS = ("file_url", "is_private", "attached_to_doctype", "attached_to_name", "attached_to_field")
 OBJECT_FIELDS = ("file_url", "content_hash", "thumbnail_url", "is_private")
@@ -117,6 +119,8 @@ def changed(doc, before, fields) -> bool:
 
 
 def file_permission(doc, ptype=None, user=None, debug=False) -> bool:
+	if doc.attached_to_doctype == EXPORT:
+		return ADMIN_ROLE in frappe.get_roles(user)
 	if ptype == "delete" and archived_file(doc):
 		return False
 	if (

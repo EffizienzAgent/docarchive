@@ -20,6 +20,7 @@ DATA_MARKER = "/*DOCARCHIVE_DATA*/"
 STORED = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".tif", ".tiff", ".zip", ".gz", ".docx", ".xlsx"}
 SIDECAR = re.compile(r"\.meta\.(\d+)\.json$")
 MAIL_PREVIEW_LIMIT = 50 * 1024 * 1024
+SCRIPT_UNSAFE = ("&", "<", ">", "\u2028", "\u2029")
 MAIL_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
 CSV_FIELDS = (
 	"id",
@@ -258,6 +259,7 @@ def labels() -> dict:
 		"download_original": _("Download original"),
 		"rendered_preview": _("Rendered preview for reading only. The archived original is the file above."),
 		"no_preview": _("No preview for this file type. Open or download the original."),
+		"download_only": _("This file type is only offered as a download, so it cannot run in the viewer."),
 		"date": _("Document Date"),
 		"number": _("Document Number"),
 		"type": _("Business Document Type"),
@@ -283,7 +285,9 @@ def labels() -> dict:
 
 
 def viewer(data) -> str:
-	payload = json.dumps({**data, "labels": labels()}, ensure_ascii=False).replace("</", "<\\/")
+	payload = json.dumps({**data, "labels": labels()}, ensure_ascii=False)
+	for char in SCRIPT_UNSAFE:
+		payload = payload.replace(char, f"\\u{ord(char):04x}")
 	return VIEWER.read_text(encoding="utf-8").replace(DATA_MARKER, payload)
 
 
