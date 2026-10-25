@@ -9,6 +9,7 @@ class ArchiveSettings(Document):
 	def validate(self):
 		self.granted_permissions = frappe.db.get_single_value("Archive Settings", "granted_permissions")
 		self.validate_retention_rules()
+		self.validate_mail_accounts()
 		permissions.validate_roles(self)
 		storage_targets.validate(self)
 
@@ -24,3 +25,12 @@ class ArchiveSettings(Document):
 			if key in seen:
 				frappe.throw(_("There is more than one retention rule for {0} and {1}.").format(*key))
 			seen.add(key)
+
+	def validate_mail_accounts(self):
+		seen = set()
+		for row in self.mail_accounts:
+			if row.email_account in seen:
+				frappe.throw(_("E-mail account {0} is listed more than once.").format(row.email_account))
+			if (row.keep_days or 0) < 0:
+				frappe.throw(_("Keep days must not be negative."))
+			seen.add(row.email_account)

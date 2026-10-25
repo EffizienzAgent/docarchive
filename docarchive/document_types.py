@@ -28,6 +28,24 @@ DEFAULT_TYPES = (
 	},
 )
 DEFAULT_UPLOAD_TYPE = "Contract"
+CORRESPONDENCE = "Correspondence"
+INTERNAL_CORRESPONDENCE = "Internal Correspondence"
+MAIL_TYPES = (
+	{
+		"type_name": CORRESPONDENCE,
+		"slug": "correspondence",
+		"default_retention_years": 6,
+		"counterparty_required": 1,
+		"is_correspondence": 1,
+	},
+	{
+		"type_name": INTERNAL_CORRESPONDENCE,
+		"slug": "internal-correspondence",
+		"default_retention_years": 6,
+		"counterparty_required": 0,
+		"is_correspondence": 1,
+	},
+)
 
 
 def seed_types():
@@ -39,3 +57,11 @@ def seed_types():
 		)
 	if not frappe.db.get_single_value("Archive Settings", "default_upload_type"):
 		frappe.db.set_single_value("Archive Settings", "default_upload_type", DEFAULT_UPLOAD_TYPE)
+
+
+def ensure_mail_types():
+	for fields in MAIL_TYPES:
+		if not frappe.db.exists("Business Document Type", {"type_name": fields["type_name"]}):
+			frappe.get_doc({"doctype": "Business Document Type", "archive": 1, **fields}).insert(
+				ignore_permissions=True
+			)

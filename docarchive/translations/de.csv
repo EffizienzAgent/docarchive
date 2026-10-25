@@ -206,3 +206,40 @@ Retention History,Verlauf der Aufbewahrung
 Pending Extension Metadata,Metadaten der ausstehenden Verlängerung
 Skipped,Übersprungen
 The recorded version of {0} is missing on the storage target.,Die gespeicherte Version von {0} fehlt auf dem Speicherziel.
+Archive Internal Mails,Interne E-Mails archivieren
+Archive Mail Account,Archiv-E-Mail-Konto
+Automated,Automatisch erzeugt
+Automatic,Automatisch
+Capture and archive business e-mails of these accounts.,Geschäftliche E-Mails dieser Konten erfassen und archivieren.
+Cc,Kopie (Cc)
+Comma-separated. Empty: the domain of the account's address.,Kommagetrennt. Leer: die Domain der Adresse des Kontos.
+Communication,Kommunikation
+Contacts Count as Counterparty,Kontakte gelten als Gegenpartei
+Correspondence,Korrespondenz
+Internal Correspondence,Interne Korrespondenz
+Date Header,Datumskopfzeile
+Direction,Richtung
+E-Mail Accounts,E-Mail-Konten
+E-mail account {0} is listed more than once.,Das E-Mail-Konto {0} ist mehr als einmal aufgeführt.
+Email Account,E-Mail-Konto
+In-Reply-To,Antwort auf
+Incoming,Eingehend
+Internal,Intern
+Internal Domains,Interne Domains
+Keep Unarchived Originals (Days),Nicht archivierte Originale aufbewahren (Tage)
+Keep days must not be negative.,Die Aufbewahrungstage dürfen nicht negativ sein.
+Mail Original,E-Mail-Original
+Mail Time,E-Mail-Zeitpunkt
+Manual,Manuell
+Message-ID,Message-ID
+Mode,Modus
+Off,Aus
+Origin,Herkunft
+Outgoing,Ausgehend
+References,Referenzen
+SHA-256,SHA-256
+Sender,Absender
+Size,Größe
+Subject,Betreff
+Thread Key,Thread-Schlüssel
+To,An

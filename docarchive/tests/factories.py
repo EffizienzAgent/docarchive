@@ -178,3 +178,42 @@ def make_manager(email):
 
 def make_outsider(email):
 	return make_user(email, [make_role("Archive Outsider")])
+
+
+def make_email_account(email_id=None, **fields):
+	email_id = email_id or f"{unique('info')}@acme.test"
+	return frappe.get_doc(
+		{
+			"doctype": "Email Account",
+			"email_account_name": unique("account"),
+			"email_id": email_id,
+			"enable_incoming": 0,
+			"enable_outgoing": 0,
+			**fields,
+		}
+	).insert(ignore_permissions=True)
+
+
+def make_mail_settings(email_account, **fields):
+	settings = frappe.get_single("Archive Settings")
+	settings.set("mail_accounts", [])
+	settings.append("mail_accounts", {"email_account": email_account, **fields})
+	settings.save(ignore_permissions=True)
+	return settings.mail_accounts[0]
+
+
+def make_communication(email_account, sent_or_received="Received", **fields):
+	return frappe.get_doc(
+		{
+			"doctype": "Communication",
+			"communication_type": "Communication",
+			"communication_medium": "Email",
+			"email_account": email_account,
+			"sent_or_received": sent_or_received,
+			"subject": "Offer",
+			"content": "Hello",
+			"sender": "client@example.test",
+			"recipients": "info@acme.test",
+			**fields,
+		}
+	).insert(ignore_permissions=True)

@@ -1,0 +1,39 @@
+import frappe
+from frappe.tests import IntegrationTestCase
+
+from docarchive.mail import accounts
+from docarchive.tests.factories import make_email_account, make_mail_settings, make_settings
+
+
+class TestMailAccounts(IntegrationTestCase):
+	def setUp(self):
+		make_settings()
+		self.account = make_email_account().name
+
+	def test_missing_account_has_no_settings(self):
+		self.assertIsNone(accounts.account_settings("nope@example.test"))
+		self.assertIsNone(accounts.account_settings(None))
+
+	def test_off_account_has_no_settings(self):
+		make_mail_settings(self.account, mode="Off")
+		self.assertIsNone(accounts.account_settings(self.account))
+
+	def test_row_defaults(self):
+		make_mail_settings(self.account, mode="Manual")
+		row = accounts.account_settings(self.account)
+		self.assertEqual((row.keep_days, row.archive_internal, row.contacts_as_counterparty), (90, 0, 0))
+
+	def test_internal_domains_default_to_account_domain(self):
+		make_mail_settings(self.account, mode="Manual")
+		self.assertEqual(accounts.internal_domains(accounts.account_settings(self.account)), {"acme.test"})
+
+	def test_internal_domains_from_row(self):
+		make_mail_settings(self.account, mode="Manual", internal_domains="Acme.test, acme.de")
+		row = accounts.account_settings(self.account)
+		self.assertEqual(accounts.internal_domains(row), {"acme.test", "acme.de"})
+
+	def test_duplicate_account_rows_refused(self):
+		settings = frappe.get_single("Archive Settings")
+		settings.set("mail_accounts", [{"email_account": self.account}, {"email_account": self.account}])
+		with self.assertRaises(frappe.ValidationError):
+			settings.save(ignore_permissions=True)

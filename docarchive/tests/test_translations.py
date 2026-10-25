@@ -39,5 +39,12 @@ class TestTranslations(IntegrationTestCase):
 
 	def test_seeded_types_translated(self):
 		known = translations()
-		for name in ("Outgoing Invoice", "Incoming Invoice", "Contract", "Bank Statement"):
+		for name in (
+			"Outgoing Invoice",
+			"Incoming Invoice",
+			"Contract",
+			"Bank Statement",
+			"Correspondence",
+			"Internal Correspondence",
+		):
 			self.assertIn(name, known)

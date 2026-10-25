@@ -27,6 +27,8 @@
   "retention_rules",
   "storage_section",
   "storage_targets",
+  "mail_section",
+  "mail_accounts",
   "granted_permissions"
  ],
  "fields": [
@@ -131,6 +133,18 @@
    "label": "Storage Targets",
    "options": "Archive Storage Target",
    "description": "Every enabled target gets a locked copy of each archived document."
+  },
+  {
+   "fieldname": "mail_section",
+   "fieldtype": "Section Break",
+   "label": "Correspondence"
+  },
+  {
+   "fieldname": "mail_accounts",
+   "fieldtype": "Table",
+   "label": "E-Mail Accounts",
+   "options": "Archive Mail Account",
+   "description": "Capture and archive business e-mails of these accounts."
   },
   {
    "fieldname": "granted_permissions",
