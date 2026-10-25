@@ -38,7 +38,6 @@
    "label": "Communication",
    "read_only": 1,
    "options": "Communication",
-   "reqd": 1,
    "unique": 1
   },
   {

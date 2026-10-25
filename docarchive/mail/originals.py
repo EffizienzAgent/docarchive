@@ -19,24 +19,44 @@ def capture(communication, raw: bytes | str, origin: str) -> str | None:
 			return existing
 		name = _capture(communication, _as_bytes(raw), origin)
 	except Exception:
-		_fail(SAVEPOINT)
+		fail(SAVEPOINT)
 		return None
 	if name:
 		_auto_archive(name)
 	return name
 
 
-def capture_sent(queue) -> str | None:
+def sent_count(queue) -> int | None:
 	try:
 		if not _capturable(queue):
+			return None
+		return frappe.db.count("Email Queue Recipient", {"parent": queue.name, "status": "Sent"})
+	except Exception:
+		fail()
+		return None
+
+
+def capture_sent(queue, sent_before: int | None) -> str | None:
+	try:
+		if sent_before is None or (sent_count(queue) or 0) <= sent_before:
 			return None
 		frappe.db.savepoint(SEND_SAVEPOINT)
 		communication = frappe.get_doc("Communication", queue.communication)
 		raw = _sent_bytes(queue, communication)
 	except Exception:
-		_fail(SEND_SAVEPOINT)
+		fail(SEND_SAVEPOINT)
 		return None
-	return capture(communication, raw, "frappe-send") if raw else None
+	name = capture(communication, raw, "frappe-send") if raw else None
+	if name:
+		_commit()
+	return name
+
+
+def _commit():
+	try:
+		frappe.db.commit()
+	except Exception:
+		fail()
 
 
 def _capturable(queue):
@@ -63,7 +83,11 @@ def on_communication_trash(communication, method=None):
 	original = frappe.db.get_value(
 		"Mail Original", {"communication": communication.name}, ["name", "business_document"], as_dict=True
 	)
-	if original and not original.business_document:
+	if not original:
+		return
+	if original.business_document:
+		frappe.db.set_value("Mail Original", original.name, "communication", None, update_modified=False)
+	else:
 		frappe.delete_doc("Mail Original", original.name, ignore_permissions=True)
 
 
@@ -75,9 +99,10 @@ def _existing(communication):
 	return frappe.db.get_value("Mail Original", {"communication": communication.name})
 
 
-def _fail(savepoint):
+def fail(savepoint=None):
 	try:
-		frappe.db.rollback(save_point=savepoint)
+		if savepoint:
+			frappe.db.rollback(save_point=savepoint)
 	except Exception:
 		pass
 	try:
@@ -138,4 +163,4 @@ def _auto_archive(name):
 		frappe.db.savepoint(AUTO_SAVEPOINT)
 		archiving.auto_archive(name)
 	except Exception:
-		_fail(AUTO_SAVEPOINT)
+		fail(AUTO_SAVEPOINT)
