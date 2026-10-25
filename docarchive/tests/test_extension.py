@@ -214,20 +214,19 @@ class TestManualExtension(ArchiveRunTestCase):
 		self.assertEqual(self.retention_calls(), [])
 
 	def test_deleted_documents_are_never_extended(self):
-		for case in ("copy", "document"):
-			with self.subTest(case):
-				doc = self.archived()
-				if case == "copy":
-					frappe.db.set_value("Archive Copy", doc.archive_copies[0].name, "status", "Deleted")
-				else:
-					frappe.db.set_value(
-						DOCUMENT, doc.name, "archive_status", "Deleted", update_modified=False
-					)
+		by_copy, by_status = self.archived(), self.archived()
+		frappe.db.set_value("Archive Copy", by_copy.archive_copies[0].name, "status", "Deleted")
+		frappe.db.set_value(DOCUMENT, by_status.name, "archive_status", "Deleted", update_modified=False)
+		before = len(self.retention_calls())
+		for doc in (by_copy, by_status):
+			with self.subTest(doc.name):
 				with self.assertRaises(frappe.ValidationError):
 					extension.extend(doc.name, extension.ADD_YEARS, years=1)
 				self.assertFalse(extension.options(doc.name)["allowed"])
 				frappe.db.set_value(
 					DOCUMENT, doc.name, "extension_until", "2036-01-02 00:00:00", update_modified=False
 				)
-		run.nightly()
-		self.assertEqual(self.retention_calls(), [])
+		pending = [doc.name for doc, _until in run.extensions({"primary", "secondary"})]
+		self.assertNotIn(by_copy.name, pending)
+		self.assertNotIn(by_status.name, pending)
+		self.assertEqual(len(self.retention_calls()), before)
