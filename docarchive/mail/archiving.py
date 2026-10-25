@@ -487,10 +487,11 @@ def _thread_party(original, own_company) -> dict:
 	party = _party_email(original).lower()
 	ids = [*(original.mail_references or "").split(), original.in_reply_to]
 	documents = threads.thread_documents(own_company, original.thread_key, [i for i in ids if i])
-	if not party or party not in {(doc.source_party_email or "").lower() for doc in documents}:
-		return {}
-	earliest = next((doc for doc in documents if doc.counterparty), None)
-	if not earliest:
+	earliest = next(
+		(doc for doc in documents if doc.counterparty and (doc.source_party_email or "").lower() == party),
+		None,
+	)
+	if not (party and earliest):
 		return {}
 	return {"counterparty_type": earliest.counterparty_type, "counterparty": earliest.counterparty}
 

@@ -150,6 +150,21 @@ class TestFollowThreadRules(FollowThreadCase):
 		self.assertEqual(frappe.db.get_value(DOCUMENT, self.document(same), "counterparty"), party)
 		self.assertIsNone(frappe.db.get_value(DOCUMENT, self.document(other), "counterparty"))
 
+	def test_counterparty_from_the_earliest_document_of_the_same_party(self):
+		from docarchive.tests.factories import make_party, party_fields
+
+		a_id, _z_id, _a_comm, a, z = self.conversation()
+		archiving.archive(z)
+		frappe.db.set_value(
+			DOCUMENT,
+			self.document(z),
+			{**party_fields(make_party("Other")), "source_party_email": "other@example.test"},
+		)
+		mine = make_party("Mine")
+		frappe.db.set_value(DOCUMENT, self.document(a), party_fields(mine))
+		_, reply = self.mail("2026-03-11 09:00:00", **{"In-Reply-To": f"<{a_id}>"})
+		self.assertEqual(frappe.db.get_value(DOCUMENT, self.document(reply), "counterparty"), mine.name)
+
 	def test_same_message_id_always_links(self):
 		a_id, *_ = self.conversation()
 		_, copy = self.mail("2026-03-01 09:00:00", **{"Message-ID": f"<{a_id}>"})
