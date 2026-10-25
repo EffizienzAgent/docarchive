@@ -6,7 +6,12 @@ from frappe.tests import IntegrationTestCase
 from docarchive.patches import add_mail_types
 from docarchive.permissions import MANAGER_ROLE
 from docarchive.setup import apply_defaults
-from docarchive.tests.factories import make_business_document, make_document_type
+from docarchive.tests.factories import (
+	make_business_document,
+	make_document_type,
+	make_own_company,
+	make_settings,
+)
 
 TYPE = "Business Document Type"
 
@@ -55,6 +60,7 @@ class TestInstall(IntegrationTestCase):
 	def test_foreign_type_with_documents_is_left_alone(self):
 		frappe.delete_doc(TYPE, "Correspondence", force=True)
 		make_document_type(type_name="Correspondence", slug="letters", is_correspondence=0)
+		make_settings(default_own_company=make_own_company().name)
 		make_business_document(document_type="Correspondence")
 		errors = frappe.db.count("Error Log")
 		add_mail_types.execute()
