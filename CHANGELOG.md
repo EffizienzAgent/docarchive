@@ -5,14 +5,14 @@
 
 ### Features
 
-* archiving status, in-app file viewer on mobile, stacked thread view ([cc0e970](https://github.com/EffizienzAgent/docarchive/commit/cc0e9706fd169b6fbc82ef5d42ff3d8d3241e548))
-* archiving status, in-app file viewer on mobile, stacked thread view ([587dfa4](https://github.com/EffizienzAgent/docarchive/commit/587dfa44022a05f682c6f82e70167ef0bc350394))
+* "Archiving" status (blue) on documents queued by "Archive now" until the job has run; the list indicator filters on it ([#49](https://github.com/EffizienzAgent/docarchive/pull/49))
+* on mobile and in the home screen app, PDFs and images from a document's file link open in a dialog instead of a new tab without a way back ([#49](https://github.com/EffizienzAgent/docarchive/pull/49))
+* thread dialog stacks e-mails as cards on narrow screens ([#49](https://github.com/EffizienzAgent/docarchive/pull/49))
 
 
 ### Documentation
 
-* retake counterparty panel and thread screenshots ([99c717e](https://github.com/EffizienzAgent/docarchive/commit/99c717ec9b5ced96c6fee5304db5ae55748d9805))
-* retake counterparty panel and thread screenshots ([0ffef48](https://github.com/EffizienzAgent/docarchive/commit/0ffef48bb63999434ca351920dc99746cd043653))
+* retake counterparty panel and thread screenshots ([#47](https://github.com/EffizienzAgent/docarchive/pull/47))
 
 ## [0.9.0](https://github.com/EffizienzAgent/docarchive/compare/v0.8.1...v0.9.0) (2026-10-25)
 
