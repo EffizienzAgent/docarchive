@@ -2,7 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import get_datetime, getdate
 
-from docarchive import content, counterparty, settings
+from docarchive import audit, content, counterparty, settings
 from docarchive.document_types import CORRESPONDENCE, INTERNAL_CORRESPONDENCE
 from docarchive.mail import accounts, events, headers
 
@@ -19,17 +19,23 @@ EMAIL_LENGTH = 140
 def archive(
 	original_name: str, own_company: str | None = None, check_permission: bool = False, raw=None
 ) -> str:
+	return archive_with_outcome(original_name, own_company, check_permission, raw)[0]
+
+
+def archive_with_outcome(original_name, own_company=None, check_permission=False, raw=None):
 	original = frappe.get_doc(ORIGINAL, original_name)
 	if original.business_document:
-		return original.business_document
+		return original.business_document, "skipped"
 	reason = refusal(original_name)
 	if reason:
 		frappe.throw(reason)
 	row = accounts.account_row(original.email_account) or frappe._dict()
 	own_company = settings.own_company_for(original.mail_at, own_company or row.own_company)
-	name = _existing(original, own_company) or _create(original, own_company, check_permission, raw)
+	name, outcome = _existing(original, own_company), "linked"
+	if not name:
+		name, outcome = _create(original, own_company, check_permission, raw), "created"
 	original.db_set("business_document", name, update_modified=False)
-	return name
+	return name, outcome
 
 
 def refusal(original_name: str | None) -> str | None:
@@ -57,7 +63,8 @@ def auto_archive(original_name: str, raw=None) -> str | None:
 		or (original.internal and not row.archive_internal)
 	):
 		return None
-	name = archive(original_name, raw=raw)
+	name, outcome = archive_with_outcome(original_name, raw=raw)
+	audit_log(audit.MAIL_ARCHIVED, [(DOCUMENT, name, outcome)], {"how": "automatic"})
 	events.changed("archived", [original_name], [original.communication])
 	return name
 
@@ -181,7 +188,7 @@ def archive_communications(names) -> dict:
 
 def archive_each(items) -> dict:
 	result = {"archived": {}, "refused": {}}
-	archived = []
+	archived, documents = [], []
 	for key, original, communication in items:
 		reason = refusal(original)
 		if reason:
@@ -190,14 +197,33 @@ def archive_each(items) -> dict:
 		messages = len(frappe.local.message_log)
 		try:
 			frappe.db.savepoint(SAVEPOINT)
-			result["archived"][key] = archive(original, check_permission=True)
+			name, outcome = archive_with_outcome(original, check_permission=True)
+			result["archived"][key] = name
 			archived.append((original, communication))
+			documents.append((DOCUMENT, name, outcome))
 		except (frappe.ValidationError, frappe.PermissionError) as error:
 			frappe.db.rollback(save_point=SAVEPOINT)
 			del frappe.local.message_log[messages:]
 			result["refused"][key] = str(error)
+	audit_log(audit.MAIL_ARCHIVED, documents, _counted({"how": "manual"}, documents, result["refused"]))
 	events.changed("archived", [o for o, _c in archived], [c for _o, c in archived])
 	return result
+
+
+def _counted(details, documents, refused):
+	counts = {}
+	for _doctype, _name, outcome in documents:
+		counts[outcome] = counts.get(outcome, 0) + 1
+	return {
+		**details,
+		"counts": dict(sorted(counts.items())),
+		**({"refused": len(refused)} if refused else {}),
+	}
+
+
+def audit_log(action, documents, details=None):
+	if audit.changes_anything(documents):
+		audit.log(action, details=details, documents=documents)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -241,6 +267,11 @@ def archive_upload(
 		name = archive(original, company, check_permission=True)
 		party = frappe._dict(counterparty_type=counterparty_type, counterparty=counterparty)
 		_complete(name, party if counterparty_type and counterparty else thread, source_doctype, source_name)
+		audit_log(
+			audit.MAIL_UPLOADED,
+			[(DOCUMENT, name, "created")],
+			{"direction": direction, "gap": bool(gap_message_id)},
+		)
 	frappe.delete_doc("File", file_name, ignore_permissions=True)
 	return name
 
@@ -258,6 +289,11 @@ def discard(names) -> dict:
 			continue
 		remove_document(name)
 		result["discarded"].append(name)
+	audit_log(
+		audit.MAIL_DISCARDED,
+		[(DOCUMENT, name, "discarded") for name in result["discarded"]],
+		{"refused": len(result["refused"])} if result["refused"] else {},
+	)
 	return result
 
 

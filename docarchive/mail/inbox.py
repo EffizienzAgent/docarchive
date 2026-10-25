@@ -6,6 +6,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt, now_datetime
 
+from docarchive import audit
 from docarchive.mail import archiving, events
 from docarchive.mail.cleanup import DEFAULT_KEEP_DAYS
 
@@ -60,6 +61,7 @@ def count_candidates(expiring_within_days: float | None = None) -> int:
 def ignore(names) -> dict:
 	communications = _checked(names)
 	changed = _set_ignored(communications, 1)
+	archiving.audit_log(audit.MAIL_IGNORED, [(ORIGINAL, name, "ignored") for name in changed])
 	events.changed("ignored", changed, [communications[name] for name in changed])
 	return {"ignored": changed}
 
@@ -68,6 +70,7 @@ def ignore(names) -> dict:
 def unignore(names) -> dict:
 	communications = _checked(names)
 	changed = _set_ignored(communications, 0)
+	archiving.audit_log(audit.MAIL_UNIGNORED, [(ORIGINAL, name, "unignored") for name in changed])
 	events.changed("unignored", changed, [communications[name] for name in changed])
 	return {"unignored": changed}
 
