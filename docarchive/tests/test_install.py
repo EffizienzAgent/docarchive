@@ -21,7 +21,9 @@ class TestInstall(IntegrationTestCase):
 		frappe.delete_doc("Business Document Type", "Correspondence", force=True)
 		apply_defaults()
 		t = frappe.get_doc("Business Document Type", "Correspondence")
-		self.assertEqual((t.slug, t.default_retention_years, t.counterparty_required), ("correspondence", 6, 1))
+		self.assertEqual(
+			(t.slug, t.default_retention_years, t.counterparty_required), ("correspondence", 6, 1)
+		)
 		self.assertEqual(t.is_correspondence, 1)
 		internal = frappe.get_doc("Business Document Type", "Internal Correspondence")
 		self.assertEqual((internal.counterparty_required, internal.is_correspondence), (0, 1))
