@@ -82,7 +82,9 @@ def release_legal_hold(names, reason=None, confirm=None) -> dict:
 	names = checked_names(names)
 	by_name = targets_by_name()
 	for name in names:
-		refusal = admin_refusal(frappe.get_doc(DOCUMENT, name), by_name)
+		doc = frappe.get_doc(DOCUMENT, name)
+		doc.check_permission("read")
+		refusal = admin_refusal(doc, by_name)
 		if refusal:
 			frappe.throw(f"{name}: {refusal}")
 	return {name: locked(name, release_document, reason, by_name) for name in names}

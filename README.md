@@ -49,6 +49,8 @@ Each row can also name an optional **admin key**: in site config mode two more c
 | Needs | `PutObject`, `PutObjectRetention`, `PutObjectLegalHold` (ON only, if the provider supports the condition), `GetObject*`, `ListBucket` | `PutObjectLegalHold` (OFF), `DeleteObjectVersion`, `GetObject*`, `ListBucket`; `BypassGovernanceRetention` only for early deletion |
 | Never | delete, shorten retention, bypass governance, change policies | `PutObject`, `DeleteObject` without version (delete markers), `PutObjectRetention`, policy or lock changes |
 
+S3 has a single permission, `s3:PutObjectLegalHold`, for setting and releasing a hold. The app sends ON only with the archive key and OFF only with the admin key (the AST guard enforces this), but that split exists in the app only. The storage enforces it only if the provider evaluates the `s3:object-lock-legal-hold` condition in a bucket policy that allows the archive key ON only. Where the provider does not, a fail-closed policy denies the archive key every hold request: setting a hold is then refused ("Legal Hold ist beim Speicher derzeit nicht freigegeben"), and only the owner or admin key can set holds outside the app.
+
 Any S3-compatible provider with Object Lock works. [docs/hetzner-example.md](docs/hetzner-example.md) shows one setup.
 
 ## Host app hooks

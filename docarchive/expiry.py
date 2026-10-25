@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import frappe
 from frappe import _
 from frappe.utils import cint, format_date, now_datetime
+from frappe.utils.global_search import delete_for_document
 
 from docarchive import retention, run, store
 from docarchive.legal_hold import (
@@ -47,7 +48,10 @@ STRIPPED = (
 
 
 def is_contract(doc) -> bool:
-	counts_from = frappe.db.get_value("Business Document Type", doc.document_type, "retention_from")
+	if doc.archive_meta:
+		counts_from = json.loads(doc.archive_meta)["retention"]["counts_from"]
+	else:
+		counts_from = frappe.db.get_value("Business Document Type", doc.document_type, "retention_from")
 	return counts_from == retention.CONTRACT_END
 
 
@@ -132,9 +136,13 @@ def preview_row(doc, by_name, early) -> dict:
 def preview(names, early=0) -> list[dict]:
 	frappe.only_for(ADMIN_ROLE)
 	by_name = targets_by_name()
-	return [
-		preview_row(frappe.get_doc(DOCUMENT, name), by_name, cint(early)) for name in checked_names(names)
-	]
+	return [preview_row(readable(name), by_name, cint(early)) for name in checked_names(names)]
+
+
+def readable(name):
+	doc = frappe.get_doc(DOCUMENT, name)
+	doc.check_permission("read")
+	return doc
 
 
 def confirm_word(names) -> str:
@@ -256,6 +264,7 @@ def strip(doc, user, until, early, reason):
 		{
 			**dict.fromkeys(STRIPPED),
 			"archive_size": 0,
+			**dict.fromkeys(("_comments", "_assign", "_liked_by", "_user_tags")),
 			"title": doc.name,
 			"archive_status": run.DELETED,
 			"deleted_at": deleted_at,
@@ -277,6 +286,11 @@ def strip(doc, user, until, early, reason):
 		"File", filters={"attached_to_doctype": DOCUMENT, "attached_to_name": doc.name}, pluck="name"
 	):
 		frappe.delete_doc("File", file, ignore_permissions=True)
+	for entry in doc.legal_hold_log:
+		frappe.db.set_value("Legal Hold Log Entry", entry.name, {"reason": None, "result": None})
 	frappe.db.delete("Version", {"ref_doctype": DOCUMENT, "docname": doc.name})
 	frappe.db.delete("Comment", {"reference_doctype": DOCUMENT, "reference_name": doc.name})
+	frappe.db.delete("ToDo", {"reference_type": DOCUMENT, "reference_name": doc.name})
+	frappe.db.delete("Tag Link", {"document_type": DOCUMENT, "document_name": doc.name})
+	delete_for_document(doc)
 	frappe.db.commit()

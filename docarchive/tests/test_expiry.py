@@ -279,3 +279,74 @@ class TestSidecarPatch(ExpiryTestCase):
 		self.assertEqual(
 			json.loads(frappe.db.get_value("Archive Copy", copy.name, "sidecar_versions")), expected
 		)
+
+
+class TestReviewFixes(ExpiryTestCase):
+	def test_stub_keeps_no_content(self):
+		doc = self.expire(self.archived())
+		legal_hold.set_legal_hold([doc.name], "Klage Müller GmbH")
+		legal_hold.release_legal_hold([doc.name], "Vergleich mit Müller", confirm=1)
+		frappe.db.set_value(
+			DOCUMENT,
+			doc.name,
+			{
+				"_comments": '[{"comment": "secret"}]',
+				"_assign": '["a@example.test"]',
+				"_liked_by": '["a"]',
+				"_user_tags": ",secret",
+			},
+		)
+		frappe.get_doc(
+			{
+				"doctype": "Comment",
+				"comment_type": "Comment",
+				"reference_doctype": DOCUMENT,
+				"reference_name": doc.name,
+				"content": "secret",
+			}
+		).insert(ignore_permissions=True)
+		with patch("docarchive.expiry.delete_for_document") as global_search:
+			self.assertEqual(self.delete([doc.name]), {doc.name: "Deleted"})
+		self.assertEqual(global_search.call_args[0][0].name, doc.name)
+		stub = frappe.db.get_value(
+			DOCUMENT, doc.name, ["_comments", "_assign", "_liked_by", "_user_tags"], as_dict=True
+		)
+		self.assertEqual(set(stub.values()), {None})
+		self.assertFalse(
+			frappe.db.exists("Comment", {"reference_doctype": DOCUMENT, "reference_name": doc.name})
+		)
+		log = frappe.get_doc(DOCUMENT, doc.name).legal_hold_log
+		self.assertEqual(
+			[(e.action, e.user, bool(e.at), e.reason, e.result) for e in log],
+			[("Set", "Administrator", True, None, None), ("Release", "Administrator", True, None, None)],
+		)
+
+	def test_contract_rule_is_frozen_at_archive_start(self):
+		contract_type = make_document_type(retention_from="Contract End Date", default_retention_years=10)
+		self.type = contract_type
+		open_contract = self.expire(self.archived())
+		frappe.db.set_value("Business Document Type", contract_type.name, "retention_from", "Document Date")
+		self.assertEqual(
+			expiry.refusal(frappe.get_doc(DOCUMENT, open_contract.name)),
+			expiry._("The contract has no end date yet."),
+		)
+		self.type = make_document_type(default_retention_years=8)
+		plain = self.expire(self.archived())
+		frappe.db.set_value("Business Document Type", self.type.name, "retention_from", "Contract End Date")
+		self.assertIsNone(expiry.refusal(frappe.get_doc(DOCUMENT, plain.name)))
+
+	def test_admin_needs_read_permission(self):
+		doc = self.expire(self.archived())
+		legal_hold.set_legal_hold([doc.name], "x")
+		with patch(
+			"docarchive.document_archive.doctype.business_document.business_document.BusinessDocument.has_permission",
+			return_value=False,
+		):
+			for call in (
+				lambda: expiry.preview([doc.name]),
+				lambda: expiry.delete_documents([doc.name], confirm=1),
+				lambda: legal_hold.release_legal_hold([doc.name], "x", confirm=1),
+			):
+				with self.assertRaises(frappe.PermissionError):
+					call()
+		self.assertEqual(self.deletes(), [])

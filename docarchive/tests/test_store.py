@@ -29,6 +29,10 @@ GUARDED_NAMES = {
 	"_admin_delete": {"_admin_delete", "delete_expired", "delete_early"},
 }
 CLIENTS = {client for client, _method in CLIENT_CALLS}
+CLIENT_OWNERS = {
+	"_client": {"__init__", *(f for (client, _m), f in CLIENT_CALLS.items() if client == "_client")},
+	"_admin_client": {"__init__", "has_admin_access", "release_hold", "_admin_delete"},
+}
 ALLOWED = dict(GUARDED_NAMES)
 for (_client, method), function in CLIENT_CALLS.items():
 	ALLOWED.setdefault(method, set()).add(function)
@@ -113,7 +117,9 @@ def violations(modules):
 					found.append((path, owner, name))
 				elif name in ALLOWED and (path != "store.py" or owner not in ALLOWED[name]):
 					found.append((path, owner, name))
-				elif name in (*CLIENTS, "_client_for") and path != "store.py":
+				elif name in CLIENTS and (path != "store.py" or owner not in CLIENT_OWNERS[name]):
+					found.append((path, owner, name))
+				elif name == "_client_for" and path != "store.py":
 					found.append((path, owner, name))
 				elif name.startswith("import:") and module.startswith(CLIENT_MODULES) and path != "store.py":
 					found.append((path, owner, name))
@@ -298,6 +304,18 @@ class TestStore(IntegrationTestCase):
 				"def delete_expired(t):\n    _admin_delete(t, 'k', 'v', BypassGovernanceRetention=True)\n",
 			),
 			"admin delete from run": ("run.py", "def f(t):\n    store._admin_delete(t, 'k', 'v')\n"),
+			"admin client aliased": (
+				"store.py",
+				"def smoke_delete(t):\n    c = t._admin_client\n    c.delete_object(BypassGovernanceRetention=True)\n",
+			),
+			"admin client by name": (
+				"store.py",
+				"def smoke_delete(t):\n    getattr(t, '_admin_client').delete_object(VersionId='v')\n",
+			),
+			"archive client aliased": (
+				"store.py",
+				"def deletable(t):\n    c = t._client\n    c.delete_object(BypassGovernanceRetention=True)\n",
+			),
 			"admin delete imported": ("run.py", "from docarchive.store import _admin_delete\n"),
 			"admin client elsewhere": ("run.py", "def f(t):\n    return t._admin_client\n"),
 			"hold elsewhere": ("run.py", "def f(t):\n    t._client.put_object_legal_hold(Bucket='b')\n"),
