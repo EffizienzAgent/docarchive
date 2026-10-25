@@ -225,3 +225,45 @@ class TestReport(MonitoringTestCase):
 		)
 		[row] = [row for row in monitoring.problems() if row["name"] == doc.name]
 		self.assertEqual((row["problem"], row["details"], row["since"]), (monitoring.FAILED, None, started))
+
+
+class TestMailOriginals(MonitoringTestCase):
+	def original(self, status, hours=0, **fields):
+		name = (
+			frappe.get_doc({"doctype": "Mail Original", "status": status, "subject": "Offer", **fields})
+			.insert(ignore_permissions=True)
+			.name
+		)
+		old = add_to_date(now_datetime(), hours=-hours)
+		frappe.db.set_value("Mail Original", name, "creation", old, update_modified=False)
+		return name
+
+	def test_failed_and_stuck_originals_are_problems(self):
+		failed = self.original("Failed", error="rebuild window passed")
+		stuck = self.original("Pending", hours=25)
+		fresh = self.original("Pending", hours=1)
+		stored = self.original("Stored", hours=25)
+		rows = [row for row in monitoring.problems() if row["problem"] == monitoring.MAIL_ORIGINAL]
+		details = " ".join(row["details"] for row in rows)
+		self.assertIn(failed, details)
+		self.assertIn("rebuild window passed", details)
+		self.assertIn(stuck, details)
+		self.assertNotIn(fresh, details)
+		self.assertNotIn(stored, details)
+		only = monitoring.problems({"problem": monitoring.MAIL_ORIGINAL})
+		self.assertEqual(len(only), len(rows))
+		self.assertFalse(
+			[
+				r
+				for r in monitoring.problems({"document_type": self.type.name})
+				if r["problem"] == "Mail Original"
+			]
+		)
+
+	def test_daily_alerts_once_even_while_archiving_is_off(self):
+		self.configure(["primary"], enabled=0)
+		failed = self.original("Failed")
+		monitoring.daily()
+		monitoring.daily()
+		[alert] = self.alerts("mail_originals_failed")
+		self.assertIn(failed, alert.email_content)

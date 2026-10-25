@@ -47,6 +47,7 @@ def _old_originals(email_account, cutoff):
 		ORIGINAL,
 		filters={
 			"email_account": email_account,
+			"status": "Stored",
 			"business_document": ("is", "not set"),
 			"creation": ("<", cutoff),
 		},
