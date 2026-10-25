@@ -245,10 +245,8 @@ def restrict_to_own_company(user, own_company):
 def store_mail_inline(case):
 	from docarchive.mail import originals
 
-	def run(communication):
-		originals.store(communication)
-		name = frappe.db.get_value("Mail Original", {"communication": communication})
-		if name:
-			case.addCleanup(originals.remove_spool, name)
+	def run(name):
+		originals.store(name)
+		case.addCleanup(originals.remove_spool, name)
 
 	case.enterContext(patch("docarchive.mail.originals.schedule", side_effect=run))

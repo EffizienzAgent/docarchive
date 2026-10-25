@@ -182,27 +182,27 @@ class TestMailStoreJob(IntegrationTestCase):
 			name = self.pending()
 		store_file.assert_not_called()
 		self.assertEqual(self.row(name, "status", "file", "direction"), ("Pending", None, "Incoming"))
-		self.assertEqual(self.scheduled, [self.comm.name])
+		self.assertEqual(self.scheduled, [name])
 		with open(originals.spool_path(name), "rb") as f:
 			self.assertEqual(f.read(), EML)
 		self.assertFalse(frappe.db.exists("Business Document", {"source_name": self.comm.name}))
 
 	def test_schedule_enqueues_deduplicated_long_job_after_commit(self):
-		SCHEDULE("COMM-1")
+		SCHEDULE("MO-1")
 		callback = frappe.db.after_commit._functions.pop()
 		with patch("frappe.enqueue") as enqueue:
 			callback()
 		enqueue.assert_called_once_with(
 			"docarchive.mail.originals.store",
 			queue="long",
-			job_id="docarchive-mail-original-COMM-1",
+			job_id="docarchive-mail-original-MO-1",
 			deduplicate=True,
-			communication="COMM-1",
+			original="MO-1",
 		)
 
 	def test_store_job_stores_and_auto_archives(self):
 		name = self.pending()
-		originals.store(self.comm.name)
+		originals.store(name)
 		original = frappe.get_doc("Mail Original", name)
 		self.assertEqual((original.status, original.sha256), ("Stored", hashlib.sha256(EML).hexdigest()))
 		self.assertEqual(content.read_bytes(original.file), EML)
@@ -213,9 +213,9 @@ class TestMailStoreJob(IntegrationTestCase):
 
 	def test_store_job_is_idempotent(self):
 		name = self.pending()
-		originals.store(self.comm.name)
+		originals.store(name)
 		with patch("docarchive.mail.originals.store_file") as store_file:
-			originals.store(self.comm.name)
+			originals.store(name)
 		store_file.assert_not_called()
 		self.assertEqual(mail.capture(self.comm, eml(), "t"), name)
 		self.assertEqual(frappe.db.count("File", {"attached_to_name": name}), 1)
@@ -227,7 +227,7 @@ class TestMailStoreJob(IntegrationTestCase):
 			patch("frappe.log_error") as log_error,
 		):
 			for attempt in range(1, originals.MAX_ATTEMPTS + 1):
-				originals.store(self.comm.name)
+				originals.store(name)
 				status = "Failed" if attempt == originals.MAX_ATTEMPTS else "Pending"
 				self.assertEqual(self.row(name, "status", "attempts"), (status, attempt))
 		log_error.assert_called_with(title="docarchive mail capture")
@@ -237,19 +237,19 @@ class TestMailStoreJob(IntegrationTestCase):
 		)
 		self.scheduled.clear()
 		self.assertGreaterEqual(originals.retry_failed(), 1)
-		self.assertIn(self.comm.name, self.scheduled)
+		self.assertIn(name, self.scheduled)
 		self.assertEqual(self.row(name, "status", "attempts"), ("Pending", 0))
 
 	def test_missing_spool_fails_at_once(self):
 		name = self.pending()
 		originals.remove_spool(name)
-		originals.store(self.comm.name)
+		originals.store(name)
 		self.assertEqual(self.row(name, "status", "attempts"), ("Failed", 1))
 
 	def test_deleted_email_queue_fails_at_once(self):
 		sent = make_communication(self.account, "Sent")
 		name = originals._pend(sent, "frappe-send", email_queue="missing-queue")
-		originals.store(sent.name)
+		originals.store(name)
 		self.assertEqual(self.row(name, "status", "attempts"), ("Failed", 1))
 
 	def test_pending_original_cannot_be_archived_yet(self):
@@ -259,14 +259,25 @@ class TestMailStoreJob(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			archiving.archive(name)
 
+	def test_unlinked_original_is_retried(self):
+		name = self.pending()
+		frappe.db.set_value("Mail Original", name, {"communication": None, "status": "Failed"})
+		self.assertGreaterEqual(originals.retry_failed(), 1)
+		self.assertIn(name, self.scheduled)
+		with patch("docarchive.mail.originals.enqueue") as enqueue:
+			originals.retry_pending()
+		enqueue.assert_any_call(name)
+		originals.store(name)
+		self.assertEqual(self.row(name, "status"), "Stored")
+
 	def test_cleanup_retries_pending_and_sweeps_orphans(self):
-		self.pending()
+		name = self.pending()
 		orphan = originals.spool_path("orphan")
 		originals.write_spool("orphan", b"x")
 		os.utime(orphan, (0, 0))
 		with patch("docarchive.mail.originals.enqueue") as enqueue:
 			cleanup.run()
-		enqueue.assert_any_call(self.comm.name)
+		enqueue.assert_any_call(name)
 		self.assertFalse(os.path.exists(orphan))
 
 	def test_deleting_pending_original_removes_spool(self):

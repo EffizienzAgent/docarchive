@@ -42,7 +42,7 @@ def capture(communication, raw: bytes | str, origin: str) -> str | None:
 		fail(SAVEPOINT)
 		return None
 	if name:
-		schedule(communication.name)
+		schedule(name)
 	return name
 
 
@@ -79,31 +79,31 @@ def capture_sent(queue, sent_before: int | None) -> str | None:
 		fail(SEND_SAVEPOINT)
 		return None
 	if name:
-		schedule(communication.name)
+		schedule(name)
 		_commit()
 	return name
 
 
-def schedule(communication: str) -> None:
-	frappe.db.after_commit.add(lambda: enqueue(communication))
+def schedule(name: str) -> None:
+	frappe.db.after_commit.add(lambda: enqueue(name))
 
 
-def enqueue(communication: str) -> None:
+def enqueue(name: str) -> None:
 	try:
 		frappe.enqueue(
 			JOB,
 			queue="long",
-			job_id=f"docarchive-mail-original-{communication}",
+			job_id=f"docarchive-mail-original-{name}",
 			deduplicate=True,
-			communication=communication,
+			original=name,
 		)
 	except Exception:
 		fail()
 
 
-def store(communication: str) -> None:
-	name = frappe.db.get_value(ORIGINAL, {"communication": communication, "status": PENDING})
-	if not name:
+def store(original: str) -> None:
+	name = original
+	if frappe.db.get_value(ORIGINAL, name, "status") != PENDING:
 		return
 	try:
 		frappe.db.savepoint(STORE_SAVEPOINT)
@@ -118,21 +118,18 @@ def store(communication: str) -> None:
 
 
 def retry_pending() -> int:
-	communications = frappe.get_all(
-		ORIGINAL, filters={"status": PENDING, "communication": ("is", "set")}, pluck="communication"
-	)
-	for communication in communications:
-		enqueue(communication)
-	return len(communications)
+	names = frappe.get_all(ORIGINAL, filters={"status": PENDING}, pluck="name")
+	for name in names:
+		enqueue(name)
+	return len(names)
 
 
 def retry_failed() -> int:
-	rows = frappe.get_all(ORIGINAL, filters={"status": FAILED}, fields=["name", "communication"])
-	for row in rows:
-		frappe.db.set_value(ORIGINAL, row.name, {"status": PENDING, "attempts": 0}, update_modified=False)
-		if row.communication:
-			schedule(row.communication)
-	return len(rows)
+	names = frappe.get_all(ORIGINAL, filters={"status": FAILED}, pluck="name")
+	for name in names:
+		frappe.db.set_value(ORIGINAL, name, {"status": PENDING, "attempts": 0}, update_modified=False)
+		schedule(name)
+	return len(names)
 
 
 def _commit():
