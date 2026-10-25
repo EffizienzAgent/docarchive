@@ -109,3 +109,39 @@ class TestMailCapture(IntegrationTestCase):
 		with patch("docarchive.mail.originals.archiving.auto_archive") as auto:
 			name = mail.capture(self.comm, EML, "t")
 		auto.assert_called_once_with(name)
+
+	def test_long_identifiers_are_captured(self):
+		message_id = "m" * 190 + "@example.test"
+		reference = "r" * 600
+		raw = eml(**{"Message-ID": f"<{message_id}>", "References": f"<{reference}> <b@x.test>"})
+		name = mail.capture(self.comm, raw, "t")
+		original = frappe.get_doc("Mail Original", name)
+		self.assertEqual(original.message_id, message_id)
+		self.assertEqual(original.thread_key, reference[:500])
+		self.assertEqual(content.read_bytes(original.file), raw)
+
+	def test_unencodable_str_does_not_raise(self):
+		self.assertIsNone(mail.capture(self.comm, "Subject: x\n\n\ud800", "t"))
+
+	def test_failing_rollback_and_log_do_not_raise(self):
+		with (
+			patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")),
+			patch("frappe.db.rollback", side_effect=Exception("r")),
+			patch("frappe.log_error", side_effect=Exception("l")),
+		):
+			self.assertIsNone(mail.capture(self.comm, EML, "t"))
+
+	def test_failing_auto_archive_keeps_capture_and_rolls_back_its_writes(self):
+		def partial(name):
+			frappe.db.set_value("Mail Original", name, "origin", "partial")
+			raise Exception("boom")
+
+		with patch("docarchive.mail.originals.archiving.auto_archive", side_effect=partial):
+			name = mail.capture(self.comm, EML, "t")
+		self.assertEqual(self.value(name, "origin"), "t")
+
+	def test_auto_archive_not_called_for_existing(self):
+		mail.capture(self.comm, EML, "t")
+		with patch("docarchive.mail.originals.archiving.auto_archive") as auto:
+			mail.capture(self.comm, EML, "t")
+		auto.assert_not_called()

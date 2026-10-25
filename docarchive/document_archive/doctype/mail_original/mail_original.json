@@ -82,6 +82,7 @@
   {
    "fieldname": "message_id",
    "fieldtype": "Data",
+   "length": 500,
    "label": "Message-ID",
    "read_only": 1,
    "search_index": 1
@@ -89,6 +90,7 @@
   {
    "fieldname": "in_reply_to",
    "fieldtype": "Data",
+   "length": 500,
    "label": "In-Reply-To",
    "read_only": 1
   },
@@ -101,6 +103,7 @@
   {
    "fieldname": "thread_key",
    "fieldtype": "Data",
+   "length": 500,
    "label": "Thread Key",
    "read_only": 1,
    "search_index": 1
@@ -108,6 +111,7 @@
   {
    "fieldname": "sender",
    "fieldtype": "Data",
+   "length": 500,
    "label": "Sender",
    "read_only": 1
   },

@@ -5,21 +5,42 @@ from docarchive.keys import slug
 from docarchive.mail import accounts, archiving, headers
 
 SAVEPOINT = "docarchive_mail_capture"
+AUTO_SAVEPOINT = "docarchive_mail_auto_archive"
+MAX_LENGTH = 500
 
 
 def capture(communication, raw: bytes | str, origin: str) -> str | None:
-	if isinstance(raw, str):
-		raw = raw.encode("utf-8", "surrogateescape")
-	frappe.db.savepoint(SAVEPOINT)
 	try:
-		name = _capture(communication, raw, origin)
+		frappe.db.savepoint(SAVEPOINT)
+		existing = _existing(communication)
+		if existing:
+			return existing
+		name = _capture(communication, _as_bytes(raw), origin)
 	except Exception:
-		frappe.db.rollback(save_point=SAVEPOINT)
-		frappe.log_error(title="docarchive mail capture")
+		_fail(SAVEPOINT)
 		return None
 	if name:
 		_auto_archive(name)
 	return name
+
+
+def _as_bytes(raw):
+	return raw.encode("utf-8", "surrogateescape") if isinstance(raw, str) else raw
+
+
+def _existing(communication):
+	return frappe.db.get_value("Mail Original", {"communication": communication.name})
+
+
+def _fail(savepoint):
+	try:
+		frappe.db.rollback(save_point=savepoint)
+	except Exception:
+		pass
+	try:
+		frappe.log_error(title="docarchive mail capture")
+	except Exception:
+		pass
 
 
 def store_file(original, raw: bytes) -> str:
@@ -37,9 +58,6 @@ def store_file(original, raw: bytes) -> str:
 
 
 def _capture(communication, raw, origin):
-	existing = frappe.db.get_value("Mail Original", {"communication": communication.name})
-	if existing:
-		return existing
 	row = accounts.account_settings(communication.email_account)
 	if not row:
 		return None
@@ -54,11 +72,11 @@ def _capture(communication, raw, origin):
 			"sha256": digest,
 			"size": len(raw),
 			"direction": "Outgoing" if communication.sent_or_received == "Sent" else "Incoming",
-			"message_id": parsed.message_id,
-			"in_reply_to": parsed.in_reply_to,
+			"message_id": parsed.message_id[:MAX_LENGTH],
+			"in_reply_to": parsed.in_reply_to[:MAX_LENGTH],
 			"mail_references": " ".join(parsed.references),
-			"thread_key": headers.thread_key(parsed, digest),
-			"sender": parsed.sender,
+			"thread_key": headers.thread_key(parsed, digest)[:MAX_LENGTH],
+			"sender": parsed.sender[:MAX_LENGTH],
 			"to": parsed.to,
 			"cc": parsed.cc,
 			"subject": parsed.subject,
@@ -74,6 +92,7 @@ def _capture(communication, raw, origin):
 
 def _auto_archive(name):
 	try:
+		frappe.db.savepoint(AUTO_SAVEPOINT)
 		archiving.auto_archive(name)
 	except Exception:
-		frappe.log_error(title="docarchive mail capture")
+		_fail(AUTO_SAVEPOINT)

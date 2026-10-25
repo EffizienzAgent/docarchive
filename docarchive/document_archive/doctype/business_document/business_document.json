@@ -203,6 +203,7 @@
   {
    "fieldname": "thread_key",
    "fieldtype": "Data",
+   "length": 500,
    "label": "Thread Key",
    "read_only": 1,
    "search_index": 1
@@ -210,6 +211,7 @@
   {
    "fieldname": "mail_message_id",
    "fieldtype": "Data",
+   "length": 500,
    "label": "Message-ID",
    "read_only": 1,
    "search_index": 1
@@ -217,6 +219,7 @@
   {
    "fieldname": "mail_in_reply_to",
    "fieldtype": "Data",
+   "length": 500,
    "label": "In-Reply-To",
    "read_only": 1
   },
