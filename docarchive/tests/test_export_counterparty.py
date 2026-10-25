@@ -1,5 +1,6 @@
 import csv
 import io
+from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -55,6 +56,38 @@ class TestExportCounterparty(IntegrationTestCase):
 			),
 			("Contact", "CON-1", "Acme", "Acme (CON-1)"),
 		)
+
+	def test_csv_columns_keep_the_0_8_1_order(self):
+		released = (
+			"id",
+			"title",
+			"type",
+			"date",
+			"number",
+			"own_company",
+			"counterparty_type",
+			"counterparty",
+			"counterparty_name",
+			"lock_mode",
+			"retain_until",
+			"legal_hold",
+			"thread_key",
+			"file_role",
+			"file_name",
+			"key",
+			"version_id",
+			"sha256",
+			"size",
+			"verified",
+		)
+		self.assertEqual(export_package.CSV_FIELDS[: len(released)], released)
+		self.assertEqual(export_package.CSV_FIELDS[len(released) :], ("counterparty_label",))
+
+	def test_long_titles_are_cut(self):
+		field = frappe.get_meta("Contact").get_title_field()
+		row = frappe._dict({"name": "C-1", field: "x" * 300})
+		with patch.object(frappe.db, "get_value", return_value=row):
+			self.assertEqual(len(counterparty.title_of("Contact", "C-1")), 140)
 
 	def test_title_of_never_raises(self):
 		party = make_party()

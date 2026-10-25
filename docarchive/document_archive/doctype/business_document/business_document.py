@@ -176,8 +176,9 @@ class BusinessDocument(Document):
 			assignment.assign(self)
 			self.resolve_own_company()
 			einvoice.record_conflicts(self)
-			self.counterparty_name = counterparty.title_of(self.counterparty_type, self.counterparty)
 		counterparty.validate(self)
+		if not (before and before.archive_started_at):
+			self.counterparty_name = counterparty.title_of(self.counterparty_type, self.counterparty)
 		self.validate_dates()
 		self.validate_contract_end()
 		self.set_title(before)

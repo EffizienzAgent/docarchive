@@ -1,6 +1,8 @@
 import frappe
 from frappe import _
 
+TITLE_LENGTH = 140
+
 
 @frappe.whitelist()
 def doctypes() -> list[str]:
@@ -17,7 +19,7 @@ def title_of(doctype, name) -> str | None:
 		return None
 	if not row:
 		return None
-	return row.get(field) or row.name
+	return (row.get(field) or row.name)[:TITLE_LENGTH]
 
 
 def validate(doc):

@@ -53,7 +53,6 @@ CSV_FIELDS = (
 	"counterparty_type",
 	"counterparty",
 	"counterparty_name",
-	"counterparty_label",
 	"lock_mode",
 	"retain_until",
 	"legal_hold",
@@ -65,6 +64,7 @@ CSV_FIELDS = (
 	"sha256",
 	"size",
 	"verified",
+	"counterparty_label",
 )
 
 
