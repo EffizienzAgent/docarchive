@@ -468,6 +468,7 @@ class TestMailStoreJob(IntegrationTestCase):
 		self.assertIsNone(frappe.response.docs[0].get("raw_fallback"))
 		self.assertTrue(self.row(name, "raw_fallback"))
 
+	def test_failing_failure_record_does_not_raise(self):
 		with (
 			patch.object(originals, "FALLBACK_LIMIT", 10),
 			self.failing_write(),
