@@ -621,3 +621,8 @@ This e-mail is archived.,Diese E-Mail ist archiviert.
 Another export is still running. Please wait until it is done.,"Ein anderer Export läuft noch. Bitte warten, bis er fertig ist."
 The export was interrupted.,Der Export wurde unterbrochen.
 "This file type is only offered as a download, so it cannot run in the viewer.","Dieser Dateityp wird nur zum Herunterladen angeboten, damit er im Viewer nicht ausgeführt werden kann."
+Stored,Gespeichert
+Attempts,Versuche
+Email Queue,E-Mail-Warteschlange
+The original of this e-mail is still being stored. Please try again in a moment.,Das Original dieser E-Mail wird noch gespeichert. Bitte gleich noch einmal versuchen.
+Storing the original of this e-mail failed. See the Error Log.,Das Original dieser E-Mail konnte nicht gespeichert werden. Siehe Fehlerprotokoll.

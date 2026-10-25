@@ -2,11 +2,17 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from docarchive.mail import accounts
-from docarchive.tests.factories import make_email_account, make_mail_settings, make_settings
+from docarchive.tests.factories import (
+	make_email_account,
+	make_mail_settings,
+	make_settings,
+	store_mail_inline,
+)
 
 
 class TestMailAccounts(IntegrationTestCase):
 	def setUp(self):
+		store_mail_inline(self)
 		make_settings()
 		self.account = make_email_account().name
 

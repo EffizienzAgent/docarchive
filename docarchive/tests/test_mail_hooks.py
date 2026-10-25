@@ -15,12 +15,14 @@ from docarchive.tests.factories import (
 	make_mail_settings,
 	make_own_company,
 	make_settings,
+	store_mail_inline,
 	unique,
 )
 
 
 class TestMailHooks(IntegrationTestCase):
 	def setUp(self):
+		store_mail_inline(self)
 		make_settings(default_own_company=make_own_company().name)
 		self.email_id = f"{unique('info')}@acme.test"
 		self.account = make_email_account(
@@ -68,11 +70,20 @@ class TestMailHooks(IntegrationTestCase):
 		with self.assertRaises(SentEmailInInboxError):
 			self.receive(raw).process()
 
+	def pending(self, comm):
+		return frappe.db.get_value("Mail Original", {"communication": comm.name}, ["status", "file"])
+
 	def test_receive_succeeds_when_capture_fails(self):
-		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
+		with patch("docarchive.mail.originals._pend", side_effect=Exception("boom")):
 			comm = self.receive().process()
 		self.assertEqual(comm.name, self.received())
 		self.assertFalse(frappe.db.exists("Mail Original", {"communication": comm.name}))
+
+	def test_receive_succeeds_when_storing_fails(self):
+		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
+			comm = self.receive().process()
+		self.assertEqual(comm.name, self.received())
+		self.assertEqual(self.pending(comm), ("Pending", None))
 
 	def test_receive_logs_and_continues_when_capture_raises(self):
 		with (
@@ -121,6 +132,7 @@ class TestMailHooks(IntegrationTestCase):
 		self.send(comm)
 		handlers = frappe.get_hooks("mailsync_mail_read")
 		self.assertTrue(handlers)
+		self.commit.reset_mock()
 		for method in handlers:
 			frappe.get_attr(method)(
 				communication=comm,
@@ -129,6 +141,7 @@ class TestMailHooks(IntegrationTestCase):
 				folder="Sent",
 				sent_or_received="Sent",
 			)
+		self.commit.assert_not_called()
 		original = frappe.get_doc("Mail Original", {"communication": comm.name})
 		self.assertEqual((original.origin, original.direction), ("mailsync", "Outgoing"))
 		originals.from_mailsync(comm.name, self.raw)
@@ -143,7 +156,7 @@ class TestMailHooks(IntegrationTestCase):
 		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
 			self.send(comm)
 		self.assertTrue(frappe.flags.sent_mail)
-		self.assertFalse(frappe.db.exists("Mail Original", {"communication": comm.name}))
+		self.assertEqual(self.pending(comm), ("Pending", None))
 
 	def test_redacted_mail_not_captured(self):
 		comm = make_communication(self.account.name, "Sent")
@@ -198,11 +211,18 @@ class TestMailHooks(IntegrationTestCase):
 		self.assertFalse(frappe.db.exists("Mail Original", {"communication": comm.name}))
 
 	def test_capture_sent_never_raises(self):
-		with patch("docarchive.mail.originals.SendMailContext", side_effect=Exception("boom")):
-			comm = make_communication(self.account.name, "Sent")
+		comm = make_communication(self.account.name, "Sent")
+		with patch("docarchive.mail.originals._pend", side_effect=Exception("boom")):
 			self.send(comm)
 		self.assertTrue(frappe.flags.sent_mail)
 		self.assertFalse(frappe.db.exists("Mail Original", {"communication": comm.name}))
+
+	def test_failing_rebuild_keeps_pending_capture(self):
+		comm = make_communication(self.account.name, "Sent")
+		with patch("docarchive.mail.originals.SendMailContext", side_effect=Exception("boom")):
+			self.send(comm)
+		self.assertTrue(frappe.flags.sent_mail)
+		self.assertEqual(self.pending(comm), ("Pending", None))
 
 	def capture(self):
 		comm = make_communication(self.account.name)

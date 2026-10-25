@@ -20,6 +20,7 @@ from docarchive.tests.factories import (
 	make_settings,
 	make_user,
 	restrict_to_own_company,
+	store_mail_inline,
 	unique,
 )
 
@@ -48,6 +49,7 @@ def address(prefix="client", domain="example.test"):
 
 class MailArchivingTestCase(IntegrationTestCase):
 	def setUp(self):
+		store_mail_inline(self)
 		self.company = make_own_company().name
 		make_settings(default_own_company=self.company)
 		self.account = make_email_account().name

@@ -1,4 +1,5 @@
 import uuid
+from unittest.mock import patch
 
 import frappe
 
@@ -239,3 +240,15 @@ def restrict_to_own_company(user, own_company):
 	frappe.get_doc(
 		{"doctype": "User Permission", "user": user, "allow": "Own Company", "for_value": own_company}
 	).insert(ignore_permissions=True)
+
+
+def store_mail_inline(case):
+	from docarchive.mail import originals
+
+	def run(communication):
+		originals.store(communication)
+		name = frappe.db.get_value("Mail Original", {"communication": communication})
+		if name:
+			case.addCleanup(originals.remove_spool, name)
+
+	case.enterContext(patch("docarchive.mail.originals.schedule", side_effect=run))

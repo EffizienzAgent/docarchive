@@ -1,23 +1,29 @@
 import hashlib
+import os
 from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
 
 from docarchive import content, mail
-from docarchive.mail import headers
+from docarchive.mail import archiving, cleanup, headers, originals
 from docarchive.tests.factories import (
 	EML,
 	eml,
 	make_communication,
 	make_email_account,
 	make_mail_settings,
+	make_own_company,
 	make_settings,
+	store_mail_inline,
 )
+
+SCHEDULE = originals.schedule
 
 
 class TestMailCapture(IntegrationTestCase):
 	def setUp(self):
+		store_mail_inline(self)
 		make_settings()
 		self.account = make_email_account().name
 		make_mail_settings(self.account, mode="Manual", internal_domains="acme.test")
@@ -101,9 +107,16 @@ class TestMailCapture(IntegrationTestCase):
 		self.assertEqual(frappe.db.count("Mail Original", {"communication": self.comm.name}), 1)
 
 	def test_failure_does_not_raise(self):
-		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
+		with patch("docarchive.mail.originals._pend", side_effect=Exception("boom")):
 			self.assertIsNone(mail.capture(self.comm, EML, "t"))
 		self.assertFalse(frappe.db.exists("Mail Original", {"communication": self.comm.name}))
+
+	def test_failing_store_keeps_pending_capture(self):
+		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
+			name = mail.capture(self.comm, EML, "t")
+		self.assertEqual(
+			frappe.db.get_value("Mail Original", name, ["status", "attempts", "file"]), ("Pending", 1, None)
+		)
 
 	def test_auto_archive_called_after_capture(self):
 		with patch("docarchive.mail.originals.archiving.auto_archive") as auto:
@@ -125,7 +138,7 @@ class TestMailCapture(IntegrationTestCase):
 
 	def test_failing_rollback_and_log_do_not_raise(self):
 		with (
-			patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")),
+			patch("docarchive.mail.originals._pend", side_effect=Exception("boom")),
 			patch("frappe.db.rollback", side_effect=Exception("r")),
 			patch("frappe.log_error", side_effect=Exception("l")),
 		):
@@ -145,3 +158,119 @@ class TestMailCapture(IntegrationTestCase):
 		with patch("docarchive.mail.originals.archiving.auto_archive") as auto:
 			mail.capture(self.comm, EML, "t")
 		auto.assert_not_called()
+
+
+class TestMailStoreJob(IntegrationTestCase):
+	def setUp(self):
+		make_settings(default_own_company=make_own_company().name)
+		self.account = make_email_account().name
+		make_mail_settings(self.account, mode="Automatic", internal_domains="acme.test")
+		self.comm = make_communication(self.account)
+		self.scheduled = []
+		self.enterContext(patch("docarchive.mail.originals.schedule", side_effect=self.scheduled.append))
+
+	def pending(self, raw=EML):
+		name = mail.capture(self.comm, raw, "t")
+		self.addCleanup(originals.remove_spool, name)
+		return name
+
+	def row(self, name, *fields):
+		return frappe.db.get_value("Mail Original", name, list(fields))
+
+	def test_capture_only_records_and_spools(self):
+		with patch("docarchive.mail.originals.store_file") as store_file:
+			name = self.pending()
+		store_file.assert_not_called()
+		self.assertEqual(self.row(name, "status", "file", "direction"), ("Pending", None, "Incoming"))
+		self.assertEqual(self.scheduled, [self.comm.name])
+		with open(originals.spool_path(name), "rb") as f:
+			self.assertEqual(f.read(), EML)
+		self.assertFalse(frappe.db.exists("Business Document", {"source_name": self.comm.name}))
+
+	def test_schedule_enqueues_deduplicated_long_job_after_commit(self):
+		SCHEDULE("COMM-1")
+		callback = frappe.db.after_commit._functions.pop()
+		with patch("frappe.enqueue") as enqueue:
+			callback()
+		enqueue.assert_called_once_with(
+			"docarchive.mail.originals.store",
+			queue="long",
+			job_id="docarchive-mail-original-COMM-1",
+			deduplicate=True,
+			communication="COMM-1",
+		)
+
+	def test_store_job_stores_and_auto_archives(self):
+		name = self.pending()
+		originals.store(self.comm.name)
+		original = frappe.get_doc("Mail Original", name)
+		self.assertEqual((original.status, original.sha256), ("Stored", hashlib.sha256(EML).hexdigest()))
+		self.assertEqual(content.read_bytes(original.file), EML)
+		self.assertEqual(original.subject, "Offer")
+		self.assertTrue(original.business_document)
+		frappe.db.after_commit.run()
+		self.assertFalse(os.path.exists(originals.spool_path(name)))
+
+	def test_store_job_is_idempotent(self):
+		name = self.pending()
+		originals.store(self.comm.name)
+		with patch("docarchive.mail.originals.store_file") as store_file:
+			originals.store(self.comm.name)
+		store_file.assert_not_called()
+		self.assertEqual(mail.capture(self.comm, eml(), "t"), name)
+		self.assertEqual(frappe.db.count("File", {"attached_to_name": name}), 1)
+
+	def test_failures_are_retried_then_marked_failed(self):
+		name = self.pending()
+		with (
+			patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")),
+			patch("frappe.log_error") as log_error,
+		):
+			for attempt in range(1, originals.MAX_ATTEMPTS + 1):
+				originals.store(self.comm.name)
+				status = "Failed" if attempt == originals.MAX_ATTEMPTS else "Pending"
+				self.assertEqual(self.row(name, "status", "attempts"), (status, attempt))
+		log_error.assert_called_with(title="docarchive mail capture")
+		self.assertTrue(os.path.exists(originals.spool_path(name)))
+		self.assertEqual(
+			archiving.refusal(name), "Storing the original of this e-mail failed. See the Error Log."
+		)
+		self.scheduled.clear()
+		self.assertGreaterEqual(originals.retry_failed(), 1)
+		self.assertIn(self.comm.name, self.scheduled)
+		self.assertEqual(self.row(name, "status", "attempts"), ("Pending", 0))
+
+	def test_missing_spool_fails_at_once(self):
+		name = self.pending()
+		originals.remove_spool(name)
+		originals.store(self.comm.name)
+		self.assertEqual(self.row(name, "status", "attempts"), ("Failed", 1))
+
+	def test_deleted_email_queue_fails_at_once(self):
+		sent = make_communication(self.account, "Sent")
+		name = originals._pend(sent, "frappe-send", email_queue="missing-queue")
+		originals.store(sent.name)
+		self.assertEqual(self.row(name, "status", "attempts"), ("Failed", 1))
+
+	def test_pending_original_cannot_be_archived_yet(self):
+		name = self.pending()
+		reason = "The original of this e-mail is still being stored. Please try again in a moment."
+		self.assertEqual(archiving.refusal(name), reason)
+		with self.assertRaises(frappe.ValidationError):
+			archiving.archive(name)
+
+	def test_cleanup_retries_pending_and_sweeps_orphans(self):
+		self.pending()
+		orphan = originals.spool_path("orphan")
+		originals.write_spool("orphan", b"x")
+		os.utime(orphan, (0, 0))
+		with patch("docarchive.mail.originals.enqueue") as enqueue:
+			cleanup.run()
+		enqueue.assert_any_call(self.comm.name)
+		self.assertFalse(os.path.exists(orphan))
+
+	def test_deleting_pending_original_removes_spool(self):
+		name = self.pending()
+		frappe.delete_doc("Mail Original", name, ignore_permissions=True)
+		frappe.db.after_commit.run()
+		self.assertFalse(os.path.exists(originals.spool_path(name)))
