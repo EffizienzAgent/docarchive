@@ -1,4 +1,5 @@
 import frappe
+from frappe import _
 
 from docarchive import file_names, queries
 from docarchive.document_archive.doctype.business_document.business_document import (
@@ -34,6 +35,7 @@ def item(doc) -> dict:
 		"retain_until": doc.retain_until,
 		"locked": bool(doc.archive_started_at),
 		"can_write": bool(doc.has_permission("write")),
+		"modified": str(doc.modified),
 	}
 
 
@@ -71,9 +73,16 @@ def error_message(error) -> str:
 
 
 @frappe.whitelist(methods=["POST"])
-def save_item(name: str, values) -> dict:
+def save_item(name: str, values, modified: str | None = None) -> dict:
 	doc = frappe.get_doc(DOCUMENT, name)
 	doc.check_permission("write")
+	if modified and modified != str(doc.modified):
+		return {
+			"error": _(
+				"Someone else changed this document in the meantime. It was reloaded, please check it again."
+			),
+			"item": item(doc),
+		}
 	values = frappe.parse_json(values) or {}
 	doc.update({field: values[field] or None for field in EDITABLE if field in values})
 	frappe.db.savepoint(SAVEPOINT)

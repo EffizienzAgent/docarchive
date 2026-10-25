@@ -126,3 +126,11 @@
 	max-height: 50vh;
 	overflow-y: auto;
 }
+
+.docarchive-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin: 0;
+	font-size: var(--text-sm);
+}

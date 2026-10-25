@@ -103,11 +103,29 @@ test("stored filters survive broken storage", () => {
 			throw new Error("blocked");
 		},
 	};
-	assert.deepEqual(load_filters(broken, "k"), {});
-	save_filters(broken, "k", { year: "2026" });
+	assert.deepEqual(load_filters(() => broken, "k"), {});
+	save_filters(() => broken, "k", { year: "2026" });
+	const denied = () => {
+		throw new Error("SecurityError");
+	};
+	assert.deepEqual(load_filters(denied, "k"), {});
+	save_filters(denied, "k", { year: "2026" });
 	const memory = new Map();
 	const storage = { getItem: (k) => memory.get(k) ?? null, setItem: (k, v) => memory.set(k, v) };
-	assert.deepEqual(load_filters(storage, "k"), {});
-	save_filters(storage, "k", { year: "2026" });
-	assert.deepEqual(load_filters(storage, "k"), { year: "2026" });
+	assert.deepEqual(load_filters(() => storage, "k"), {});
+	save_filters(() => storage, "k", { year: "2026" });
+	assert.deepEqual(load_filters(() => storage, "k"), { year: "2026" });
+});
+
+test("stored filters must be a plain object", () => {
+	for (const value of ["[1,2]", '"text"', "42", "null", "true"]) {
+		assert.deepEqual(load_filters(() => ({ getItem: () => value }), "k"), {}, value);
+	}
+});
+
+test("deleted documents are hidden unless asked for", () => {
+	const docs = [...DOCS, { name: "d", title: "Alt", document_date: "2020-01-01", archive_status: "Deleted" }];
+	assert.deepEqual(names(filter_documents(docs)), ["c", "b", "a"]);
+	assert.deepEqual(names(filter_documents(docs, { show_deleted: true })), ["c", "b", "a", "d"]);
+	assert.equal(document_state({ archive_status: "Deleted" }), "deleted");
 });

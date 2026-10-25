@@ -114,3 +114,23 @@ class TestTriage(IntegrationTestCase):
 
 	def test_open_documents_lists_incomplete_ones(self):
 		self.assertIn(self.doc.name, triage.open_documents())
+
+	def test_stale_item_does_not_overwrite_a_newer_change(self):
+		stale = triage.triage_item(self.doc.name)
+		frappe.db.set_value("Business Document", self.doc.name, "document_number", "OTHER-1")
+		with self.set_user(self.manager("triage-stale@example.com")):
+			result = triage.save_item(
+				self.doc.name, frappe.as_json({"title": "Mine"}), modified=stale["modified"]
+			)
+		self.assertIn("error", result)
+		self.assertEqual(result["item"]["document_number"], "OTHER-1")
+		self.assertNotEqual(frappe.db.get_value("Business Document", self.doc.name, "title"), "Mine")
+
+	def test_current_item_saves_with_modified(self):
+		current = triage.triage_item(self.doc.name)
+		with self.set_user(self.manager("triage-current@example.com")):
+			result = triage.save_item(
+				self.doc.name, frappe.as_json({"document_number": "RE-9"}), modified=current["modified"]
+			)
+		self.assertEqual(result["item"]["document_number"], "RE-9")
+		self.assertEqual(result["item"]["title"], current["title"])

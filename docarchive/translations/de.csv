@@ -275,3 +275,6 @@ Failed: {0},Fehlgeschlagen: {0}
 The retention is being extended to {0}.,Die Aufbewahrung wird auf {0} verlängert.
 Retention Overview,Aufbewahrung
 Retention ends in 90 days,Fristen enden in 90 Tagen
+Deleted,Gelöscht
+Show deleted,Gelöschte anzeigen
+Someone else changed this document in the meantime. It was reloaded, please check it again.,"Jemand anderes hat dieses Dokument inzwischen geändert. Es wurde neu geladen, bitte noch einmal prüfen."
