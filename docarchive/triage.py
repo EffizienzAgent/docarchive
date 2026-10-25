@@ -32,6 +32,7 @@ def item(doc) -> dict:
 		"missing": missing_fields(doc),
 		"needs_contract_end": needs_contract_end(doc.document_type),
 		"archive_status": doc.archive_status,
+		"retain_until": doc.retain_until,
 		"locked": bool(doc.archive_started_at),
 		"can_write": bool(doc.has_permission("write")),
 		"modified": str(doc.modified),

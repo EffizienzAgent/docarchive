@@ -81,18 +81,39 @@ class DocumentsPanel {
 	}
 
 	toolbar() {
-		const { document_types, years } = core.filter_options(this.data.documents);
+		const { document_types, years, retain_years } = core.filter_options(this.data.documents);
 		const types = document_types.map((type) => [type, __(type)]);
 		const states = core.STATES.map((state) => [state, __(STATE_STYLES[state][1])]);
 		const upload = this.data.can_create
 			? `<button class="btn btn-primary btn-xs" data-action="upload">${esc(__("Upload"))}</button>`
 			: "";
+		const extend =
+			this.data.can_extend && this.data.documents.some((doc) => doc.archive_status === "Archived")
+				? `<button class="btn btn-default btn-xs" data-action="extend-all">${esc(__("Extend all documents of this counterparty"))}</button>`
+				: "";
 		return `<div class="docarchive-toolbar">
 			<input type="search" class="form-control input-xs docarchive-search" data-filter="search"
 				placeholder="${esc(__("Search title or number"))}" value="${esc(this.filters.search)}">
 			${select("document_type", __("All types"), types, this.filters.document_type)}
 			${select("year", __("All years"), years.map((year) => [year, year]), this.filters.year)}
 			${select("state", __("All statuses"), states, this.filters.state)}
+			${select(
+				"retain_year",
+				__("Kept until: any year"),
+				retain_years.map((year) => [year, __("Kept until {0}", [year])]),
+				this.filters.retain_year,
+			)}
+			<select class="form-control input-xs" data-filter="sort_by" aria-label="${esc(__("Sort by"))}">
+				${[
+					["document_date", __("Document Date")],
+					["retain_until", __("Retain Until (UTC)")],
+				]
+					.map(
+						([key, text]) =>
+							`<option value="${key}" ${key === (this.filters.sort_by || "document_date") ? "selected" : ""}>${esc(text)}</option>`,
+					)
+					.join("")}
+			</select>
 			<button class="btn btn-default btn-xs" data-action="sort">${esc(sort_label(this.filters))}</button>
 			${
 				this.data.documents.some((doc) => doc.archive_status === core.DELETED)
@@ -102,6 +123,7 @@ class DocumentsPanel {
 			}
 			<span class="docarchive-spacer"></span>
 			<button class="btn btn-default btn-xs hidden" data-action="bulk-archive"></button>
+			${extend}
 			${upload}
 		</div>`;
 	}
@@ -119,6 +141,9 @@ class DocumentsPanel {
 			$(event.currentTarget).text(sort_label(this.filters));
 		});
 		$toolbar.on("click", "[data-action=upload]", () => this.upload());
+		$toolbar.on("click", "[data-action=extend-all]", () =>
+			docarchive.extend_many(this.party, () => this.load()),
+		);
 		$toolbar.on("click", "[data-action=bulk-archive]", () =>
 			docarchive.archive_now([...this.selected], () => this.load()),
 		);
@@ -215,7 +240,14 @@ class DocumentsPanel {
 			? `<th class="docarchive-check"><input type="checkbox" data-select-all ${all ? "checked" : ""}
 				${eligible.length ? "" : "disabled"} aria-label="${esc(__("Select all"))}"></th>`
 			: "";
-		const headers = ["Title", "Business Document Type", "Document Number", "Document Date", "Status"];
+		const headers = [
+			"Title",
+			"Business Document Type",
+			"Document Number",
+			"Document Date",
+			"Retain Until (UTC)",
+			"Status",
+		];
 		return `<table class="table table-condensed docarchive-table">
 			<thead><tr>${select_all}${headers.map((h) => `<th>${esc(__(h))}</th>`).join("")}<th></th></tr></thead>
 			<tbody>${rows.map((doc) => this.row(doc, selectable)).join("")}</tbody>
@@ -245,6 +277,7 @@ class DocumentsPanel {
 			<td>${esc(__(doc.document_type))}</td>
 			<td class="docarchive-nowrap">${esc(doc.document_number)}</td>
 			<td class="docarchive-nowrap">${esc(frappe.datetime.str_to_user(doc.document_date))}</td>
+			<td class="docarchive-nowrap">${esc(doc.retain_until ? frappe.datetime.str_to_user(doc.retain_until.slice(0, 10)) : "")}</td>
 			<td class="docarchive-nowrap">${state_badge(doc)}</td>
 			<td class="docarchive-actions">
 				${file}

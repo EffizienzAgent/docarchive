@@ -153,8 +153,11 @@ class Triage {
 		$frame.on("load", () =>
 			setTimeout(() => document.activeElement === $frame[0] && this.focus_form(), 300),
 		);
+		const kept = item.retain_until
+			? `<p class="text-muted">${esc(__("Retain Until (UTC)"))}: ${esc(docarchive.format_retain_until(String(item.retain_until)))}</p>`
+			: "";
 		dialog.fields_dict.file_info.$wrapper.html(
-			`<p class="docarchive-triage-file">${esc(item.file_name || __("No file"))}</p>`,
+			`<p class="docarchive-triage-file">${esc(item.file_name || __("No file"))}</p>${kept}`,
 		);
 		this.show_error();
 		this.party_type = item.counterparty_type;

@@ -51,6 +51,8 @@ export function document_state(doc) {
 }
 
 export const year_of = (doc) => (doc.document_date || "").slice(0, 4);
+export const retain_year_of = (doc) => (doc.retain_until || "").slice(0, 4);
+export const SORT_FIELDS = ["document_date", "retain_until"];
 
 export function filter_documents(docs, filters = {}) {
 	const query = (filters.search || "").trim().toLowerCase();
@@ -61,12 +63,12 @@ export function filter_documents(docs, filters = {}) {
 				`${doc.title || ""} ${doc.document_number || ""}`.toLowerCase().includes(query)) &&
 			(!filters.document_type || doc.document_type === filters.document_type) &&
 			(!filters.year || year_of(doc) === filters.year) &&
+			(!filters.retain_year || retain_year_of(doc) === filters.retain_year) &&
 			(!filters.state || document_state(doc) === filters.state),
 	);
+	const field = SORT_FIELDS.includes(filters.sort_by) ? filters.sort_by : "document_date";
 	const direction = filters.oldest_first ? 1 : -1;
-	return rows.sort(
-		(a, b) => direction * (a.document_date || "").localeCompare(b.document_date || ""),
-	);
+	return rows.sort((a, b) => direction * (a[field] || "").localeCompare(b[field] || ""));
 }
 
 export function filter_options(docs) {
@@ -74,6 +76,7 @@ export function filter_options(docs) {
 	return {
 		document_types: unique(docs.map((doc) => doc.document_type)).sort(),
 		years: unique(docs.map(year_of)).sort().reverse(),
+		retain_years: unique(docs.map(retain_year_of)).sort(),
 	};
 }
 

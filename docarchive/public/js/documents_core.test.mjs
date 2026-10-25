@@ -59,8 +59,8 @@ test("document state follows status and missing fields", () => {
 });
 
 const DOCS = [
-	{ name: "a", title: "Rechnung Acme", document_number: "RE-1", document_type: "Invoice", document_date: "2025-03-01", archive_status: "Archived" },
-	{ name: "b", title: "Vertrag", document_number: "", document_type: "Contract", document_date: "2026-01-10", missing: ["Contract End Date"] },
+	{ name: "a", title: "Rechnung Acme", document_number: "RE-1", document_type: "Invoice", document_date: "2025-03-01", archive_status: "Archived", retain_until: "2036-01-02 00:00:00" },
+	{ name: "b", title: "Vertrag", document_number: "", document_type: "Contract", document_date: "2026-01-10", missing: ["Contract End Date"], retain_until: "2034-01-02 00:00:00" },
 	{ name: "c", title: "Gutschrift", document_number: "GS-7", document_type: "Invoice", document_date: "2026-05-02", missing: [] },
 ];
 const names = (rows) => rows.map((row) => row.name);
@@ -68,6 +68,13 @@ const names = (rows) => rows.map((row) => row.name);
 test("sorts newest first unless asked otherwise", () => {
 	assert.deepEqual(names(filter_documents(DOCS)), ["c", "b", "a"]);
 	assert.deepEqual(names(filter_documents(DOCS, { oldest_first: true })), ["a", "b", "c"]);
+});
+
+test("sorts and filters by retention", () => {
+	assert.deepEqual(names(filter_documents(DOCS, { sort_by: "retain_until", oldest_first: true })), ["c", "b", "a"]);
+	assert.deepEqual(names(filter_documents(DOCS, { sort_by: "retain_until" })), ["a", "b", "c"]);
+	assert.deepEqual(names(filter_documents(DOCS, { retain_year: "2034" })), ["b"]);
+	assert.deepEqual(names(filter_documents(DOCS, { sort_by: "nonsense" })), ["c", "b", "a"]);
 });
 
 test("filters by search, type, year and state", () => {
@@ -83,6 +90,7 @@ test("filter options list types and years once", () => {
 	assert.deepEqual(filter_options(DOCS), {
 		document_types: ["Contract", "Invoice"],
 		years: ["2026", "2025"],
+		retain_years: ["2034", "2036"],
 	});
 });
 
