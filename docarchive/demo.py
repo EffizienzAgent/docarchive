@@ -78,6 +78,7 @@ def fake_client(fakes, config):
 class Demo:
 	def build(self) -> dict:
 		frappe.set_user("Administrator")
+		frappe.local.lang = frappe.db.get_single_value("System Settings", "language") or "en"
 		self.user_roles()
 		self.company = self.own_company()
 		self.settings()
@@ -163,9 +164,10 @@ class Demo:
 		)
 
 	def panel_on_contacts(self):
+		last = frappe.get_meta("Contact").fields[-1].fieldname
 		for fieldname, fieldtype, label, after in (
-			("documents_section", "Section Break", "Documents", "links"),
-			("documents_html", "HTML", "Documents", "documents_section"),
+			("documents_tab", "Tab Break", "Documents", last),
+			("documents_html", "HTML", "Documents", "documents_tab"),
 		):
 			if not frappe.db.exists("Custom Field", {"dt": "Contact", "fieldname": fieldname}):
 				frappe.get_doc(
@@ -186,7 +188,7 @@ class Demo:
 					"dt": "Contact",
 					"view": "Form",
 					"enabled": 1,
-					"script": 'frappe.ui.form.on("Contact", {\n\trefresh(frm) {\n\t\tdocarchive.documents_panel(frm, "documents_html", "documents_section");\n\t},\n});\n',
+					"script": 'frappe.ui.form.on("Contact", {\n\trefresh(frm) {\n\t\tdocarchive.documents_panel(frm, "documents_html", "documents_tab");\n\t},\n});\n',
 				}
 			).insert(ignore_permissions=True)
 
