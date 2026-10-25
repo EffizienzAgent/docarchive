@@ -25,7 +25,7 @@ extend_doctype_class = {
 	"Email Queue": ["docarchive.mail.extensions.EmailQueueArchive"],
 }
 scheduler_events = {
-	"cron": {"30 2 * * *": ["docarchive.run.schedule"]},
+	"cron": {"30 2 * * *": ["docarchive.run.schedule"], "30 7 * * *": ["docarchive.monitoring.daily"]},
 	"daily": ["docarchive.mail.cleanup.run", "docarchive.export.expire"],
 }
 has_permission = {"File": "docarchive.guards.file_permission"}

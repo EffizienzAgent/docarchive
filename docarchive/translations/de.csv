@@ -304,7 +304,7 @@ Store E-Invoice XML as Attachment,XML der E-Rechnung als Anlage speichern
 Tax,Steuer
 Type,Art
 VAT IDs,USt-IdNrn.
-"{0} in the XML differs: {1}","{0} im XML weicht ab: {1}"
+{0} in the XML differs: {1},{0} im XML weicht ab: {1}
 Empty: taken from an e-invoice or the file name when possible.,"Leer: wird, wenn möglich, aus einer E-Rechnung oder dem Dateinamen übernommen."
 Empty: taken from an e-invoice or the file name when possible. Needed before archiving.,"Leer: wird, wenn möglich, aus einer E-Rechnung oder dem Dateinamen übernommen. Vor der Archivierung nötig."
 Open,Offen
@@ -654,3 +654,24 @@ The audit log does not match the storage,Das Archivprotokoll stimmt nicht mit de
 Database,Datenbank
 No audit entries yet.,Noch keine Protokolleinträge.
 Not yet stored under Object Lock,Noch nicht unter Object Lock gespeichert
+Archive Completeness,Archiv-Vollständigkeit
+Archive Problems,Archivprobleme
+Archiving failed for {0} documents,Archivierung für {0} Dokumente fehlgeschlagen
+Last Archive Run Finished,Letzter Archivlauf beendet
+Last finished: {0},Zuletzt beendet: {0}
+Missing Copies,Fehlende Kopien
+Monitoring,Überwachung
+Number Gap,Nummernlücke
+Overdue,Überfällig
+Overdue After (Hours),Überfällig nach (Stunden)
+Show Number Gaps,Nummernlücken anzeigen
+Since,Seit
+The archive run left {0} documents behind,Der Archivlauf hat {0} Dokumente liegen lassen
+The nightly archive run failed,Der nächtliche Archivlauf ist fehlgeschlagen
+The nightly archive run has not finished in the last {0} hours,Der nächtliche Archivlauf ist seit {0} Stunden nicht beendet worden
+never,nie
+{0} documents are overdue for archiving,{0} Dokumente sind mit der Archivierung überfällig
+{0} documents have fewer copies than enabled storage targets,{0} Dokumente haben weniger Kopien als aktive Speicherziele
+Extending the retention failed for {0} documents,Die Verlängerung der Aufbewahrung ist für {0} Dokumente fehlgeschlagen
+"Archiving is enabled, but no storage target is configured","Die Archivierung ist aktiviert, aber kein Speicherziel ist eingerichtet"
+Archive Admins are notified about documents that are ready but not archived after this many hours. Empty or 0: 48 hours.,"Archiv-Admins werden benachrichtigt, wenn bereite Dokumente nach so vielen Stunden noch nicht archiviert sind. Leer oder 0: 48 Stunden."

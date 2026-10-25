@@ -3,7 +3,7 @@ import hashlib
 import frappe
 from frappe import _
 
-from docarchive import audit, retention, run, settings, store
+from docarchive import audit, monitoring, retention, run, settings, store
 from docarchive.document_archive.doctype.business_document.business_document import missing_fields
 
 DOCUMENT = run.DOCUMENT
@@ -101,6 +101,7 @@ def run_job(names, user=None):
 			frappe.publish_realtime(
 				EVENT, {"name": name, "status": status}, user=user, doctype=DOCUMENT, docname=name
 			)
+	monitoring.archive_failed([name for name in names if outcomes[name][0] == "failed"])
 
 
 def skip_reason(doc, targets) -> str:

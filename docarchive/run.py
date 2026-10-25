@@ -48,6 +48,27 @@ def schedule():
 
 
 def nightly(dry_run=False) -> dict:
+	if dry_run:
+		return run_nightly(dry_run)
+	from docarchive import monitoring
+
+	try:
+		summary = run_nightly()
+	except Exception as e:
+		frappe.db.rollback()
+		monitoring.run_failed(safe_error(e))
+		frappe.db.commit()
+		raise
+	if summary["status"] == "done":
+		try:
+			monitoring.after_run(summary)
+		except Exception:
+			frappe.db.rollback()
+			frappe.log_error(title="docarchive: monitoring")
+	return summary
+
+
+def run_nightly(dry_run=False) -> dict:
 	config = settings.get()
 	if not (config.enabled or dry_run):
 		return {"status": "disabled"}
