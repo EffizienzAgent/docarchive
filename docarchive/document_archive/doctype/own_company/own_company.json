@@ -15,6 +15,7 @@
  "field_order": [
   "company_name",
   "slug",
+  "vat_ids",
   "disabled"
  ],
  "fields": [
@@ -34,6 +35,12 @@
    "set_only_once": 1,
    "in_list_view": 1,
    "description": "Lowercase letters, digits and hyphens. Used as the archive folder name."
+  },
+  {
+   "fieldname": "vat_ids",
+   "fieldtype": "Small Text",
+   "label": "VAT IDs",
+   "description": "One per line. Tax numbers work too. E-invoices whose seller has one of these IDs are outgoing, those whose buyer has one are incoming."
   },
   {
    "fieldname": "disabled",

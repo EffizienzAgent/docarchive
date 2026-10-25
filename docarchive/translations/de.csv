@@ -225,3 +225,24 @@ Structured Invoice (XML),Strukturierte Rechnung (XML)
 "The first file is the main file, the others become its attachments.","Die erste Datei ist die Hauptdatei, die anderen werden ihre Anlagen."
 Unknown attachment role {0}.,Unbekannte Rolle der Anlage {0}.
 Version ID,Versions-ID
+Also store the XML embedded in a ZUGFeRD or Factur-X PDF as an attachment of the document. The PDF itself is always archived unchanged.,Das in einer ZUGFeRD- oder Factur-X-PDF eingebettete XML zusätzlich als Anlage des Dokuments speichern. Die PDF selbst wird immer unverändert archiviert.
+Buyer,Käufer
+Buyer Reference,Käuferreferenz / Leitweg-ID
+Credit Note,Gutschrift
+Due Date,Fälligkeitsdatum
+E-Invoice,E-Rechnung
+E-Invoice Data,Daten der E-Rechnung
+Format,Format
+Gross,Brutto
+Invoice,Rechnung
+Invoice Number,Rechnungsnummer
+Issue Date,Rechnungsdatum
+Net,Netto
+"One per line. Tax numbers work too. E-invoices whose seller has one of these IDs are outgoing, those whose buyer has one are incoming.","Eine pro Zeile. Steuernummern gehen auch. E-Rechnungen, deren Verkäufer eine dieser IDs hat, sind ausgehend, solche, deren Käufer eine hat, eingehend."
+Read From,Gelesen aus
+Seller,Verkäufer
+Store E-Invoice XML as Attachment,XML der E-Rechnung als Anlage speichern
+Tax,Steuer
+Type,Art
+VAT IDs,USt-IdNrn.
+"{0} in the XML differs: {1}","{0} im XML weicht ab: {1}"

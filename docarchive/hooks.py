@@ -26,3 +26,4 @@ s3storage_before_object_write = ["docarchive.guards.protect_object"]
 # docarchive_assign: callables that fill own_company / counterparty_type / counterparty on a document.
 # docarchive_counterparty_doctypes: doctypes allowed as counterparty (empty: any).
 # docarchive_read_file: callables returning the raw bytes of a file URL, or None.
+# docarchive_einvoice_extractors: callables (data, file_name) returning e-invoice metadata, or None.

@@ -8,7 +8,7 @@ from frappe.core.api.file import get_max_file_size
 from frappe.rate_limiter import rate_limit
 from pypdf.errors import PyPdfError
 
-from docarchive import content, keys, settings
+from docarchive import content, einvoice, keys, settings
 from docarchive.document_archive.doctype.business_document.business_document import (
 	extension,
 	missing_fields,
@@ -53,10 +53,9 @@ def upload_document(
 	attachments: list | str | None = None,
 ) -> dict:
 	frappe.only_for(ALLOWED_ROLES)
-	doc_type = document_type_for(document_type)
+	doc_type = document_type_for(document_type) if clean(document_type) else None
 	fields = {
-		"document_type": doc_type.name,
-		"document_date": parse_date(document_date, _("Document Date"), required=True),
+		"document_date": parse_date(document_date, _("Document Date")),
 		"contract_end_date": parse_date(contract_end_date, _("Contract End Date")),
 		"document_number": clean(document_number),
 		"title": clean(title),
@@ -68,9 +67,18 @@ def upload_document(
 		"source_party_name": clean(source_party_name),
 		"source_party_email": clean(source_party_email),
 	}
-	check_required(doc_type, fields)
 	name, data = read_upload(file_name, content_base64)
 	extra = read_attachments(attachments)
+	info = einvoice.extract(
+		[
+			(name, data, "main"),
+			*((a["file_name"], a["data"], f"attachment {n}") for n, a in enumerate(extra, 1)),
+		]
+	)
+	doc_type = doc_type or document_type_for(None, einvoice.expected(info).get("document_type"))
+	fill_from_einvoice(fields, info)
+	fields["document_type"] = doc_type.name
+	check_required(doc_type, fields, bool(einvoice.counterparty_of(info)))
 	sha = content.sha256(data)
 	source_key = clean(source_key)
 
@@ -112,11 +120,11 @@ def clean(value):
 	return value or None
 
 
-def document_type_for(slug):
+def document_type_for(slug, name=None):
 	slug = clean(slug)
-	if not slug:
+	if not (slug or name):
 		fail(_("Document type is missing."))
-	name = frappe.db.get_value("Business Document Type", {"slug": slug}, "name")
+	name = name or frappe.db.get_value("Business Document Type", {"slug": slug}, "name")
 	if not name:
 		fail(_("Unknown document type {0}.").format(slug))
 	return frappe.get_cached_doc("Business Document Type", name)
@@ -141,12 +149,20 @@ def own_company_for(value):
 	return value
 
 
-def check_required(doc_type, fields):
+def fill_from_einvoice(fields, info):
+	for field, value in einvoice.expected(info).items():
+		if field in fields and not fields[field]:
+			fields[field] = value
+	if not fields["document_date"]:
+		fail(_("{0} is missing.").format(_("Document Date")))
+
+
+def check_required(doc_type, fields, has_party=False):
 	if doc_type.number_required and not fields["document_number"]:
 		fail(_("{0} is missing.").format(_("Document Number")))
 	if doc_type.contract_end_required and not fields["contract_end_date"]:
 		fail(_("{0} is missing.").format(_("Contract End Date")))
-	if doc_type.counterparty_required and not any(fields[hint] for hint in PARTY_HINTS):
+	if doc_type.counterparty_required and not (has_party or any(fields[hint] for hint in PARTY_HINTS)):
 		fail(
 			_(
 				"This document type needs a counterparty: send source_party_id, source_party_name or source_party_email."

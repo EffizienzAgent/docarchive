@@ -21,6 +21,7 @@
   "default_upload_type",
   "manager_roles",
   "allowed_extensions",
+  "store_einvoice_xml",
   "max_future_days",
   "max_contract_years",
   "retention_section",
@@ -92,6 +93,13 @@
    "label": "Allowed File Types",
    "default": "pdf\npng\njpg\njpeg\ntif\ntiff\nxml",
    "description": "One file extension per line. Only these file types can be filed."
+  },
+  {
+   "fieldname": "store_einvoice_xml",
+   "fieldtype": "Check",
+   "label": "Store E-Invoice XML as Attachment",
+   "default": "0",
+   "description": "Also store the XML embedded in a ZUGFeRD or Factur-X PDF as an attachment of the document. The PDF itself is always archived unchanged."
   },
   {
    "fieldname": "max_future_days",

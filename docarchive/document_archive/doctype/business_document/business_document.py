@@ -6,7 +6,7 @@ from frappe.model.document import Document
 from frappe.utils import add_days, add_years, getdate, today
 from frappe.utils.data import cast
 
-from docarchive import assignment, content, counterparty, settings
+from docarchive import assignment, content, counterparty, einvoice, settings
 
 SOURCE_FIELDS = (
 	"source_system",
@@ -48,6 +48,7 @@ PROTECTED_FIELDS = (
 	"extension_until",
 	"retention_history",
 	"extension_meta",
+	"einvoice_data",
 	"source_key",
 	"replaces",
 	*SOURCE_FIELDS,
@@ -108,6 +109,9 @@ def attachment_rows(doc):
 
 
 def default_title(doc):
+	from_einvoice = einvoice.title(doc)
+	if from_einvoice:
+		return from_einvoice
 	if doc.file:
 		row = own_file(doc)
 		return title_from_file_name(row.file_name if row else doc.file.rsplit("/", 1)[-1])
@@ -139,10 +143,12 @@ class BusinessDocument(Document):
 		if before and before.archive_started_at:
 			self.enforce_lock(before)
 		else:
-			assignment.assign(self)
-			self.resolve_own_company()
 			self.validate_file(before)
 			self.validate_attachments(before)
+			einvoice.update(self, before, self.einvoice_files())
+			assignment.assign(self)
+			self.resolve_own_company()
+			einvoice.record_conflicts(self)
 		counterparty.validate(self)
 		self.validate_dates()
 		self.validate_contract_end()
@@ -241,6 +247,13 @@ class BusinessDocument(Document):
 				frappe.throw(_("Attachment {0} is already part of this document.").format(row.idx))
 			seen.add(row.content_sha256)
 			row.title = row.title or title_from_file_name(file_name(self, row.file))
+
+	def einvoice_files(self):
+		main = [(file_name(self, self.file), self.file, "main")] if self.file else []
+		rows = [(file_name(self, row.file), row.file, f"attachment {row.idx}") for row in self.attachments]
+		for name, file_url, source in main + rows:
+			if extension(name) in einvoice.EXTENSIONS:
+				yield name, content.read_bytes(file_url), source
 
 	def attach_files(self):
 		for row in self.get("attachments") or []:

@@ -51,6 +51,7 @@ Add these to your app's `hooks.py`:
 | `docarchive_assign` | `doc` (Business Document, in `validate`, before archiving starts) | Fill `own_company`, `counterparty_type` and `counterparty`, e.g. from `source_system`, `source_account`, `source_party_type` and `source_party_id` (set by server code with `flags.archive_write`). Values the user set are kept. Do not save other documents here. |
 | `docarchive_counterparty_doctypes` | – | List of doctypes allowed as counterparty. Empty: any doctype that is not a child table or a single. |
 | `docarchive_read_file` | `file_url` | Return the raw bytes of a file, or `None`. Use this when files live outside the site folder (e.g. in object storage). The last hook wins. |
+| `docarchive_einvoice_extractors` | `data`, `file_name` | Return e-invoice metadata or `None`. See [E-invoices](#e-invoices). |
 
 Own company resolution: an explicit value, then the `docarchive_assign` hooks, then the successor company by date, then the default company from Archive Settings.
 
@@ -79,6 +80,29 @@ frappe.ui.form.on("Customer", {
 - `docarchive.queries.documents_to_assign()`: documents that are not archived and still lack a file or a field their type requires, or whose archiving failed. Newest first, each with a `missing` list.
 - `docarchive.queries.count_documents_to_assign()` (whitelisted): the number of those documents.
 
+## E-invoices
+
+docarchive recognizes e-invoices among a document's files (main file first, then the attachments):
+
+- XRechnung / EN 16931 XML in **CII** (UN/CEFACT Cross Industry Invoice) or **UBL** (Invoice and CreditNote) syntax,
+- **ZUGFeRD / Factur-X** PDFs: the embedded XML (`factur-x.xml`, `zugferd-invoice.xml`, `xrechnung.xml` or another embedded `.xml`) is read from the PDF's embedded files. The PDF is not changed.
+
+**What is archived**: the files as they are. A ZUGFeRD PDF is archived whole, with its embedded XML, exactly as before. With **Archive Settings → Store E-Invoice XML as Attachment** (off by default), the embedded XML is also stored as an attachment with the role *Structured Invoice (XML)*, so it is archived as its own object next to the PDF.
+
+**What is extracted** (metadata only, no line items): invoice number, issue date, due date, type code and whether it is an invoice or a credit note; seller and buyer name, VAT IDs, tax numbers and address; currency; net, tax and gross totals and the amount due; the buyer reference (Leitweg-ID); the syntax and profile. The data is stored in `einvoice_data`, shown in the **E-Invoice** section of the form and written to the `.meta.json` under `einvoice`. It is frozen once archiving starts.
+
+**How it is used**, only while archiving has not started and only when the files change:
+
+- Empty fields are prefilled: document date, number, title, own company and type. Add your VAT IDs (or tax numbers) to **Own Company → VAT IDs**: if the seller's ID matches, the document is an **Outgoing Invoice** of that company, if the buyer's matches, an **Incoming Invoice** (by the seeded type slugs `outgoing-invoice` and `incoming-invoice`).
+- Values a user or the API set are never overwritten. When they differ from the XML, the form shows it, e.g. "Document Date in the XML differs: 10.03.2026". The upload API only needs `document_type` and `document_date` when the e-invoice does not provide them.
+- The counterparty hint goes to your `docarchive_assign` hook: call `docarchive.einvoice.counterparty_hint(doc)`. It returns the other party (the buyer of an outgoing, the seller of an incoming invoice) as `{"vat_id", "tax_number", "name", "address"}`. Match by VAT ID first, then by tax number, then by name. Documents with e-invoice data but no counterparty are run through the hooks again before each nightly run.
+
+**Your own parser**: register callables under `docarchive_einvoice_extractors` in `hooks.py`. Each gets `(data: bytes, file_name: str)` and returns a dict in the format above (see `docarchive/einvoice_parser.py`) or `None`. The last hook is tried first, the built-in parser last. An ERPNext site can plug in a dedicated e-invoice app this way. To store the XML of a PDF as an attachment, return it as `xml` together with `embedded_file`.
+
+**Safety**: XML is parsed with `defusedxml` (no DTDs, no entities, no network) with explicit namespaces. XML larger than 10 MB, also inside a PDF, is skipped. Files that cannot be read are treated as plain documents; saving never fails because of them.
+
+**GoBD note**: for a hybrid invoice such as ZUGFeRD, the structured XML is the authoritative original, not the PDF view. Archive the file you received unchanged; docarchive does that. The extracted metadata is a convenience for filing and search. docarchive does not validate e-invoices against EN 16931 or XRechnung, does not check that the PDF view matches the XML, and makes no compliance promise (see [No compliance promise](#no-compliance-promise)).
+
 ## Upload API
 
 Integrations such as n8n create documents with one POST request:
@@ -96,8 +120,8 @@ Send the file either as multipart form data (field `file`) or as JSON / form fie
 |---|---|---|
 | `file` or `content_base64` + `file_name` | yes | The main file. The file name must end in an allowed file type (Archive Settings → Allowed File Types). The size limit is Frappe's maximum file size. |
 | `attachments[]` (multipart) or `attachments` (JSON) | no | Up to 20 further files with the same rules. Multipart: repeat the file field `attachments[]`, and optionally `attachment_roles[]` in the same order. JSON: a list of `{"file_name", "content_base64", "role", "title"}`. Roles: `Attachment` (default), `Structured Invoice (XML)`, `Proof of Service`, or their slugs (`structured-invoice-xml`). |
-| `document_type` | yes | The slug of a Business Document Type, e.g. `outgoing-invoice`. |
-| `document_date` | yes | `YYYY-MM-DD`: invoice date, signing date or statement date. |
+| `document_type` | yes, unless an e-invoice gives it | The slug of a Business Document Type, e.g. `outgoing-invoice`. |
+| `document_date` | yes, unless an e-invoice gives it | `YYYY-MM-DD`: invoice date, signing date or statement date. |
 | `document_number` | if the type requires it | Invoice or contract number. |
 | `contract_end_date` | if the type requires it | `YYYY-MM-DD`, only for types whose retention counts from the contract end. |
 | `title` | no | Defaults to the file name. |
@@ -106,7 +130,7 @@ Send the file either as multipart form data (field `file`) or as JSON / form fie
 | `source_party_name`, `source_party_email` | no | Shown to the people who assign the document by hand. Never used to guess a counterparty. |
 | `source_key` | no | A stable ID of the document in the source system, e.g. `billing:invoice:42`. Makes retries safe. |
 
-A type with **Counterparty Required** needs at least one of `source_party_id`, `source_party_name` and `source_party_email`. A counterparty that cannot be resolved does not fail the upload; the document then appears in `documents_to_assign()`.
+A type with **Counterparty Required** needs at least one of `source_party_id`, `source_party_name` and `source_party_email`, or an e-invoice whose other party is known. A counterparty that cannot be resolved does not fail the upload; the document then appears in `documents_to_assign()`.
 
 Retries are safe:
 
