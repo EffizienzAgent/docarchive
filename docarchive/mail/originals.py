@@ -26,6 +26,7 @@ UPLOAD_ORIGIN = "manual-upload"
 PENDING, STORED, FAILED = "Pending", "Stored", "Failed"
 MAX_ATTEMPTS = 5
 JOB = "docarchive.mail.originals.store"
+JOB_TIMEOUT = 1500
 ERROR_LENGTH = 500
 REBUILD_WINDOW = timedelta(hours=1)
 FALLBACK_LIMIT = 10 * 1024 * 1024
@@ -124,6 +125,7 @@ def enqueue(name: str) -> None:
 		frappe.enqueue(
 			JOB,
 			queue="default",
+			timeout=JOB_TIMEOUT,
 			job_id=f"docarchive-mail-original-{name}",
 			deduplicate=True,
 			original=name,

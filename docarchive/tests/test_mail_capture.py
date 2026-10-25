@@ -226,6 +226,7 @@ class TestMailStoreJob(IntegrationTestCase):
 		enqueue.assert_called_once_with(
 			"docarchive.mail.originals.store",
 			queue="default",
+			timeout=1500,
 			job_id="docarchive-mail-original-MO-1",
 			deduplicate=True,
 			original="MO-1",
