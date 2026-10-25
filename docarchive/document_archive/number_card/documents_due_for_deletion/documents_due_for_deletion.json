@@ -1,0 +1,15 @@
+{
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "document_type": "Business Document",
+ "filters_json": "[]",
+ "dynamic_filters_json": "[]",
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Documents Due for Deletion",
+ "method": "docarchive.expiry.due_count_card",
+ "module": "Document Archive",
+ "name": "Documents Due for Deletion",
+ "show_percentage_stats": 0,
+ "type": "Custom"
+}

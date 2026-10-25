@@ -1,5 +1,6 @@
 import hashlib
 import os
+import time
 import unittest
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -30,6 +31,8 @@ def config(bucket, name):
 		bucket=bucket,
 		access_key=os.environ.get("DOCARCHIVE_TEST_S3_ACCESS_KEY"),
 		secret_key=os.environ.get("DOCARCHIVE_TEST_S3_SECRET_KEY"),
+		admin_access_key=os.environ.get("DOCARCHIVE_TEST_S3_ACCESS_KEY"),
+		admin_secret_key=os.environ.get("DOCARCHIVE_TEST_S3_SECRET_KEY"),
 	)
 
 
@@ -124,3 +127,80 @@ class TestMinio(IntegrationTestCase):
 		self.assertEqual(
 			sorted(v["Key"] for v in versions["Versions"]), sorted((doc.object_key, doc.meta_key))
 		)
+
+	def short_lock(self, mode="GOVERNANCE", seconds=3):
+		key = f"check/{uuid.uuid4().hex}.txt"
+		until = datetime.now(UTC) + timedelta(seconds=seconds)
+		return key, store.put_locked(self.targets[0], key, b"short", mode, until)["version_id"]
+
+	def test_legal_hold_set_and_release(self):
+		target = self.targets[0]
+		key = f"check/{uuid.uuid4().hex}.txt"
+		version = store.put_locked(target, key, b"held", "GOVERNANCE", self.until())["version_id"]
+		self.assertEqual(store.hold_status(target, key, version), "OFF")
+		store.set_hold(target, key, version)
+		self.assertEqual(store.hold_status(target, key, version), "ON")
+		store.release_hold(target, key, version)
+		self.assertEqual(store.hold_status(target, key, version), "OFF")
+
+	def test_delete_expired_only_after_expiry_and_without_hold(self):
+		target = self.targets[0]
+		key, version = self.short_lock()
+		other = store.put_locked(target, key, b"newer", "GOVERNANCE", self.until())["version_id"]
+		with self.assertRaises(store.LockError):
+			store.delete_expired(target, key, version)
+		with self.assertRaises(Exception) as caught:
+			store._admin_delete(target, key, version)
+		self.assertTrue(store.refused(caught.exception))
+		store.set_hold(target, key, version)
+		time.sleep(4)
+		with self.assertRaises(store.LockError):
+			store.delete_expired(target, key, version)
+		with self.assertRaises(Exception) as caught:
+			store._admin_delete(target, key, version)
+		self.assertTrue(store.refused(caught.exception))
+		store.release_hold(target, key, version)
+		self.assertTrue(store.delete_expired(target, key, version))
+		self.assertIsNone(store.head(target, key, version))
+		self.assertFalse(store.delete_expired(target, key, version))
+		self.assertEqual(store.head(target, key, other)["VersionId"], other)
+
+	def test_delete_early_only_for_governance(self):
+		target = self.targets[0]
+		key = f"check/{uuid.uuid4().hex}.txt"
+		version = store.put_locked(target, key, b"early", "GOVERNANCE", self.until(30))["version_id"]
+		self.assertTrue(store.delete_early(target, key, version))
+		self.assertIsNone(store.head(target, key, version))
+		key, version = self.short_lock("COMPLIANCE", seconds=2)
+		with self.assertRaises(store.LockError):
+			store.delete_early(target, key, version)
+		self.assertTrue(store.head(target, key, version))
+
+	def test_document_hold_release_and_early_delete(self):
+		from docarchive import expiry, legal_hold
+
+		company = make_own_company().name
+		make_settings(default_own_company=company)
+		doc = make_business_document(
+			document_type=make_document_type(default_retention_years=8).name, **party_fields(make_party())
+		)
+		self.assertEqual(run.archive_document(doc.name, self.targets), "Archived")
+		self.enterContext(patch("docarchive.store.targets", return_value=self.targets))
+		self.assertEqual(legal_hold.set_legal_hold([doc.name], "x")[doc.name]["status"], "held")
+		doc.reload()
+		objects = [
+			(t, k, v)
+			for t in self.targets
+			for c in doc.archive_copies
+			if c.target_name == t.name
+			for k, v in run.copy_objects(c, doc)
+		]
+		self.assertEqual({store.hold_status(*o) for o in objects}, {"ON"})
+		self.assertEqual(
+			legal_hold.release_legal_hold([doc.name], "y", confirm=1)[doc.name]["status"], "released"
+		)
+		self.assertEqual({store.hold_status(*o) for o in objects}, {"OFF"})
+		result = expiry.run_job([doc.name], "Administrator", early=1, reason="z")
+		self.assertEqual(result, {doc.name: "Deleted"})
+		self.assertEqual([store.head(*o) for o in objects], [None] * len(objects))
+		self.assertEqual(frappe.get_doc("Business Document", doc.name).archive_status, "Deleted")

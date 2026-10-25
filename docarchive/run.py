@@ -30,6 +30,9 @@ CANDIDATE_FIELDS = [
 ]
 
 
+HOLD_REFUSED = "refused"
+
+
 class ArchiveError(frappe.ValidationError):
 	pass
 
@@ -110,18 +113,22 @@ def missing_copies(target_names) -> list[str]:
 	copies = frappe.get_all(
 		"Archive Copy",
 		filters={"parenttype": DOCUMENT, "target_name": ("in", list(target_names))},
-		fields=["parent", "target_name"],
+		fields=["parent", "target_name", "status"],
 	)
-	have = {}
+	have, deleting = {}, set()
 	for row in copies:
 		have.setdefault(row.parent, set()).add(row.target_name)
-	return [name for name in archived if not set(target_names) <= have.get(name, set())]
+		if row.status == DELETED:
+			deleting.add(row.parent)
+	return [
+		name for name in archived if name not in deleting and not set(target_names) <= have.get(name, set())
+	]
 
 
 def eligible(target_names=()) -> list[str]:
 	started = frappe.get_all(
 		DOCUMENT,
-		filters={"archive_status": ("!=", ARCHIVED), "archive_started_at": ("is", "set")},
+		filters={"archive_status": ("not in", (ARCHIVED, DELETED)), "archive_started_at": ("is", "set")},
 		pluck="name",
 		order_by="creation",
 	) + missing_copies(target_names)
@@ -252,6 +259,41 @@ def copy_to(doc, target, data):
 	except Exception as e:
 		copy.update({"status": FAILED, "error": safe_error(e)})
 		log(doc, target, copy.error)
+		return
+	if doc.legal_hold:
+		hold_copy(doc, copy, target)
+
+
+def copy_objects(copy, doc) -> list[tuple[str, str]]:
+	sidecars = json.loads(copy.sidecar_versions or "{}")
+	return [
+		(doc.object_key, copy.object_version_id),
+		(doc.meta_key, copy.meta_version_id),
+		*sorted(sidecars.items()),
+	]
+
+
+def missing_sidecars(copy, doc) -> list[str]:
+	recorded = json.loads(copy.sidecar_versions or "{}")
+	expected = (
+		f"{doc.object_key}.meta.{index}.json" for index in range(2, (doc.retention_extensions or 0) + 2)
+	)
+	return [key for key in expected if key not in recorded]
+
+
+def hold_copy(doc, copy, target) -> str | None:
+	try:
+		for key, version in copy_objects(copy, doc):
+			store.set_hold(target, key, version)
+	except Exception as e:
+		if store.refused(e):
+			log(doc, target, safe_error(e))
+			return HOLD_REFUSED
+		copy.legal_hold = FAILED
+		log(doc, target, safe_error(e))
+		return safe_error(e)
+	copy.legal_hold = "On"
+	return None
 
 
 def ensure(target, key, body, until, content_type, copy, version_field):
@@ -493,6 +535,11 @@ def extend_copy(doc, copy, target, until):
 		store.extend_locked(target, key, version, sha256, copy.lock_mode, until)
 	body = keys.meta_bytes(doc.extension_meta, copy.lock_mode)
 	ensure(target, sidecar_key(doc), body, until, "application/json", copy, "sidecar_version_id")
+	sidecars = json.loads(copy.sidecar_versions or "{}")
+	sidecars[sidecar_key(doc)] = copy.sidecar_version_id
+	copy.sidecar_versions = json.dumps(sidecars, sort_keys=True)
+	if doc.legal_hold:
+		store.set_hold(target, sidecar_key(doc), copy.sidecar_version_id)
 	copy.update({"retain_until": retention.to_db(until), "error": None})
 
 

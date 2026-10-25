@@ -15,11 +15,14 @@
   "lock_mode",
   "retain_until",
   "archived_at",
+  "legal_hold",
+  "deleted_at",
   "error",
   "object_version_id",
   "meta_version_id",
   "meta_sha256",
-  "sidecar_version_id"
+  "sidecar_version_id",
+  "sidecar_versions"
  ],
  "fields": [
   {
@@ -33,7 +36,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Pending\nArchived\nFailed",
+   "options": "Pending\nArchived\nFailed\nDeleted",
    "default": "Pending",
    "in_list_view": 1,
    "read_only": 1
@@ -86,6 +89,28 @@
    "fieldname": "sidecar_version_id",
    "fieldtype": "Data",
    "label": "Latest Sidecar Version ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "legal_hold",
+   "fieldtype": "Select",
+   "label": "Legal Hold",
+   "options": "Off\nOn\nFailed",
+   "default": "Off",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "deleted_at",
+   "fieldtype": "Datetime",
+   "label": "Deleted At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sidecar_versions",
+   "fieldtype": "Code",
+   "label": "Sidecar Versions",
+   "options": "JSON",
    "read_only": 1
   }
  ],

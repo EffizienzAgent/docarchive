@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 
 from botocore.exceptions import ClientError
 
+ARCHIVE, ADMIN = "archive", "admin"
+
 
 def error(code, operation):
 	return ClientError({"Error": {"Code": code, "Message": code}}, operation)
@@ -14,16 +16,32 @@ def error(code, operation):
 class LockedFakeS3:
 	"""An Object Lock bucket in memory. Versions are kept, locked versions cannot be deleted."""
 
-	def __init__(self, fail=(), bypass_allowed=False):
+	def __init__(self, fail=(), bypass_allowed=False, deny=()):
 		self.versions = {}
 		self.calls = []
+		self.callers = []
+		self.caller = ARCHIVE
 		self.fail = set(fail)
+		self.deny = set(deny)
 		self.bypass_allowed = bypass_allowed
 
 	def record(self, operation, **kwargs):
 		self.calls.append((operation, kwargs))
+		self.callers.append(self.caller)
 		if operation in self.fail:
 			raise error("InternalError", operation)
+		if (self.caller, operation) in self.deny:
+			raise error("AccessDenied", operation)
+
+	def calls_by(self, caller):
+		return [call for call, by in zip(self.calls, self.callers, strict=True) if by == caller]
+
+	def deleted(self):
+		return [
+			(kwargs["Key"], kwargs["VersionId"], kwargs["Bypass"])
+			for operation, kwargs in self.calls
+			if operation == "delete_object"
+		]
 
 	def puts(self):
 		return [kwargs for operation, kwargs in self.calls if operation == "put_object"]
@@ -52,6 +70,7 @@ class LockedFakeS3:
 			"ContentType": kwargs.get("ContentType"),
 			"ObjectLockMode": mode,
 			"ObjectLockRetainUntilDate": until,
+			"LegalHold": "OFF",
 		}
 		self.versions.setdefault((Bucket, Key), []).append(version)
 		return {"VersionId": version["VersionId"]}
@@ -65,7 +84,16 @@ class LockedFakeS3:
 			"VersionId": version["VersionId"],
 			"ObjectLockMode": version["ObjectLockMode"],
 			"ObjectLockRetainUntilDate": version["ObjectLockRetainUntilDate"],
+			"ObjectLockLegalHoldStatus": version["LegalHold"],
 		}
+
+	def put_object_legal_hold(self, Bucket, Key, LegalHold, VersionId=None):
+		self.record("put_object_legal_hold", Bucket=Bucket, Key=Key, VersionId=VersionId, LegalHold=LegalHold)
+		version = self.latest(Bucket, Key, VersionId, "PutObjectLegalHold")
+		if LegalHold["Status"] == "OFF" and self.caller != ADMIN:
+			raise error("AccessDenied", "PutObjectLegalHold")
+		version["LegalHold"] = LegalHold["Status"]
+		return {}
 
 	def get_object(self, Bucket, Key, VersionId=None):
 		self.record("get_object", Bucket=Bucket, Key=Key, VersionId=VersionId)
@@ -100,9 +128,13 @@ class LockedFakeS3:
 			"delete_object", Bucket=Bucket, Key=Key, VersionId=VersionId, Bypass=BypassGovernanceRetention
 		)
 		if VersionId is None:
+			if self.caller == ADMIN:
+				raise error("AccessDenied", "DeleteObject")
 			self.versions.setdefault((Bucket, Key), [])
 			return {"DeleteMarker": True}
 		version = self.latest(Bucket, Key, VersionId, "DeleteObject")
+		if version["LegalHold"] == "ON":
+			raise error("AccessDenied", "DeleteObject")
 		if BypassGovernanceRetention and not self.bypass_allowed:
 			raise error("AccessDenied", "DeleteObject")
 		locked = version["ObjectLockRetainUntilDate"] and version["ObjectLockRetainUntilDate"] > datetime.now(
@@ -115,3 +147,22 @@ class LockedFakeS3:
 
 	def body(self, Bucket, Key):
 		return self.latest(Bucket, Key)["Body"]
+
+
+class AdminClient:
+	"""The same fake bucket, seen through the admin key."""
+
+	def __init__(self, fake):
+		self.fake = fake
+
+	def __getattr__(self, name):
+		method = getattr(self.fake, name)
+
+		def call(*args, **kwargs):
+			self.fake.caller = ADMIN
+			try:
+				return method(*args, **kwargs)
+			finally:
+				self.fake.caller = ARCHIVE
+
+		return call
