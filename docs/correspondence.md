@@ -13,7 +13,7 @@ Archive Settings → **E-Mail Accounts** has one row per Frappe Email Account (S
 | Outgoing Originals From | Frappe | **Frappe**: the original of a sent mail is rebuilt after sending. **Sent Folder**: it comes from the IMAP Sent folder through mailsync (see below). Only for IMAP accounts. |
 | Archive Internal Mails | off | Whether mails where every address is internal qualify at all. |
 | Contacts Count as Counterparty | off | Whether a Contact without a linked party (e.g. a private contact) may be set as counterparty automatically. |
-| Keep Unarchived Originals (Days) | 90 | After this, captured originals that were not archived are deleted. At least 1. |
+| Keep Unarchived Originals (Days) | 14 | After this, captured originals that were not archived are deleted. At least 1. Existing rows keep their value (the default used to be 90). |
 | Own Company | empty | Own company for this account's mails. Empty: the normal resolution. |
 | Internal Domains | domain of the account's address | Comma-separated. |
 
@@ -45,7 +45,7 @@ A mail counts as automated if it has a `List-Unsubscribe` header, an `Auto-Submi
 
 ## Cleanup
 
-A daily job deletes, per account, stored originals older than **Keep Unarchived Originals (Days)** that were not archived; pending and failed originals are kept (see above). This also applies to accounts set to **Off** (originals captured before) and to accounts whose row was removed, which use the default of 90 days. It also removes mail documents of that age whose archiving has not started and that still have no counterparty although their type requires one, together with their original, unless they are marked for legal hold. **Internal Correspondence** and other types without a required counterparty are not removed. So spam and private mail never reach WORM storage unless someone assigns them. Deleting a Communication deletes its unarchived original with it; an archived mail stays. If that fails, the error is logged, the original is only unlinked from the Communication, and the delete goes through.
+A daily job deletes, per account, stored originals older than **Keep Unarchived Originals (Days)** that were not archived; pending and failed originals are kept (see above). This also applies to accounts set to **Off** (originals captured before) and to accounts whose row was removed, which keep the old default of 90 days so that removing a row never deletes sooner than before. It also removes mail documents of that age whose archiving has not started and that still have no counterparty although their type requires one, together with their original, unless they are marked for legal hold. **Internal Correspondence** and other types without a required counterparty are not removed. So spam and private mail never reach WORM storage unless someone assigns them. Deleting a Communication deletes its unarchived original with it; an archived mail stays. If that fails, the error is logged, the original is only unlinked from the Communication, and the delete goes through.
 
 ## Viewer
 
