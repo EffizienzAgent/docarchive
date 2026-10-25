@@ -539,3 +539,4 @@ of,von
 {0} objects could not be verified. See manifest.json.,{0} Objekte konnten nicht geprüft werden. Siehe manifest.json.
 {0} objects could not be verified. See Mismatch Details.,{0} Objekte konnten nicht geprüft werden. Siehe Details zu Abweichungen.
 Main,Hauptdatei
+Documents marked for legal hold cannot be discarded.,"Dokumente, die für einen Legal Hold vorgemerkt sind, können nicht verworfen werden."

@@ -333,6 +333,13 @@ class TestDiscard(MailArchivingTestCase):
 		self.assertEqual(result["refused"][name], "Archived documents cannot be discarded.")
 		self.assertTrue(frappe.db.exists("Mail Original", original))
 
+	def test_discard_refuses_documents_marked_for_legal_hold(self):
+		name, original, _ = self.archived()
+		frappe.db.set_value(DOCUMENT, name, "hold_on_archive", 1)
+		result = archiving.discard([name])
+		self.assertEqual(result["refused"][name], "Documents marked for legal hold cannot be discarded.")
+		self.assertTrue(frappe.db.exists("Mail Original", original))
+
 	def test_discard_refuses_other_documents(self):
 		from docarchive.tests.factories import make_business_document
 

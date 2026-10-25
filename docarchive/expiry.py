@@ -34,6 +34,10 @@ STRIPPED = (
 	"source_doctype",
 	"source_name",
 	"source_key",
+	"thread_key",
+	"mail_message_id",
+	"mail_in_reply_to",
+	"mail_references",
 	"content_sha256",
 	"archive_sha256",
 	"archive_size",
@@ -293,6 +297,8 @@ def strip(doc, user, until, early, reason):
 	):
 		frappe.delete_doc("File", file, ignore_permissions=True)
 	frappe.db.delete("Business Document Attachment", {"parenttype": DOCUMENT, "parent": doc.name})
+	for original in frappe.get_all("Mail Original", filters={"business_document": doc.name}, pluck="name"):
+		frappe.delete_doc("Mail Original", original, ignore_permissions=True)
 	for row in doc.get("attachment_copies") or []:
 		frappe.db.set_value("Archive Attachment Copy", row.name, "object_key", None)
 	for entry in doc.legal_hold_log:

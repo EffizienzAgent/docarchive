@@ -194,11 +194,13 @@ def _names(names) -> list[str]:
 
 
 def _discard_refusal(name):
-	source, system, started = frappe.db.get_value(
-		DOCUMENT, name, ["source_doctype", "source_system", "archive_started_at"]
+	source, system, started, hold = frappe.db.get_value(
+		DOCUMENT, name, ["source_doctype", "source_system", "archive_started_at", "hold_on_archive"]
 	)
 	if started:
 		return _("Archived documents cannot be discarded.")
+	if hold:
+		return _("Documents marked for legal hold cannot be discarded.")
 	if source != COMMUNICATION and system != "email":
 		return _("Only e-mail documents can be discarded.")
 	return None

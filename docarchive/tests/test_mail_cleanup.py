@@ -98,6 +98,13 @@ class TestCleanup(MailArchivingTestCase):
 		self.assertEqual(cleanup.run()["documents"], 0)
 		self.assertTrue(frappe.db.exists(DOCUMENT, name))
 
+	def test_document_marked_for_legal_hold_kept(self):
+		name, original = self.archived()
+		frappe.db.set_value(DOCUMENT, name, "hold_on_archive", 1)
+		self.assertEqual(cleanup.run()["documents"], 0)
+		self.assertTrue(frappe.db.exists(DOCUMENT, name))
+		self.assertTrue(frappe.db.exists(ORIGINAL, original))
+
 	def test_account_off_is_skipped(self):
 		original = self.original()
 		self.configure(mode="Off")

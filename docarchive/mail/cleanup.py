@@ -39,6 +39,7 @@ def _old_documents(email_account, cutoff):
 			"source_account": email_account,
 			"archive_started_at": ("is", "not set"),
 			"counterparty": ("is", "not set"),
+			"hold_on_archive": 0,
 			"creation": ("<", cutoff),
 		},
 		pluck="name",
@@ -50,8 +51,10 @@ def _remove_original(name):
 
 
 def _remove_document(name) -> bool:
-	started, party = frappe.db.get_value(DOCUMENT, name, ["archive_started_at", "counterparty"])
-	if started or party:
+	started, party, hold = frappe.db.get_value(
+		DOCUMENT, name, ["archive_started_at", "counterparty", "hold_on_archive"]
+	)
+	if started or party or hold:
 		return False
 	archiving.remove_document(name)
 	return True
