@@ -190,3 +190,37 @@ Repeat regularly on the real buckets:
 6. Run `bench --site <site> docarchive-sync-mode --target <name>` for each target, so the site records the new mode.
 
 **COMPLIANCE cannot be undone.** No key, not even the admin key, can delete a COMPLIANCE object or shorten its retention before the date. A delete without a version ID only adds a delete marker. Never use COMPLIANCE in the test bucket.
+
+## 7. Lifecycle rule for the audit log
+
+docarchive stores each audit log entry as a locked object under `_audit/` and never deletes it. To remove entries after their lock has ended, set a lifecycle rule on each archive bucket with the offline admin key. Limit it to the `_audit/` prefix, so it can never touch archived documents.
+
+An entry is locked until January 1 after its year plus the configured years (default 10), so at most about 11 years. In a bucket with Object Lock, expiring an object only adds a delete marker; the locked version itself is removed by the noncurrent version rule once its lock has ended. With a default of 10 years:
+
+```json
+{
+  "Rules": [
+    {
+      "ID": "docarchive-audit-expiry",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "_audit/" },
+      "Expiration": { "Days": 4030 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 30 }
+    },
+    {
+      "ID": "docarchive-audit-markers",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "_audit/" },
+      "Expiration": { "ExpiredObjectDeleteMarker": true }
+    }
+  ]
+}
+```
+
+```
+aws s3api put-bucket-lifecycle-configuration --profile admin \
+  --bucket example-archive-fsn1 --lifecycle-configuration file://audit-lifecycle.json
+```
+
+Raise `Days` when you raise **Lock Audit Log For (Years)**. Providers differ in which lifecycle actions they support and how they treat locked versions (some skip them, some retry later). Check yours before relying on the rule, e.g. with a short-lived test prefix in the test bucket. The writer key keeps its deny on `s3:PutLifecycleConfiguration`.
+

@@ -6,11 +6,45 @@ docarchive files business documents such as invoices, contracts and bank stateme
 
 ## Status
 
-This version has the document model, the locks, the storage configuration, the upload API, the nightly archive run to Object Lock storage, legal holds, the deletion of expired documents, and the archiving of e-mails and other correspondence. Archiving is off until a System Manager enables it in Archive Settings. Until then, nothing leaves the site.
+This version has the document model, the locks, the storage configuration, the upload API, the nightly archive run to Object Lock storage, legal holds, the deletion of expired documents, the archiving of e-mails and other correspondence, exports, the audit log and monitoring. Archiving is off until a System Manager enables it in Archive Settings. Until then, nothing leaves the site.
 
 ## No compliance promise
 
 docarchive is a technical tool. It does not make you compliant with GoBD, the GDPR or any other law or standard, and it gives no legal or tax advice. Retention periods, procedures and documentation are your responsibility. Check them with your tax advisor or auditor.
+
+## Features
+
+**Archiving and WORM**
+- [Object Lock per document](#object-lock-writes): every file is written once, with its own mode (GOVERNANCE or COMPLIANCE) and retain-until date, to one or more [storage targets](#storage-targets).
+- [Checksums](#how-it-works): SHA-256 at upload, checked again when archiving, after each write and on export.
+- [Retention](#retention) per document type and own company, optionally [from the contract end](#contract-end-and-retention-extension).
+- [Retention extension](#manual-extension), automatic for contracts and by hand, never shorter.
+- [Nightly archive run](#archive-run) and [Archive now](#archive-now) with retain-until date and lock mode shown before confirming.
+
+**Legal hold and deletion**
+- [Legal hold](#legal-hold) at archiving or later, released only by Archive Admins.
+- [Deletion of expired documents](#deleting-expired-documents) with a deletion log, and [early deletion](#early-deletion-governance-only) for GOVERNANCE copies.
+
+**Documents**
+- [Attachments](#how-it-works): annexes, e-invoice XML and proofs of service, archived and locked with the main file.
+- [E-invoices](#e-invoices): XRechnung and ZUGFeRD data read into the document.
+- [Counterparty panel](#counterparty-panel), [triage](#triage) of documents with missing fields, and an [upload API](#upload-api).
+
+**Correspondence**
+- [E-mail capture](#account-settings-and-modes) of the original `.eml` per account, off, manual or automatic, incoming and outgoing (rebuilt by Frappe or from the Sent folder via mailsync).
+- [Archiving and discarding](#archiving-and-discarding) mails from the Communication, with counterparty from its links; letters and faxes as uploads.
+- [Viewer](#viewer) for archived mails, [threads and gaps](#threads-and-gaps), and [closing gaps with an `.eml` upload](#closing-gaps-with-an-eml-upload).
+
+**Export**
+- [Export](#export) as ZIP packages with manifest, checksums and an offline viewer.
+
+**Audit and monitoring**
+- [Audit log](#audit-log) of archive events, each entry stored under Object Lock and compared with the database every night.
+- [Monitoring and completeness](#monitoring-and-completeness): bell notifications for failed, overdue and incomplete archiving, and a completeness report.
+
+**Integration**
+- [Roles and permissions](#roles): Document Manager, Archive Admin, Document Integration, and host roles.
+- [Host app hooks](#host-app-hooks) for assignment, counterparties, file access and e-invoice extractors, and [commands](#commands) for runs and checks.
 
 ## How it works
 
@@ -27,7 +61,7 @@ docarchive is a technical tool. It does not make you compliant with GoBD, the GD
 
 ## Roles
 
-The app creates the role **Document Manager** (read, write and create documents; no delete), the role **Archive Admin** (read documents, release legal holds, delete documents after their retention; see [Legal hold](#legal-hold)) and the role **Document Integration** for the [upload API](#upload-api) (no desk access and no document permissions; it can only call the upload endpoint). Files attached to a Business Document can only be changed or deleted by users who may write that document, so an integration user cannot touch the files it uploaded. Only System Manager can read or change Archive Settings, so storage endpoints, buckets and key names stay hidden from document managers. To let a host role in, add it to **Archive Settings → Manager Roles** (Guest, All and Desk User are refused). The app then grants that role the same rights through Custom DocPerm and remembers which rows it created. On every save of the settings and on every migrate, it removes only those rows for roles that are no longer listed; permission rows set by an admin stay.
+The app creates the role **Document Manager** (read, write and create documents; no delete), the role **Archive Admin** (read documents and the [audit log](#audit-log), release legal holds, delete documents after their retention; see [Legal hold](#legal-hold)) and the role **Document Integration** for the [upload API](#upload-api) (no desk access and no document permissions; it can only call the upload endpoint). Files attached to a Business Document can only be changed or deleted by users who may write that document, so an integration user cannot touch the files it uploaded. Only System Manager can read or change Archive Settings, so storage endpoints, buckets and key names stay hidden from document managers. To let a host role in, add it to **Archive Settings → Manager Roles** (Guest, All and Desk User are refused). The app then grants that role the same rights through Custom DocPerm and remembers which rows it created. On every save of the settings and on every migrate, it removes only those rows for roles that are no longer listed; permission rows set by an admin stay.
 
 Custom DocPerm replaces the standard permissions of a doctype. If you edit permissions on these doctypes by hand, keep the manager rows.
 
@@ -394,11 +428,53 @@ Each ZIP contains:
 - `documents/<object key>`: the archived objects with their exact bytes,
 - `manifest.json` and `manifest.csv`: scope, every document with its metadata (taken from the archived `.meta.json` or the newest sidecar), retention, lock mode, legal hold, and per object the key, version ID, SHA-256, size and check result,
 - `previews/<object key>.html`: for `.eml` files a rendered, sanitized preview (HTML body or plain text) with a Content-Security-Policy that blocks scripts and remote content,
-- `index.html`: an offline viewer in one file, without network requests. It lists all documents with search and filters (type, counterparty, own company, year, legal hold, problems), shows the metadata and retention trail, previews PDFs, images, XML and mail, and always links the original to open or download. Files that a browser could run (HTML, SVG, XSLT and similar) are only offered as a download. The embedded data escapes `<`, `>`, `&`, U+2028 and U+2029, so no document text can end the script block. Documents with a `thread_key` show their conversation in date order. The metadata block always shows the same fields with labels (empty ones as "–"), so the file starts at the same position for every document. Keyboard: j/k or ↑/↓ move through the list, Enter opens the preview, `/` focuses the search, Esc clears the search or closes, ←/→ switch attachments and `?` shows all shortcuts; none of them fire while typing. Under "Export Viewer" in Archive Settings you can set a brand name, a logo (PNG, JPEG, GIF or WebP up to 200 KB, embedded as a data URI) and a hex accent color, and turn off the "Made with docarchive" footer link. Without these the viewer stays neutral.
+- `audit/<yyyy>/<mm>/<file>.json`: the audit entries that touched an exported document (in the part with that document), and entries without documents, such as settings changes, within the date range (in part 1), as stored in the bucket. An entry lists every document of its trigger, so it can name documents outside the export. An entry that cannot be read from the target or does not match its checksum is listed as a mismatch and included from the database copy; one not yet written is included from the database copy and marked as such,
+- `index.html`: an offline viewer in one file, without network requests. It lists all documents with search and filters (type, counterparty, own company, year, legal hold, problems), shows the metadata and retention trail, previews PDFs, images, XML and mail, and always links the original to open or download. Files that a browser could run (HTML, SVG, XSLT and similar) are only offered as a download. The embedded data escapes `<`, `>`, `&`, U+2028 and U+2029, so no document text can end the script block. Documents with a `thread_key` show their conversation in date order. The metadata block always shows the same fields with labels (empty ones as "–"), so the file starts at the same position for every document. Keyboard: j/k or ↑/↓ move through the list, Enter opens the preview, `/` focuses the search, Esc clears the search or closes, ←/→ switch attachments and `?` shows all shortcuts; none of them fire while typing. Under "Export Viewer" in Archive Settings you can set a brand name, a logo (PNG, JPEG, GIF or WebP up to 200 KB, embedded as a data URI) and a hex accent color, and turn off the "Made with docarchive" footer link. Without these the viewer stays neutral. The **Audit Log** tab lists the entries with search and an action filter and links each document; each document lists its entries and links to them.
 
 ### Archive now
 
 Users who may write a document see **Archive now** on its form when archiving is enabled and the document is complete. The list view has the same action for selected documents. Both show the retain-until date and the mode and ask for confirmation, then queue the same archive code as the nightly run, without the minimum age wait. A failed target is retried by the next nightly run.
+
+### Audit log
+
+The **Archive Audit Log** ("Archivprotokoll") records state-changing archive events: one entry per trigger, not per document. A nightly run, an "Archive now" job, a legal hold set or release, a retention extension (single or bulk), a deletion run and an export each give one entry with the user, the time, the action and the documents it touched, each with an outcome (e.g. `archived`, `failed`, `held`, `deleted`, `exported`) and, for failures, a reason code (e.g. `checksum`, `storage:AccessDenied`). Changes to archive-relevant settings (Archive Settings, Business Document Types) and to the locked fields of a document before archiving are logged with the names of the changed fields. Views and downloads are not logged. A trigger that changes nothing (e.g. a refused hold) leaves no entry.
+
+Entries hold no free text and no personal data, because they cannot be changed: reasons stay in the document's legal hold log and in the deletion log, changed values in the document's version history.
+
+Each entry is stored as its own locked object `_audit/<yyyy>/<mm>/<utc-timestamp>-<id>.json` on every enabled storage target, with the target's lock mode, until January 1 after the entry year plus **Lock Audit Log For (Years)** (Archive Settings, default 10). Actions that write to storage (archive run, archive now, legal hold, extension, deletion, export) write their entry in the same operation, right after its database commit, so a rolled-back action leaves no object behind. A batch job that aborts (error or timeout) still logs the documents it already processed, marked `aborted`. Other entries are written by a background job right after the commit. Nothing is written while archiving is disabled. The database keeps a copy of every entry for the desk and as a retry buffer: an entry that a target could not take stays **Pending**, and the nightly run writes what is missing, also to a target added later.
+
+After archiving, the nightly run compares the database with every bucket: entries changed in the database, objects missing in a bucket, objects with different content, objects in a bucket without a database entry, and entries not written within 24 hours. Any mismatch sends one bell notification per day to the Archive Admins (System Managers if there are none). Entries whose lock has ended are skipped, so a bucket lifecycle rule may remove them (see [docs/hetzner-example.md](docs/hetzner-example.md#7-lifecycle-rule-for-the-audit-log)). docarchive itself never deletes audit objects.
+
+Archive Admins and System Managers can read the log (list **Archive Audit Log**); nobody can create, change or delete an entry in the desk. Each entry links its documents. The Business Document form shows the entries of the document in its **Audit Log** section to everyone who may read the document.
+
+Other apps can add entries:
+
+```python
+from docarchive import audit
+
+audit.log(
+	"mail.discarded",                      # short dotted action
+	"Communication", "COMM-0001",          # optional: the record that triggered the entry
+	details={"count": 2},                  # optional: JSON, no free text or personal data
+	documents=[("Business Document", "DOC-2026-00017", "discarded")],  # (doctype, name, outcome[, reason])
+	write=False,                           # True if the caller writes to storage in the same operation
+)
+```
+
+### Monitoring and completeness
+
+Archive Admins (System Managers if there are none) get a bell notification when:
+
+- an archive attempt fails, in the nightly run or through "Archive now": one notification per run listing the documents, each document at most once a day,
+- the nightly run fails, or leaves eligible documents behind that it neither archived nor recorded as failed (e.g. because another job held the document),
+- the nightly run has not finished for 26 hours (checked daily at 07:30, e.g. when the scheduler or worker is down),
+- documents are ready but not archived for longer than **Overdue After (Hours)** (Archive Settings, default 48),
+- archived documents have fewer copies than there are enabled storage targets,
+- the audit log does not match the storage (see [Audit log](#audit-log)).
+
+Each condition sends at most one notification per user and day (failed documents: one per new document and day), so a broken target does not flood the bell. Nothing is checked while archiving is disabled.
+
+The script report **Archive Completeness** ("Archiv-Vollständigkeit", Archive Admin and System Manager) lists overdue, failed and missing-copy documents with the time since when and the details (first error line, missing targets). With **Show Number Gaps** it also lists missing numbers per type, own company and number prefix (e.g. `RE-2026-002 - RE-2026-003` between `RE-2026-001` and `RE-2026-004`), for types that require a number or for the selected type. A gap is a hint, not an error: numbers can be skipped on purpose, and incoming documents carry the counterparty's numbers. The number card **Archive Problems** shows the count and opens the report; `docarchive.monitoring.problem_count()` gives hosts the same number.
 
 ### Commands
 

@@ -25,10 +25,11 @@ extend_doctype_class = {
 	"Email Queue": ["docarchive.mail.extensions.EmailQueueArchive"],
 }
 scheduler_events = {
-	"cron": {"30 2 * * *": ["docarchive.run.schedule"]},
+	"cron": {"30 2 * * *": ["docarchive.run.schedule"], "30 7 * * *": ["docarchive.monitoring.daily"]},
 	"daily": ["docarchive.mail.cleanup.run", "docarchive.export.expire"],
 }
 has_permission = {"File": "docarchive.guards.file_permission"}
+ignore_links_on_delete = ["Archive Audit Log", "Archive Audit Document"]
 docarchive_assign = ["docarchive.mail.archiving.assign"]
 mailsync_mail_read = ["docarchive.mail.originals.from_mailsync"]
 s3storage_before_file_delete = ["docarchive.guards.protect_file"]

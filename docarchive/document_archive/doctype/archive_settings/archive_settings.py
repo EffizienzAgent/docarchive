@@ -2,7 +2,40 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from docarchive import content, export_package, permissions, storage_targets
+from docarchive import audit, content, export_package, permissions, storage_targets
+
+AUDITED_FIELDS = (
+	"enabled",
+	"min_age_hours",
+	"default_own_company",
+	"successor_own_company",
+	"successor_from_date",
+	"allowed_extensions",
+	"max_future_days",
+	"max_contract_years",
+	"audit_retention_years",
+)
+AUDITED_TABLES = (
+	("retention_rules", ("own_company", "document_type", "years")),
+	(
+		"storage_targets",
+		(
+			"target_name",
+			"enabled",
+			"lock_mode",
+			"config_source",
+			"config_prefix",
+			"endpoint",
+			"region",
+			"bucket",
+			"access_key_config_key",
+			"secret_key_config_key",
+			"admin_access_key_config_key",
+			"admin_secret_key_config_key",
+		),
+	),
+	("manager_roles", ("role",)),
+)
 
 
 class ArchiveSettings(Document):
@@ -16,6 +49,7 @@ class ArchiveSettings(Document):
 
 	def on_update(self):
 		permissions.sync_manager_roles(permissions.roles_of(self))
+		audit.log_settings(self, AUDITED_FIELDS, AUDITED_TABLES)
 
 	def validate_export_brand(self):
 		self.export_brand_color = (self.export_brand_color or "").strip() or None

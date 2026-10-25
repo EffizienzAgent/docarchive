@@ -38,6 +38,11 @@
   "export_brand_logo",
   "export_brand_color",
   "export_show_credit",
+  "audit_section",
+  "audit_retention_years",
+  "monitoring_section",
+  "overdue_hours",
+  "last_run_finished_at",
   "granted_permissions"
  ],
  "fields": [
@@ -212,6 +217,38 @@
    "fieldtype": "Check",
    "label": "Show \"Made with docarchive\"",
    "default": "1"
+  },
+  {
+   "fieldname": "audit_section",
+   "fieldtype": "Section Break",
+   "label": "Audit Log"
+  },
+  {
+   "fieldname": "audit_retention_years",
+   "fieldtype": "Int",
+   "label": "Lock Audit Log For (Years)",
+   "default": "10",
+   "non_negative": 1,
+   "description": "Each audit log entry is stored as a locked object on every enabled storage target for this many years."
+  },
+  {
+   "fieldname": "monitoring_section",
+   "fieldtype": "Section Break",
+   "label": "Monitoring"
+  },
+  {
+   "fieldname": "overdue_hours",
+   "fieldtype": "Int",
+   "label": "Overdue After (Hours)",
+   "default": "48",
+   "non_negative": 1,
+   "description": "Archive Admins are notified about documents that are ready but not archived after this many hours. Empty or 0: 48 hours."
+  },
+  {
+   "fieldname": "last_run_finished_at",
+   "fieldtype": "Datetime",
+   "label": "Last Archive Run Finished",
+   "read_only": 1
   },
   {
    "fieldname": "granted_permissions",

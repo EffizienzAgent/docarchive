@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from botocore.exceptions import ClientError
 
 ARCHIVE, ADMIN = "archive", "admin"
+AUDIT_PREFIX = "_audit/"
 
 
 def error(code, operation):
@@ -44,7 +45,20 @@ class LockedFakeS3:
 		]
 
 	def puts(self):
+		return [kwargs for kwargs in self.all_puts() if not kwargs["Key"].startswith(AUDIT_PREFIX)]
+
+	def audit_puts(self):
+		return [kwargs for kwargs in self.all_puts() if kwargs["Key"].startswith(AUDIT_PREFIX)]
+
+	def all_puts(self):
 		return [kwargs for operation, kwargs in self.calls if operation == "put_object"]
+
+	def object_calls(self):
+		return [
+			(operation, kwargs)
+			for operation, kwargs in self.calls
+			if not kwargs.get("Key", AUDIT_PREFIX).startswith(AUDIT_PREFIX)
+		]
 
 	def latest(self, Bucket, Key, VersionId=None, operation="HeadObject"):
 		versions = self.versions.get((Bucket, Key)) or []
@@ -86,6 +100,15 @@ class LockedFakeS3:
 			"ObjectLockRetainUntilDate": version["ObjectLockRetainUntilDate"],
 			"ObjectLockLegalHoldStatus": version["LegalHold"],
 		}
+
+	def list_objects_v2(self, Bucket, Prefix="", ContinuationToken=None):
+		self.record("list_objects_v2", Bucket=Bucket, Prefix=Prefix)
+		contents = [
+			{"Key": key, "ETag": f'"{hashlib.md5(versions[-1]["Body"]).hexdigest()}"'}
+			for (bucket, key), versions in sorted(self.versions.items())
+			if bucket == Bucket and key.startswith(Prefix) and versions
+		]
+		return {"Contents": contents, "IsTruncated": False}
 
 	def put_object_legal_hold(self, Bucket, Key, LegalHold, VersionId=None):
 		self.record("put_object_legal_hold", Bucket=Bucket, Key=Key, VersionId=VersionId, LegalHold=LegalHold)

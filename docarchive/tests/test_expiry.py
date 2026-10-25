@@ -16,7 +16,11 @@ class ExpiryTestCase(HoldTestCase):
 		super().setUp()
 		frappe.db.delete(LOG)
 		self.queued = []
-		self.enterContext(patch("frappe.enqueue", side_effect=lambda *a, **kw: self.queued.append(kw)))
+		self.enterContext(patch("frappe.enqueue", side_effect=self.enqueue))
+
+	def enqueue(self, *args, **kwargs):
+		if kwargs.get("job_id") != "docarchive-audit-flush":
+			self.queued.append(kwargs)
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
@@ -159,9 +163,9 @@ class TestDeletion(ExpiryTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			frappe.get_doc(DOCUMENT, doc.name).save(ignore_permissions=True)
 		self.fake("secondary").deny = set()
-		primary_calls = len(self.fake("primary").calls)
+		primary_calls = len(self.fake("primary").object_calls())
 		self.assertEqual(self.delete([doc.name]), {doc.name: "Deleted"})
-		self.assertEqual(len(self.fake("primary").calls), primary_calls)
+		self.assertEqual(len(self.fake("primary").object_calls()), primary_calls)
 		self.assertEqual(frappe.db.count(LOG, {"business_document": doc.name}), 1)
 
 	def test_needs_role_confirmation_and_admin_key(self):

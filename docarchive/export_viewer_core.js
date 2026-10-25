@@ -72,7 +72,27 @@ const ViewerCore = (() => {
 		];
 	}
 
-	return { action, escape, move, cycle, typing, control, meta, typeOf, party };
+	function outcomeOf(entry, id) {
+		const row = entry.documents.find((item) => item.id === id) || {};
+		return [row.outcome, row.reason].filter(Boolean).join(": ");
+	}
+
+	function auditRows(entries, filters = {}) {
+		const term = (filters.search || "").trim().toLowerCase();
+		return entries
+			.filter((entry) =>
+				(!filters.action || entry.action === filters.action) &&
+				(!term || [entry.user, entry.action, ...entry.documents.map((row) => row.id)].some((value) => (value || "").toLowerCase().includes(term))))
+			.slice()
+			.sort((a, b) => b.at.localeCompare(a.at));
+	}
+
+	function entriesOf(doc, entries) {
+		const byId = new Map(entries.map((entry) => [entry.id, entry]));
+		return (doc.audit || []).map((id) => byId.get(id)).filter(Boolean).sort((a, b) => b.at.localeCompare(a.at));
+	}
+
+	return { action, escape, move, cycle, typing, control, meta, typeOf, party, outcomeOf, auditRows, entriesOf };
 })();
 
 if (typeof module !== "undefined") module.exports = ViewerCore;

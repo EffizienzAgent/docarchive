@@ -2,6 +2,7 @@ import base64
 import csv
 import email
 import email.policy
+import hashlib
 import html
 import io
 import json
@@ -18,6 +19,8 @@ from docarchive import content, retention, run, settings
 
 VIEWER = Path(__file__).with_name("export_viewer.html")
 VIEWER_CORE = Path(__file__).with_name("export_viewer_core.js")
+DOCUMENT = run.DOCUMENT
+FILTERS = ("own_company", "document_type", "date_from", "date_to", "counterparty_type", "counterparty")
 DATA_MARKER = "/*DOCARCHIVE_DATA*/"
 CORE_MARKER = "/*DOCARCHIVE_CORE*/"
 LOGO_LIMIT = 200 * 1024
@@ -72,23 +75,21 @@ def scope_of(export, number, count) -> dict:
 		"target": export.target_name,
 		"exported_at": run.utc_iso(now_datetime()),
 		"exported_by": export.requested_by,
-		"filters": {
-			field: str(export.get(field)) if export.get(field) else None
-			for field in (
-				"own_company",
-				"document_type",
-				"date_from",
-				"date_to",
-				"counterparty_type",
-				"counterparty",
-			)
-		},
+		"filters": filters_of(export),
 	}
+
+
+def filters_of(export) -> dict:
+	return {field: str(export.get(field)) if export.get(field) else None for field in FILTERS}
 
 
 def archive_path(key) -> str:
 	parts = [part for part in PurePosixPath(key).parts if part not in ("", ".", "..", "/")]
 	return "documents/" + "/".join(parts)
+
+
+def audit_path(key) -> str:
+	return "audit/" + archive_path(key).removeprefix("documents/").removeprefix("_audit/")
 
 
 def preview_path(key) -> str:
@@ -106,6 +107,7 @@ class Package:
 		self.documents = []
 		self.mismatches = []
 		self.pending = {}
+		self.audit = []
 
 	def add_object(self, doc, item, result):
 		entry = self.pending.setdefault(doc.name, {"objects": {}, "metas": {}, "previews": {}})
@@ -152,8 +154,59 @@ class Package:
 		entry = self.pending.pop(doc.name)
 		self.documents.append(document_row(doc, copy, entry))
 
+	def add_audit(self, entry, result):
+		"""Add an audit entry as stored in the bucket.
+
+		result has data (bytes), error, or pending (not written yet: the database copy is included).
+		"""
+		path = audit_path(entry.object_key)
+		data, error = result.get("data"), result.get("error")
+		if data is not None and hashlib.sha256(data).hexdigest() != entry.sha256:
+			error = _("Checksum mismatch")
+		if error is not None:
+			self.mismatches.append(
+				{
+					"document": None,
+					"key": entry.object_key,
+					"expected": entry.sha256,
+					"actual": None,
+					"error": error,
+				}
+			)
+		if data is None or error is not None:
+			data = entry.body.encode()
+		self.zip.writestr(path, data, compress_type=zipfile.ZIP_DEFLATED)
+		stored = json.loads(data)
+		self.audit.append(
+			{
+				"id": stored["id"],
+				"at": stored["at"],
+				"user": stored["user"],
+				"action": stored["action"],
+				"documents": [
+					{"id": row["name"], "outcome": row.get("outcome"), "reason": row.get("reason")}
+					for row in stored.get("documents") or []
+					if row.get("doctype") == DOCUMENT
+				],
+				"path": path,
+				"verified": error is None and not result.get("pending"),
+				"pending": bool(result.get("pending")),
+			}
+		)
+
 	def close(self):
-		data = {"scope": self.scope, "documents": self.documents, "mismatches": self.mismatches}
+		by_document = {}
+		for entry in self.audit:
+			for row in entry["documents"]:
+				by_document.setdefault(row["id"], []).append(entry["id"])
+		for row in self.documents:
+			row["audit"] = by_document.get(row["id"], [])
+		data = {
+			"scope": self.scope,
+			"documents": self.documents,
+			"audit": self.audit,
+			"mismatches": self.mismatches,
+		}
 		manifest = json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True)
 		self.zip.writestr("manifest.json", manifest, compress_type=zipfile.ZIP_DEFLATED)
 		self.zip.writestr("manifest.csv", manifest_csv(self.documents), compress_type=zipfile.ZIP_DEFLATED)
@@ -319,6 +372,19 @@ def labels() -> dict:
 		"status": _("Status"),
 		"yes": _("Yes"),
 		"title_label": _("Title"),
+		"documents_tab": _("Documents"),
+		"audit_tab": _("Audit Log"),
+		"audit_search": _("Search user, action or document"),
+		"all_actions": _("All actions"),
+		"at": _("At"),
+		"user": _("User"),
+		"action": _("Action"),
+		"outcome": _("Outcome"),
+		"entries": _("Entries"),
+		"no_entries": _("No audit entries match the filters."),
+		"not_in_export": _("not in this export"),
+		"stored_entry": _("Stored entry"),
+		"audit_pending": _("Not yet stored under Object Lock"),
 	}
 
 

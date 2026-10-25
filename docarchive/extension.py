@@ -5,7 +5,7 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, now_datetime
 
-from docarchive import permissions, retention, run, settings, store
+from docarchive import audit, permissions, retention, run, settings, store
 
 DOCUMENT = run.DOCUMENT
 EVENT = "docarchive_extension"
@@ -205,6 +205,9 @@ def extend(name: str, how: str, years=None, until=None, reason=None) -> dict:
 		frappe.throw(_("Only archived documents can be extended."), ExtensionError)
 	target = new_until(doc, how, years, until)
 	done = apply(doc, target, reason)
+	audit.log_if_changed(
+		audit.RETENTION_EXTENDED, [(DOCUMENT, doc.name, "extended" if done else "pending")], {"how": how}
+	)
 	return {"done": done, "retain_until": run.utc_iso(target)}
 
 
@@ -246,20 +249,27 @@ def extend_many(
 
 def run_many(names, how, years=None, until=None, reason=None, user=None):
 	result = {"extended": [], "pending": [], "skipped": {}, "failed": {}}
-	for index, name in enumerate(names, 1):
-		try:
-			doc = check(name)
-			target = new_until(doc, how, years, until) if current_until(doc) else None
-			skipped = refusal(doc, target) if target else _("Only archived documents can be extended.")
-			if skipped:
-				result["skipped"][name] = skipped
+	with audit.batch(audit.RETENTION_EXTENDED, {"how": how}) as documents:
+		for index, name in enumerate(names, 1):
+			documents.start(DOCUMENT, name)
+			try:
+				doc = check(name)
+				target = new_until(doc, how, years, until) if current_until(doc) else None
+				skipped = refusal(doc, target) if target else _("Only archived documents can be extended.")
+				outcome = None if skipped else "extended" if apply(doc, target, reason) else "pending"
+				frappe.db.commit()
+			except Exception as error:
+				frappe.db.rollback()
+				result["failed"][name] = run.safe_error(error)
+				documents.done(DOCUMENT, name, "failed", run.reason_code(error))
 			else:
-				result["extended" if apply(doc, target, reason) else "pending"].append(name)
-			frappe.db.commit()
-		except Exception as error:
-			frappe.db.rollback()
-			result["failed"][name] = run.safe_error(error)
-		frappe.publish_realtime(EVENT, {"done": index, "total": len(names)}, user=user)
+				if skipped:
+					result["skipped"][name] = skipped
+					documents.done(DOCUMENT, name, "skipped", "refused")
+				else:
+					result[outcome].append(name)
+					documents.done(DOCUMENT, name, outcome)
+			frappe.publish_realtime(EVENT, {"done": index, "total": len(names)}, user=user)
 	frappe.publish_realtime(EVENT, {"done": len(names), "total": len(names), "result": result}, user=user)
 	return result
 

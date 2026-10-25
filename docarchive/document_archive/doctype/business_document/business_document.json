@@ -83,7 +83,9 @@
   "extension_meta",
   "legal_hold_section",
   "legal_hold_reason",
-  "legal_hold_log"
+  "legal_hold_log",
+  "audit_section",
+  "audit_html"
  ],
  "fields": [
   {
@@ -549,6 +551,18 @@
    "label": "Set Legal Hold When Archiving",
    "read_only_depends_on": "eval:doc.archive_started_at",
    "description": "Every archived object gets a legal hold at upload. It can only be released with the admin key."
+  },
+  {
+   "fieldname": "audit_section",
+   "fieldtype": "Section Break",
+   "label": "Audit Log",
+   "collapsible": 1,
+   "depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "audit_html",
+   "fieldtype": "HTML",
+   "label": "Audit Log"
   }
  ],
  "permissions": [
