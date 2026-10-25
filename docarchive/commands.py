@@ -81,4 +81,18 @@ def extract(context, dry_run=False):
 		sys.exit(1)
 
 
-commands = [run_archive, smoke, sync_mode, extract]
+@click.command("docarchive-demo")
+@pass_context
+def demo(context):
+	"""Create demo data (companies, invoices, a mail thread, an export) on an empty developer site."""
+	frappe = connect(context)
+	from docarchive import demo as demo_data
+
+	try:
+		result = demo_data.seed()
+	finally:
+		frappe.destroy()
+	click.echo(json.dumps(result, indent=1, default=str))
+
+
+commands = [run_archive, smoke, sync_mode, extract, demo]
