@@ -55,23 +55,7 @@ def remove_document(name: str) -> None:
 
 
 def mail_meta(doc) -> dict | None:
-	original = frappe.db.get_value(
-		ORIGINAL,
-		{"business_document": doc.name},
-		[
-			"message_id",
-			"in_reply_to",
-			"mail_references",
-			"sender",
-			"to",
-			"cc",
-			"subject",
-			"date_header",
-			"email_account",
-			"origin",
-		],
-		as_dict=True,
-	)
+	original = _meta_original(doc)
 	if not original:
 		return None
 	meta = {
@@ -89,6 +73,29 @@ def mail_meta(doc) -> dict | None:
 	if original.origin == "frappe-send":
 		meta["note"] = SEND_NOTE
 	return meta
+
+
+def _meta_original(doc):
+	originals = frappe.get_all(
+		ORIGINAL,
+		filters={"business_document": doc.name},
+		fields=[
+			"message_id",
+			"in_reply_to",
+			"mail_references",
+			"sender",
+			"to",
+			"cc",
+			"subject",
+			"date_header",
+			"email_account",
+			"origin",
+			"sha256",
+		],
+		order_by="creation asc, name asc",
+	)
+	match = next((row for row in originals if row.sha256 == doc.get("content_sha256")), None)
+	return match or (originals[0] if originals else None)
 
 
 def assign(doc):

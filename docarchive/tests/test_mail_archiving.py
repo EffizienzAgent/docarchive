@@ -122,6 +122,18 @@ class TestArchive(MailArchivingTestCase):
 			1,
 		)
 
+	def test_mail_meta_uses_original_of_the_archived_file(self):
+		mid = f"<{unique('m')}@example.test>"
+		first = self.capture(eml(**{"Message-ID": mid, "Subject": "First"}))
+		second = self.capture(eml(**{"Message-ID": mid, "Subject": "Second"}))
+		name = archiving.archive(first)
+		archiving.archive(second)
+		frappe.db.set_value("Mail Original", second, "creation", "2020-01-01 00:00:00", update_modified=False)
+		doc = frappe.get_doc(DOCUMENT, name)
+		self.assertEqual(archiving.mail_meta(doc)["subject"], "First")
+		doc.content_sha256 = "0" * 64
+		self.assertEqual(archiving.mail_meta(doc)["subject"], "Second")
+
 	def test_without_message_id_dedupes_by_hash(self):
 		raw = eml().replace(b"Message-ID", b"X-Other")
 		name = archiving.archive(self.capture(raw))
