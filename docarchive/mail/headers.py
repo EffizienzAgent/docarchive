@@ -9,20 +9,24 @@ ANGLE = re.compile(r"<([^<>]*)>")
 BULK_PRECEDENCE = {"bulk", "list", "junk"}
 
 
-def parse(raw: bytes) -> frappe._dict:
+def message_from(raw: bytes):
 	try:
-		message = email.message_from_bytes(raw, policy=email.policy.default)
+		return email.message_from_bytes(raw, policy=email.policy.default)
 	except Exception:
-		message = email.message.EmailMessage()
+		return email.message.EmailMessage()
+
+
+def parse(raw: bytes) -> frappe._dict:
+	message = message_from(raw)
 	return frappe._dict(
-		message_id=(_ids(_header(message, "Message-ID")) or [""])[0],
-		in_reply_to=(_ids(_header(message, "In-Reply-To")) or [""])[0],
-		references=_ids(_header(message, "References")),
-		sender=_addresses(_header(message, "From")),
-		to=_addresses(_header(message, "To")),
-		cc=_addresses(_header(message, "Cc")),
-		subject=_header(message, "Subject"),
-		date_header=_header(message, "Date"),
+		message_id=(ids(header(message, "Message-ID")) or [""])[0],
+		in_reply_to=(ids(header(message, "In-Reply-To")) or [""])[0],
+		references=ids(header(message, "References")),
+		sender=_addresses(header(message, "From")),
+		to=_addresses(header(message, "To")),
+		cc=_addresses(header(message, "Cc")),
+		subject=header(message, "Subject"),
+		date_header=header(message, "Date"),
 		automated=_automated(message),
 	)
 
@@ -42,22 +46,22 @@ def _addresses(value) -> str:
 	return ", ".join(address for _, address in getaddresses([value]) if address)
 
 
-def _header(message, name) -> str:
+def header(message, name) -> str:
 	try:
 		return " ".join(str(message[name] or "").split())
 	except Exception:
 		return ""
 
 
-def _ids(value) -> list[str]:
+def ids(value) -> list[str]:
 	found = ANGLE.findall(value or "")
 	return [i.strip() for i in found if i.strip()] or ([value.strip()] if value and value.strip() else [])
 
 
 def _automated(message) -> bool:
-	auto_submitted = _header(message, "Auto-Submitted").lower()
+	auto_submitted = header(message, "Auto-Submitted").lower()
 	return bool(
-		_header(message, "List-Unsubscribe")
+		header(message, "List-Unsubscribe")
 		or auto_submitted not in ("", "no")
-		or _header(message, "Precedence").lower() in BULK_PRECEDENCE
+		or header(message, "Precedence").lower() in BULK_PRECEDENCE
 	)
