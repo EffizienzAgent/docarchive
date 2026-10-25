@@ -9,9 +9,12 @@ from docarchive import settings
 CONTRACT_END = "Contract End Date"
 
 
+def counts_from_contract_end(doc) -> bool:
+	return frappe.db.get_value("Business Document Type", doc.document_type, "retention_from") == CONTRACT_END
+
+
 def start_date(doc):
-	counts_from = frappe.db.get_value("Business Document Type", doc.document_type, "retention_from")
-	if counts_from == CONTRACT_END and doc.contract_end_date:
+	if counts_from_contract_end(doc) and doc.contract_end_date:
 		return getdate(doc.contract_end_date)
 	return getdate(doc.document_date)
 

@@ -237,3 +237,41 @@ All documents processed.,Alle Dokumente bearbeitet.
 Nothing to assign.,Nichts zuzuordnen.
 Assign,Zuordnen
 Assign all,Alle zuordnen
+Add years,Jahre hinzufügen
+An extension of this document is still running. Please try again after the nightly run.,Für dieses Dokument läuft noch eine Verlängerung. Bitte nach dem nächtlichen Lauf erneut versuchen.
+At least N years from the retention start,Mindestens N Jahre ab Beginn der Aufbewahrung
+Choose between 1 and {0} years.,Bitte zwischen 1 und {0} Jahren wählen.
+Choose how to extend the retention.,"Bitte wählen, wie die Aufbewahrung verlängert wird."
+Current,Bisher
+Ends within (months),Endet innerhalb von (Monaten)
+Extend,Verlängern
+Extend all documents of this counterparty,Alle Dokumente dieser Gegenpartei verlängern
+Extend retention,Aufbewahrungsfrist verlängern
+Extension started.,Verlängerung gestartet.
+Failed Copies,Fehlgeschlagene Kopien
+Kept until: any year,Aufbewahrt bis: alle Jahre
+Kept until {0},Aufbewahrt bis {0}
+New,Neu
+New date,Neues Datum
+Only archived documents can be extended.,Nur archivierte Dokumente können verlängert werden.
+Only document managers can extend the retention.,Nur die Dokumentenverwaltung kann die Aufbewahrung verlängern.
+Only failed copies,Nur fehlgeschlagene Kopien
+Preview,Vorschau
+Reason,Grund
+Sort by,Sortieren nach
+The extension is not finished on every target yet. The nightly run retries it.,Die Verlängerung ist noch nicht auf allen Speicherzielen fertig. Der nächtliche Lauf versucht es erneut.
+The new date must be later than the current retention ({0}).,Das neue Datum muss nach der bisherigen Aufbewahrung ({0}) liegen.
+The retention cannot be shortened afterwards.,Die Frist kann danach nicht mehr verkürzt werden.
+This document is being archived right now. Please try again later.,Dieses Dokument wird gerade archiviert. Bitte später erneut versuchen.
+Until a date,Bis zu einem Datum
+Year,Jahr
+Kept until {0}.,Aufbewahrt bis {0}.
+Extend {0} documents,{0} Dokumente verlängern
+"{0} documents will be extended, {1} are skipped.","{0} Dokumente werden verlängert, {1} werden übersprungen."
+Extended: {0},Verlängert: {0}
+Still running on some targets: {0},Auf einigen Speicherzielen noch offen: {0}
+Skipped: {0},Übersprungen: {0}
+Failed: {0},Fehlgeschlagen: {0}
+The retention is being extended to {0}.,Die Aufbewahrung wird auf {0} verlängert.
+Retention Overview,Aufbewahrung
+Retention ends in 90 days,Fristen enden in 90 Tagen

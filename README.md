@@ -190,6 +190,16 @@ After archiving starts, the contract end date can be set for the first time or m
 
 Each extension also writes a sidecar `<key>.meta.<n>.json` (n = 2, 3, …) to every target, locked with the new date and the copy's mode. It holds the metadata with the new retention, the extension (previous and new date, contract end, time) and the earlier extensions, so the newest sidecar carries the whole trail. The original `.meta.json` is never rewritten: Object Lock versions are immutable, and a second version under the same key would hide the first. The sidecar content is frozen before the first write, so a retry writes the same bytes, and a contract end that moves again in the meantime leads to the next extension. Before extending, the run checks the SHA-256 of the exact object version it recorded.
 
+### Manual extension
+
+Document managers can extend the retention of archived documents by hand: "Extend retention" on the form (add N years or pick a date), "Extend retention" in the Business Document list and "Extend all documents of this counterparty" in the panel (at least N years from the retention start, so each document gets the later of its current date and start + N years, or a fixed date). Bulk extensions show a preview with the current and new date per document and the skipped ones, then run as a background job with progress and a summary.
+
+The server refuses any date that is not later than every archived copy's current date and never shortens. A manual extension uses the same path as the contract end extension above: `extend_locked` per copy, a locked `.meta.<n>.json` sidecar, per-target status, and the nightly run retries targets that failed. The extension entry also records who extended, when and why (optional reason). While one extension is still running on a document, a new one is refused. The endpoints in `docarchive.extension` are POST only and check the manager role and write access.
+
+### Retention overview
+
+The Business Document list and the counterparty panel show `retain_until`; the panel filters and sorts by it. The report "Retention Overview" lists archived documents with a chart by retain-until year and filters for type, own company, counterparty, lock mode, "ends within N months" and failed copies. The number card "Retention ends in 90 days" and `docarchive.extension.count_ending(days)` give hosts a count to show.
+
 ### Object Lock writes
 
 `docarchive.store.put_locked(target, key, body, mode, retain_until)` is the only code that calls `PutObject`. Before any request it checks that the mode is `GOVERNANCE` or `COMPLIANCE` and that `retain_until` is a timezone-aware datetime in the future. It always sends `ObjectLockMode`, `ObjectLockRetainUntilDate`, `ContentMD5` and the SHA-256 as object metadata. `docarchive.store.extend_locked` is the only code that calls `PutObjectRetention`; see the retention extension above. A test parses the app's source: each S3 client method may be used in exactly one function of `store.py`, copy, multipart, presigned URL, legal hold and policy calls are banned, `BypassGovernanceRetention` is only allowed in the smoke check, and only `store.py` may import boto3, botocore or `s3storage.client`.

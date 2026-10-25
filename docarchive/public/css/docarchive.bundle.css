@@ -117,3 +117,12 @@
 	font-weight: 600;
 	word-break: break-all;
 }
+
+.docarchive-body {
+	overflow-x: auto;
+}
+
+.docarchive-extension-preview {
+	max-height: 50vh;
+	overflow-y: auto;
+}

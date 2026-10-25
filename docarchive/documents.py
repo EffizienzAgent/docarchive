@@ -1,7 +1,7 @@
 import frappe
 from frappe.utils import today
 
-from docarchive import settings, storage_targets
+from docarchive import extension, settings, storage_targets
 from docarchive.document_archive.doctype.business_document.business_document import missing_fields
 
 DOCUMENT = "Business Document"
@@ -45,6 +45,7 @@ def counterparty_panel(counterparty_type: str, counterparty: str) -> dict:
 		"can_create": bool(frappe.has_permission(DOCUMENT, "create")),
 		"can_write": bool(frappe.has_permission(DOCUMENT, "write")),
 		"archiving": archiving_on(),
+		"can_extend": extension.is_manager() and bool(frappe.has_permission(DOCUMENT, "write")),
 	}
 	if not frappe.has_permission(DOCUMENT, "read"):
 		return panel
