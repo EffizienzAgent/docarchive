@@ -116,4 +116,11 @@
 .docarchive-triage-file {
 	font-weight: 600;
 	word-break: break-all;
+
+.docarchive-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin: 0;
+	font-size: var(--text-sm);
 }

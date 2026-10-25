@@ -41,7 +41,10 @@ export function date_from_file_name(file_name, today = new Date()) {
 	return { date: null, title: title_from_text(base) };
 }
 
+export const DELETED = "Deleted";
+
 export function document_state(doc) {
+	if (doc.archive_status === DELETED) return "deleted";
 	if (doc.archive_status === "Archived") return "archived";
 	if (doc.archive_status === "Failed") return "failed";
 	return doc.missing && doc.missing.length ? "open" : "complete";
@@ -53,6 +56,7 @@ export function filter_documents(docs, filters = {}) {
 	const query = (filters.search || "").trim().toLowerCase();
 	const rows = docs.filter(
 		(doc) =>
+			(filters.show_deleted || doc.archive_status !== DELETED) &&
 			(!query ||
 				`${doc.title || ""} ${doc.document_number || ""}`.toLowerCase().includes(query)) &&
 			(!filters.document_type || doc.document_type === filters.document_type) &&
@@ -76,17 +80,21 @@ export function filter_options(docs) {
 export const filter_key = (counterparty_type, counterparty) =>
 	`docarchive.filters:${counterparty_type}:${counterparty}`;
 
-export function load_filters(storage, key) {
+const is_plain_object = (value) =>
+	value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype;
+
+export function load_filters(get_storage, key) {
 	try {
-		return JSON.parse(storage.getItem(key)) || {};
+		const value = JSON.parse(get_storage().getItem(key));
+		return is_plain_object(value) ? value : {};
 	} catch {
 		return {};
 	}
 }
 
-export function save_filters(storage, key, filters) {
+export function save_filters(get_storage, key, filters) {
 	try {
-		storage.setItem(key, JSON.stringify(filters));
+		get_storage().setItem(key, JSON.stringify(filters));
 	} catch {
 		// storage can be unavailable or full
 	}
