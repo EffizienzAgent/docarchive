@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.8.0](https://github.com/EffizienzAgent/docarchive/compare/v0.7.0...v0.8.0) (2026-10-25)
+
+
+### Features
+
+* **audit log:** one entry per archive event (archive runs, legal holds, retention extensions, deletions, exports, settings), each written as its own Object Lock object; nightly reconciliation of database and buckets with a bell notification; audit entries per document in the desk and in the export viewer ([#33](https://github.com/EffizienzAgent/docarchive/pull/33)) ([e3e95f1](https://github.com/EffizienzAgent/docarchive/commit/e3e95f15c5acd64924cd9e851ba9bb4c5082d4cd))
+* **monitoring:** bell notifications for failed archive attempts, failed or incomplete nightly runs, missed runs, overdue documents and missing copies; "Archive Completeness" report with optional number gaps and an "Archive Problems" number card ([#35](https://github.com/EffizienzAgent/docarchive/pull/35)) ([c673a6e](https://github.com/EffizienzAgent/docarchive/commit/c673a6ebea8b16bb7e5c0847cc29c10235bf1812))
+* **correspondence:** mail originals are stored in a background job instead of inside the mail receive, send and mailsync jobs; failed originals are retried, never aged out, and shown in Archive Completeness ([#38](https://github.com/EffizienzAgent/docarchive/pull/38)) ([e6d87fe](https://github.com/EffizienzAgent/docarchive/commit/e6d87fe4fcb55f8733da8b83f0db854a5d011d6e))
+* `bench docarchive-demo` seeds demo data; screenshots in the README ([#37](https://github.com/EffizienzAgent/docarchive/pull/37)) ([adb8ebf](https://github.com/EffizienzAgent/docarchive/commit/adb8ebf39791bcf69571f92c658205b3249dd379))
+
+
+### Bug Fixes
+
+* **correspondence:** the nightly run archives correspondence documents again; the documents panel no longer reports channel and direction as missing ([#38](https://github.com/EffizienzAgent/docarchive/pull/38)) ([f89b3fd](https://github.com/EffizienzAgent/docarchive/commit/f89b3fd1737edac70a8c3cf071813576906e34ac))
+* **correspondence:** sent mails are rebuilt only within an hour of sending, and the rebuild time is recorded ([#38](https://github.com/EffizienzAgent/docarchive/pull/38)) ([28476cb](https://github.com/EffizienzAgent/docarchive/commit/28476cb454ebae0b8c814888589496a2739b89d4))
+* **correspondence:** deleting a Communication never fails because of its mail original ([#38](https://github.com/EffizienzAgent/docarchive/pull/38)) ([2078ec0](https://github.com/EffizienzAgent/docarchive/commit/2078ec0bffa82ac68339ed17ef4fedf8273b9255))
+* **correspondence:** migrate only marks the app's own or unused Correspondence types ([#38](https://github.com/EffizienzAgent/docarchive/pull/38)) ([9d2b587](https://github.com/EffizienzAgent/docarchive/commit/9d2b587d8a45024fd7f9feb72a243467dc35f1e3))
+* **correspondence:** thread gaps reveal Communications only to readers; the viewer caps inlined images ([#38](https://github.com/EffizienzAgent/docarchive/pull/38)) ([00ce4f6](https://github.com/EffizienzAgent/docarchive/commit/00ce4f6be4f9caa2a6da3fa573b9efb44c386725), [68b7b8c](https://github.com/EffizienzAgent/docarchive/commit/68b7b8c303ffb3fe1699599615fdb0c3b3711c51))
+
+
+### Documentation
+
+* feature overview at the top of the README ([#36](https://github.com/EffizienzAgent/docarchive/pull/36)) ([fb74ed9](https://github.com/EffizienzAgent/docarchive/commit/fb74ed9faf6640eca00b099fd41c51860ac1b46a))
+
 ## [0.7.0](https://github.com/EffizienzAgent/docarchive/compare/v0.6.0...v0.7.0) (2026-10-25)
 
 
