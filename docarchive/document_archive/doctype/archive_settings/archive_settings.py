@@ -31,8 +31,8 @@ class ArchiveSettings(Document):
 		for row in self.mail_accounts:
 			if row.email_account in seen:
 				frappe.throw(_("E-mail account {0} is listed more than once.").format(row.email_account))
-			if (row.keep_days or 0) < 0:
-				frappe.throw(_("Keep days must not be negative."))
+			if (row.keep_days or 0) < 1:
+				frappe.throw(_("Keep days must be at least 1."))
 			self.validate_sent_folder(row)
 			seen.add(row.email_account)
 

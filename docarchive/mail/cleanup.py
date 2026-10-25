@@ -7,17 +7,34 @@ ORIGINAL = "Mail Original"
 DOCUMENT = "Business Document"
 TYPE = "Business Document Type"
 SAVEPOINT = "docarchive_mail_cleanup"
+DEFAULT_KEEP_DAYS = 90
 
 
 def run() -> dict:
 	result = {"originals": 0, "documents": 0}
-	for row in frappe.get_single("Archive Settings").mail_accounts:
-		if row.mode == "Off" or not row.email_account or not row.keep_days:
-			continue
-		cutoff = add_days(now_datetime(), -row.keep_days)
-		result["originals"] += _remove(_old_originals(row.email_account, cutoff), _remove_original)
-		result["documents"] += _remove(_old_documents(row.email_account, cutoff), _remove_document)
+	keep = {row.email_account: row.keep_days for row in frappe.get_single("Archive Settings").mail_accounts}
+	for account in _accounts():
+		cutoff = add_days(now_datetime(), -(keep.get(account) or DEFAULT_KEEP_DAYS))
+		result["originals"] += _remove(_old_originals(account, cutoff), _remove_original)
+		result["documents"] += _remove(_old_documents(account, cutoff), _remove_document)
 	return result
+
+
+def _accounts():
+	originals = frappe.get_all(
+		ORIGINAL, filters={"email_account": ("is", "set")}, pluck="email_account", distinct=True
+	)
+	documents = frappe.get_all(
+		DOCUMENT,
+		filters={
+			"source_doctype": "Communication",
+			"source_account": ("is", "set"),
+			"archive_started_at": ("is", "not set"),
+		},
+		pluck="source_account",
+		distinct=True,
+	)
+	return sorted(set(originals) | set(documents))
 
 
 def _old_originals(email_account, cutoff):

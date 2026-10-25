@@ -38,6 +38,12 @@ class TestMailAccounts(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			settings.save(ignore_permissions=True)
 
+	def test_keep_days_must_be_positive(self):
+		for days in (0, -1):
+			with self.assertRaises(frappe.ValidationError):
+				make_mail_settings(self.account, mode="Manual", keep_days=days)
+		self.assertEqual(make_mail_settings(self.account, mode="Manual", keep_days=1).keep_days, 1)
+
 	def test_sent_folder_requires_imap(self):
 		with self.assertRaises(frappe.ValidationError):
 			make_mail_settings(self.account, mode="Manual", outgoing_source="Sent Folder")

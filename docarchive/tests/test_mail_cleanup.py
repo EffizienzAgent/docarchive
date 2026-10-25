@@ -116,11 +116,23 @@ class TestCleanup(MailArchivingTestCase):
 		self.assertTrue(frappe.db.exists(DOCUMENT, name))
 		self.assertTrue(frappe.db.exists(ORIGINAL, original))
 
-	def test_account_off_is_skipped(self):
-		original = self.original()
-		self.configure(mode="Off")
-		self.assertEqual(cleanup.run(), {"originals": 0, "documents": 0})
-		self.assertTrue(frappe.db.exists(ORIGINAL, original))
+	def test_account_off_still_expires_originals(self):
+		old, recent = self.original(days=31), self.original(days=29)
+		self.configure(mode="Off", keep_days=30)
+		self.assertEqual(cleanup.run(), {"originals": 1, "documents": 0})
+		self.assertFalse(frappe.db.exists(ORIGINAL, old))
+		self.assertTrue(frappe.db.exists(ORIGINAL, recent))
+
+	def test_removed_row_expires_with_default(self):
+		old, recent = self.original(days=91), self.original(days=89)
+		name, _ = self.archived()
+		settings = frappe.get_single("Archive Settings")
+		settings.set("mail_accounts", [])
+		settings.save(ignore_permissions=True)
+		self.assertEqual(cleanup.run(), {"originals": 1, "documents": 1})
+		self.assertFalse(frappe.db.exists(ORIGINAL, old))
+		self.assertTrue(frappe.db.exists(ORIGINAL, recent))
+		self.assertFalse(frappe.db.exists(DOCUMENT, name))
 
 	def test_original_without_communication_deleted(self):
 		original = self.original()

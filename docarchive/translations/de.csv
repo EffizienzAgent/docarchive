@@ -227,7 +227,7 @@ Incoming,Eingehend
 Internal,Intern
 Internal Domains,Interne Domains
 Keep Unarchived Originals (Days),Nicht archivierte Originale aufbewahren (Tage)
-Keep days must not be negative.,Die Aufbewahrungstage dürfen nicht negativ sein.
+Keep days must be at least 1.,Die Aufbewahrungstage müssen mindestens 1 betragen.
 Mail Original,E-Mail-Original
 Mail Time,E-Mail-Zeitpunkt
 Manual,Manuell
