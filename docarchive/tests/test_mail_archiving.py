@@ -50,6 +50,7 @@ def address(prefix="client", domain="example.test"):
 class MailArchivingTestCase(IntegrationTestCase):
 	def setUp(self):
 		store_mail_inline(self)
+		self.enterContext(self.patch_hooks({"docarchive_counterparty_doctypes": []}))
 		self.company = make_own_company().name
 		make_settings(default_own_company=self.company)
 		self.account = make_email_account().name

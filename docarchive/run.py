@@ -250,6 +250,7 @@ def archive_locked(name, targets, outcomes) -> str:
 		doc.archive_error = safe_error(e)
 		doc.flags.audit_reason = reason_code(e)
 		log(doc, None, doc.archive_error)
+	doc.archive_queued_at = None
 	status = finish(doc, targets)
 	if status == ARCHIVED:
 		outcomes[name] = ("archived_with_hold" if doc.legal_hold and not held_before else "archived", None)
@@ -482,6 +483,7 @@ def store_result(doc) -> bool:
 			"archive_status": doc.archive_status,
 			"archive_attempts": doc.archive_attempts,
 			"archive_error": doc.archive_error,
+			"archive_queued_at": None,
 		},
 		update_modified=False,
 	)

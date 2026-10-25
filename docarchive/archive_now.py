@@ -2,6 +2,7 @@ import hashlib
 
 import frappe
 from frappe import _
+from frappe.utils import now_datetime
 
 from docarchive import audit, monitoring, retention, run, settings, store
 from docarchive.document_archive.doctype.business_document.business_document import missing_fields
@@ -69,6 +70,8 @@ def archive_now(names) -> dict:
 	if refused and not (queued or started):
 		frappe.throw("\n".join(f"{name}: {reason}" for name, reason in refused.items()))
 	if queued:
+		for name in queued:
+			frappe.db.set_value(DOCUMENT, name, "archive_queued_at", now_datetime(), update_modified=False)
 		frappe.enqueue(
 			"docarchive.archive_now.run_job",
 			queue="long",
@@ -95,6 +98,7 @@ def run_job(names, user=None):
 			):
 				status = doc.archive_status
 				outcomes[name] = ("skipped", skip_reason(doc, targets))
+				frappe.db.set_value(DOCUMENT, name, "archive_queued_at", None, update_modified=False)
 			else:
 				status = run.archive_document(name, targets, outcomes)
 			documents.done(DOCUMENT, name, *outcomes[name])

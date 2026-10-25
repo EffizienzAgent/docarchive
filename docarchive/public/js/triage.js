@@ -314,6 +314,18 @@ function pick(values) {
 	return Object.fromEntries(FIELDS.map((field) => [field, values?.[field] ?? null]));
 }
 
+docarchive.show_file = function (file, file_name) {
+	if (preview_kind(file) === "other") return false;
+	const dialog = new frappe.ui.Dialog({
+		title: file_name || file.split(/[?#]/)[0].split("/").pop(),
+		size: "extra-large",
+		fields: [{ fieldname: "file", fieldtype: "HTML" }],
+	});
+	dialog.fields_dict.file.$wrapper.html(preview_html({ file, file_name }));
+	dialog.show();
+	return true;
+};
+
 docarchive.triage = function (names, options = {}) {
 	if (!names?.length) {
 		frappe.show_alert({ message: __("Nothing to assign."), indicator: "green" });

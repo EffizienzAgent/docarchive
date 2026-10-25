@@ -69,6 +69,8 @@ Pending,Ausstehend
 Archived,Archiviert
 Failed,Fehlgeschlagen
 Archive Started At,Archivierung begonnen am
+Archiving Queued At,Archivierung angestoßen am
+Archiving,Wird archiviert
 Archived At,Archiviert am
 Archive Attempts,Archivierungsversuche
 Archive Error,Archivfehler

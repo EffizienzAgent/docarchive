@@ -36,6 +36,7 @@ PROTECTED_FIELDS = (
 	"filing_reason",
 	"archive_status",
 	"archive_started_at",
+	"archive_queued_at",
 	"archived_at",
 	"archive_attempts",
 	"archive_error",

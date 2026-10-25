@@ -188,8 +188,8 @@ function thread_row(item) {
 				? `<button class="btn btn-xs btn-default" data-show-mail="${esc(item.name)}">${esc(__("Show e-mail"))}</button>`
 				: "";
 		return `<tr>
-			<td class="docarchive-nowrap">${esc(item.at ? frappe.datetime.str_to_user(item.at) : "")}</td>
-			<td class="docarchive-nowrap">${esc(direction)}</td>
+			<td class="docarchive-nowrap docarchive-thread-meta">${esc(item.at ? frappe.datetime.str_to_user(item.at) : "")}</td>
+			<td class="docarchive-nowrap docarchive-thread-meta">${esc(direction)}</td>
 			<td>${esc(item.sender)}</td>
 			<td><a href="${esc(frappe.utils.get_form_link(DOCUMENT, item.name))}">${esc(item.title || item.name)}</a></td>
 			<td class="docarchive-actions">${show}</td>
@@ -201,9 +201,9 @@ function thread_row(item) {
 			? `<button class="btn btn-xs btn-default" data-archive="${esc(item.communication)}">${esc(__("Archive"))}</button>`
 			: "";
 	return `<tr class="docarchive-gap">
-		<td colspan="2"><span class="indicator-pill orange">${esc(__("Gap"))}</span></td>
-		<td>${gap_state(item)}</td>
-		<td class="text-muted">${esc(item.message_id)}</td>
+		<td colspan="2" class="docarchive-thread-meta"><span class="indicator-pill orange">${esc(__("Gap"))}</span></td>
+		<td class="docarchive-thread-meta">${gap_state(item)}</td>
+		<td class="text-muted docarchive-thread-id">${esc(item.message_id)}</td>
 		<td class="docarchive-actions">
 			${archive}
 			${
@@ -218,7 +218,7 @@ function thread_row(item) {
 function thread_html(items) {
 	if (!items.length) return `<p class="text-muted">${esc(__("This document has no thread."))}</p>`;
 	const headers = [__("Date"), __("Direction"), __("Sender or recipient"), __("Subject"), ""];
-	return `<table class="table table-condensed docarchive-table">
+	return `<table class="table table-condensed docarchive-table docarchive-thread">
 		<thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>
 		<tbody>${items.map(thread_row).join("")}</tbody>
 	</table>`;
