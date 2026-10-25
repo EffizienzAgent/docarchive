@@ -111,6 +111,19 @@ function file_attachment(name, source, file) {
 		.catch(() => frappe.msgprint(__("The attachment could not be loaded.")));
 }
 
+docarchive.mail_element = function (name) {
+	return frappe.xcall(`${VIEWER}.render`, { name }).then((mail) => {
+		const $element = $(`<div class="docarchive-mail-preview">${headers_html(mail)}${
+			mail.html
+				? `<iframe class="docarchive-mail-body" sandbox="" referrerpolicy="no-referrer"
+					title="${esc(__("E-mail"))}"></iframe>`
+				: `<pre class="docarchive-mail-text">${esc(mail.text || "")}</pre>`
+		}</div>`);
+		if (mail.html) $element.find("iframe")[0].srcdoc = core.mail_document(mail.html, false);
+		return $element[0];
+	});
+};
+
 docarchive.set_archive_headline = function (frm, state) {
 	const { html, color } = core.archive_headline(state, {
 		link: doc_link,

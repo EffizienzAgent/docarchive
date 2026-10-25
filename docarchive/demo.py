@@ -5,6 +5,7 @@ legal holds, extensions, audit entries and an export work without real S3 creden
 The site keeps the database state; the in-memory objects are gone afterwards.
 """
 
+import html
 import io
 import uuid
 from email.message import EmailMessage
@@ -335,6 +336,8 @@ class Demo:
 				msg["In-Reply-To"] = references.split()[-1]
 				msg["References"] = references
 			msg.set_content(body)
+			if references:
+				with_signature_logo(msg, body)
 			original = mail.capture(comm, msg.as_bytes(), "demo")
 			if not original:
 				frappe.throw(
@@ -349,6 +352,30 @@ class Demo:
 
 	def export(self):
 		return export.run_export(export.start_export({"own_company": self.company}))
+
+
+def with_signature_logo(msg, body):
+	"""HTML alternative with an inline logo, as Apple Mail sends it (multipart/related, cid:)."""
+	paragraphs = "".join(f"<p>{html.escape(line)}</p>" for line in body.split("\n\n"))
+	msg.add_alternative(
+		f'<html><body>{paragraphs}<p><img src="cid:logo@kranich" alt="Kranich Logistik" width="160"></p></body></html>',
+		subtype="html",
+	)
+	msg.get_payload()[1].add_related(logo_png(), "image", "png", cid="<logo@kranich>", filename="logo.png")
+
+
+def logo_png() -> bytes:
+	from PIL import Image, ImageDraw, ImageFont
+
+	image = Image.new("RGB", (320, 80), "#0b3d91")
+	try:
+		font = ImageFont.truetype("DejaVuSans-Bold.ttf", 34)
+	except OSError:
+		font = ImageFont.load_default(size=34)
+	ImageDraw.Draw(image).text((20, 18), "KRANICH", font=font, fill="white")
+	out = io.BytesIO()
+	image.save(out, "PNG", optimize=True)
+	return out.getvalue()
 
 
 def by_number(number) -> str:

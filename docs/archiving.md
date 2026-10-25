@@ -19,12 +19,12 @@ Each target has its own row under **Archive Copies** with its status, lock mode,
 ## Object keys
 
 ```
-<own-company>/<year>/<type-slug>/<counterparty-id>/<date>_<number>_<document-id>.<ext>
+<own-company>/<year>/<type-slug>/<counterparty-id>/<document-id>_<date>_<number or title>.<ext>
 <same key without extension>__att-<n>-<title>.<ext>
 <same key>.meta.json
 ```
 
-For example `acme-gmbh/2026/outgoing-invoice/cust-0042/2026-03-15_inv-2026-017_doc-2026-00017.pdf`. Each segment is lowercased and transliterated, and every character other than `a-z` and `0-9` becomes a hyphen. A document without a counterparty goes to `ohne-gegenpartei`, one without a number gets `ohne-nummer`. An attachment goes next to the main file, numbered in table order and named after its title (or its role), e.g. `…_doc-2026-00017__att-1-timesheet-march.pdf`. The key only uses fields that are locked once archiving starts, and attachment keys are stored at archive start, so a retry always writes the same keys.
+For example `acme-gmbh/2026/outgoing-invoice/cust-0042/DOC-2026-00017_2026-03-15_INV-2026-017.pdf` or, for a mail without a number, `acme-gmbh/2026/correspondence/cust-0042/DOC-2026-00014_2026-06-04_re-anfrage-zusatzlager-juli.eml`. Files sort by document ID, which also keeps every key unique. The document ID and the number keep their case; other characters than letters, digits, `.` and `-` become a hyphen. Without a number the title is used, lowercased, transliterated and cut to 60 characters; without either the name is just ID and date. The folders are lowercased and transliterated, and a document without a counterparty goes to `ohne-gegenpartei`. An attachment goes next to the main file, numbered in table order and named after its title (or its role), e.g. `…_INV-2026-017__att-1-timesheet-march.pdf`. The key is computed once at archive start from fields that are locked from then on and the title at that moment, and stored with the attachment keys, so a retry always writes the same keys. Documents archived under the older scheme keep their keys (`<date>_<number>_<document-id>`); everything that works on archived objects uses the stored keys.
 
 The `.meta.json` holds the document data (ID, title, type, date, number, contract end, own company), the counterparty, the main file (`file`), every file in `files` (main file and attachments, each with key, name, role, SHA-256 and size, so the set is provable), the source fields (including the optional source record `source_doctype` / `source_name`), and the retention (counts from, start date, years, retain-until date, mode). It is frozen at archive start (`archive_meta`), so retries write the same bytes.
 

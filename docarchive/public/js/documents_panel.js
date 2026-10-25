@@ -573,10 +573,16 @@ class DocumentsPanel {
 		$preview.html(`${core.preview_header(doc, { t: __, esc, value: preview_value, actions })}
 			<div class="docarchive-preview-tabs" role="tablist">${tabs}</div>
 			<div class="docarchive-preview-stage"></div>`);
-		this.render_stage($preview.find(".docarchive-preview-stage"), current);
+		this.render_stage($preview.find(".docarchive-preview-stage"), current, doc);
 	}
 
-	render_stage($stage, current) {
+	eml_preview(url, name, doc) {
+		if (typeof docarchive.eml_preview === "function") return docarchive.eml_preview(url, name);
+		if (url === doc.file) return docarchive.mail_element(doc.name);
+		return null;
+	}
+
+	render_stage($stage, current, doc) {
 		const request = (this.preview_request = {});
 		if (!current) return $stage.html(this.stage_message(__("No file")));
 		const url = current.file;
@@ -587,6 +593,17 @@ class DocumentsPanel {
 		}
 		if (kind === "image") {
 			return $stage.html(`<img class="docarchive-preview-image" src="${esc(url)}" alt="${esc(name)}">`);
+		}
+		const eml = docarchive.mail_core.is_eml(url) && this.eml_preview(url, name, doc);
+		if (eml) {
+			$stage.html(this.stage_message(__("Loading preview...")));
+			return Promise.resolve(eml)
+				.then((element) => {
+					if (request !== this.preview_request) return;
+					$(element).addClass("docarchive-preview-mail");
+					$stage.empty().append(element);
+				})
+				.catch(() => request === this.preview_request && $stage.html(this.download(url, name)));
 		}
 		if (kind === "html" && typeof docarchive.html_preview === "function") {
 			$stage.html(this.stage_message(__("Loading preview...")));

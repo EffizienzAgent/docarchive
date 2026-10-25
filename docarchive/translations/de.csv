@@ -707,3 +707,4 @@ File later e-mails of a filed thread automatically,Folge-E-Mails eines abgelegte
 Archive Reason,Ablagegrund
 Filed automatically because the thread is filed,"Automatisch abgelegt, weil der Verlauf abgelegt ist"
 Archive {0} more e-mails of this thread,{0} weitere E-Mails dieses Verlaufs ablegen
+The browser blocked the download. The mail is in the package at {0}.,Der Browser hat den Download blockiert. Die E-Mail liegt im Paket unter {0}.

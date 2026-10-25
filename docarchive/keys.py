@@ -3,7 +3,6 @@ import re
 import unicodedata
 
 NO_COUNTERPARTY = "ohne-gegenpartei"
-NO_NUMBER = "ohne-nummer"
 MAX_SEGMENT = 80
 UMLAUTS = str.maketrans(
 	{
@@ -21,6 +20,8 @@ UMLAUTS = str.maketrans(
 	}
 )
 UNSAFE = re.compile(r"[^a-z0-9]+")
+KEEP_CASE_UNSAFE = re.compile(r"[^A-Za-z0-9.-]+")
+MAX_TITLE = 60
 
 
 def slug(text, fallback="x"):
@@ -29,9 +30,22 @@ def slug(text, fallback="x"):
 	return UNSAFE.sub("-", ascii_text).strip("-")[:MAX_SEGMENT].strip("-") or fallback
 
 
+def keep_case(text) -> str:
+	"""Like slug, but keeps upper case, so IDs and numbers stay as people know them."""
+	ascii_text = unicodedata.normalize("NFKD", str(text or "").translate(UMLAUTS))
+	ascii_text = ascii_text.encode("ascii", "ignore").decode()
+	return KEEP_CASE_UNSAFE.sub("-", ascii_text).strip("-.")[:MAX_SEGMENT].strip("-.")
+
+
+def file_base(name, date, number=None, title=None) -> str:
+	"""<doc-id>_<date>_<number or title slug>, without extension. The doc ID keeps keys unique."""
+	label = keep_case(number) or slug(title, "")[:MAX_TITLE].strip("-")
+	return "_".join(part for part in (keep_case(name) or slug(name), str(date), label) if part)
+
+
 def object_key(doc, type_slug, ext) -> str:
 	date = str(doc.document_date)
-	file_name = "_".join((date, slug(doc.document_number, NO_NUMBER), slug(doc.name)))
+	file_name = file_base(doc.name, date, doc.document_number, doc.get("title"))
 	return "/".join(
 		(
 			slug(doc.own_company),

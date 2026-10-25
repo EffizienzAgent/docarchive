@@ -138,3 +138,12 @@ test("threads list the newest mail first", () => {
 	];
 	assert.deepEqual(threadOf(split[0], split).map((doc) => doc.id), ["c", "a"]);
 });
+
+test("attachment sizes are short", () => {
+	const { size } = ViewerCore;
+	assert.equal(size(512), "512 B");
+	assert.equal(size(2048), "2.0 KB");
+	assert.equal(size(5 * 1024 * 1024), "5.0 MB");
+	assert.equal(size(150 * 1024), "150 KB");
+	assert.equal(size(undefined), "");
+});

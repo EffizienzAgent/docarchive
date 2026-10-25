@@ -200,7 +200,7 @@ class TestArchiveDocument(ArchiveRunTestCase):
 		self.assertEqual(doc.archive_sha256, doc.content_sha256)
 		self.assertEqual(
 			doc.object_key,
-			f"{self.company}/2026/{type_slug}/{self.party.name.lower()}/2026-03-15_inv-2026-017_{doc.name.lower()}.pdf",
+			f"{self.company}/2026/{type_slug}/{self.party.name.lower()}/{doc.name}_2026-03-15_INV-2026-017.pdf",
 		)
 		self.assertEqual(doc.meta_key, doc.object_key + ".meta.json")
 		self.assertEqual((doc.retention_mode, str(doc.retain_until)), ("GOVERNANCE", "2035-01-02 00:00:00"))
