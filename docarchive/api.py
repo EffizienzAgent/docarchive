@@ -77,9 +77,9 @@ def upload_document(
 	scope = {"source_system": fields["source_system"], "source_account": fields["source_account"]}
 	for _attempt in range(2):
 		frappe.db.savepoint(SAVEPOINT)
-		existing = find_existing(source_key, scope, sha, doc_type.name)
-		if existing:
-			return existing
+		matches = find_existing(source_key, scope, sha, doc_type.name)
+		if matches:
+			return merge(matches, extra, fields, name, data, source_key, scope)
 		current = (source_versions(source_key, scope) or [None])[-1]
 		try:
 			doc = create(fields, name, data, None if current else source_key, current and current.name, extra)
@@ -91,20 +91,58 @@ def upload_document(
 	fail(_("This source_key is already used by another source."))
 
 
-def find_existing(source_key, scope, sha, document_type):
+def find_existing(source_key, scope, sha, document_type) -> list[str]:
 	versions = source_versions(source_key, scope)
-	for version in versions:
-		if version.content_sha256 == sha:
-			return exists(version.name)
+	matches = [version.name for version in versions if version.content_sha256 == sha]
+	if matches:
+		return matches
 	if source_key and not versions and frappe.db.exists(DOCUMENT, {"source_key": source_key}):
 		fail(_("This source_key is already used by another source."))
-	if not versions:
-		same = frappe.db.get_value(
-			DOCUMENT, {"content_sha256": sha, "document_type": document_type}, "name", order_by="creation"
-		)
-		if same:
-			return exists(same)
-	return None
+	if versions:
+		return []
+	return frappe.get_all(
+		DOCUMENT,
+		filters={"content_sha256": sha, "document_type": document_type},
+		pluck="name",
+		order_by="creation",
+	)
+
+
+def attachment_shas(name) -> set[str]:
+	return set(
+		frappe.get_all(ATTACHMENT, filters={"parenttype": DOCUMENT, "parent": name}, pluck="content_sha256")
+	)
+
+
+def merge(matches, attachments, fields, file_name, data, source_key, scope):
+	incoming = {content.sha256(item["data"]): item for item in attachments}
+	for match in reversed(matches):
+		if set(incoming) <= attachment_shas(match):
+			return exists(match)
+	latest = matches[-1]
+	if not frappe.db.get_value(DOCUMENT, latest, "archive_started_at", for_update=True):
+		known = attachment_shas(latest)
+		add_attachments(latest, [item for sha, item in incoming.items() if sha not in known])
+		return response(latest, "updated")
+	current = (source_versions(source_key, scope) or [None])[-1]
+	doc = create(fields, file_name, data, None, current.name if current else latest, incoming.values())
+	return response(doc.name, "replaced")
+
+
+def attachment_row(item):
+	return {
+		"file": private_file(item["file_name"], item["data"]).file_url,
+		"role": item["role"],
+		"title": item["title"],
+	}
+
+
+def add_attachments(name, attachments):
+	doc = frappe.get_doc(DOCUMENT, name)
+	for item in attachments:
+		doc.append("attachments", attachment_row(item))
+	doc.flags.archive_write = True
+	doc.save(ignore_permissions=True)
 
 
 def clean(value):
@@ -250,14 +288,7 @@ def private_file(file_name, data):
 
 def create(fields, file_name, data, source_key, replaces, attachments=()):
 	file = private_file(file_name, data)
-	rows = [
-		{
-			"file": private_file(item["file_name"], item["data"]).file_url,
-			"role": item["role"],
-			"title": item["title"],
-		}
-		for item in attachments
-	]
+	rows = [attachment_row(item) for item in attachments]
 	doc = frappe.get_doc(
 		{
 			"doctype": DOCUMENT,
