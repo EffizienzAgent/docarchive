@@ -28,6 +28,9 @@ DEFAULT_TYPES = (
 	},
 )
 DEFAULT_UPLOAD_TYPE = "Contract"
+TYPE = "Business Document Type"
+SAVEPOINT = "docarchive_mail_types"
+LOG_TITLE = "docarchive mail types"
 CORRESPONDENCE = "Correspondence"
 INTERNAL_CORRESPONDENCE = "Internal Correspondence"
 MAIL_TYPES = (
@@ -49,19 +52,39 @@ MAIL_TYPES = (
 
 
 def seed_types():
-	if frappe.db.count("Business Document Type"):
+	if frappe.db.count(TYPE):
 		return
 	for fields in DEFAULT_TYPES:
-		frappe.get_doc({"doctype": "Business Document Type", "archive": 1, **fields}).insert(
-			ignore_permissions=True
-		)
+		_create(fields)
+	ensure_mail_types()
 	if not frappe.db.get_single_value("Archive Settings", "default_upload_type"):
 		frappe.db.set_single_value("Archive Settings", "default_upload_type", DEFAULT_UPLOAD_TYPE)
 
 
 def ensure_mail_types():
 	for fields in MAIL_TYPES:
-		if not frappe.db.exists("Business Document Type", {"type_name": fields["type_name"]}):
-			frappe.get_doc({"doctype": "Business Document Type", "archive": 1, **fields}).insert(
-				ignore_permissions=True
-			)
+		try:
+			frappe.db.savepoint(SAVEPOINT)
+			_ensure(fields)
+		except Exception:
+			frappe.db.rollback(save_point=SAVEPOINT)
+			frappe.log_error(title=LOG_TITLE)
+
+
+def _ensure(fields):
+	name, slug = fields["type_name"], fields["slug"]
+	if frappe.db.exists(TYPE, name):
+		frappe.db.set_value(TYPE, name, "is_correspondence", 1)
+		return
+	other = frappe.db.get_value(TYPE, {"slug": slug})
+	if other:
+		frappe.log_error(
+			title=LOG_TITLE,
+			message=f"Business Document Type {other} already uses the slug {slug}, so {name} was not created.",
+		)
+		return
+	_create(fields)
+
+
+def _create(fields):
+	frappe.get_doc({"doctype": TYPE, "archive": 1, **fields}).insert(ignore_permissions=True)
