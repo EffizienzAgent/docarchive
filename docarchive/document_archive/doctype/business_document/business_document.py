@@ -33,7 +33,6 @@ LOCKED_FIELDS = (
 )
 PROTECTED_FIELDS = (
 	"content_sha256",
-	"thread_root",
 	"archive_status",
 	"archive_started_at",
 	"archived_at",
@@ -216,6 +215,7 @@ class BusinessDocument(Document):
 		return super().db_set(fieldname, value, *args, **kwargs)
 
 	def restore_protected(self, before):
+		self.restore_thread_root(before)
 		if self.flags.archive_write:
 			return
 		self.reset_fields(PROTECTED_FIELDS, before)
@@ -226,6 +226,12 @@ class BusinessDocument(Document):
 			prior = old.get(row.name)
 			for field in ATTACHMENT_PROTECTED:
 				row.set(field, prior.get(field) if prior else None)
+
+	def restore_thread_root(self, before):
+		if before:
+			self.thread_root = frappe.db.get_value(self.doctype, self.name, "thread_root", for_update=True)
+		elif not self.flags.archive_write:
+			self.thread_root = None
 
 	def is_mail(self):
 		return bool(

@@ -76,6 +76,17 @@ class TestThreadRoots(MailArchivingTestCase):
 		self.assertEqual(len(self.roots(*docs)), 1)
 		self.assertIsNotNone(self.roots(*docs).pop())
 
+	def test_saving_a_loaded_document_keeps_a_later_merge(self):
+		doc = frappe.get_doc(DOCUMENT, archiving.archive(self.capture()))
+		frappe.db.set_value(DOCUMENT, doc.name, "thread_root", "merged", update_modified=False)
+		doc.flags.archive_write = True
+		doc.save(ignore_permissions=True)
+		self.assertEqual(frappe.db.get_value(DOCUMENT, doc.name, "thread_root"), "merged")
+		doc = frappe.get_doc(DOCUMENT, doc.name)
+		doc.thread_root = "forged"
+		doc.save(ignore_permissions=True)
+		self.assertEqual(frappe.db.get_value(DOCUMENT, doc.name, "thread_root"), "merged")
+
 	def test_other_company_is_not_joined(self):
 		from docarchive.tests.factories import make_own_company
 
