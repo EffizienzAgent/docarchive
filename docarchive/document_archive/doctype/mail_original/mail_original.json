@@ -17,6 +17,7 @@
   "attempts",
   "email_queue",
   "error",
+  "rebuilt_at",
   "file",
   "sha256",
   "size",
@@ -83,6 +84,12 @@
    "fieldname": "error",
    "fieldtype": "Small Text",
    "label": "Error",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rebuilt_at",
+   "fieldtype": "Datetime",
+   "label": "Rebuilt At (UTC)",
    "read_only": 1
   },
   {

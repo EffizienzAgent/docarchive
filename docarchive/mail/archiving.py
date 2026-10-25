@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import getdate
+from frappe.utils import get_datetime, getdate
 
 from docarchive import content, counterparty, settings
 from docarchive.document_types import CORRESPONDENCE, INTERNAL_CORRESPONDENCE
@@ -82,6 +82,8 @@ def mail_meta(doc) -> dict | None:
 	}
 	if original.origin == "frappe-send":
 		meta["note"] = SEND_NOTE
+	if original.rebuilt_at:
+		meta["rebuilt_at"] = get_datetime(original.rebuilt_at).isoformat() + "Z"
 	return meta
 
 
@@ -101,6 +103,7 @@ def _meta_original(doc):
 			"email_account",
 			"origin",
 			"sha256",
+			"rebuilt_at",
 		],
 		order_by="creation asc, name asc",
 	)

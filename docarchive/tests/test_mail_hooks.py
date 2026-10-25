@@ -1,12 +1,14 @@
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import frappe
 from frappe.email.doctype.email_account.email_account import EmailAccount
 from frappe.email.receive import InboundMail, SentEmailInInboxError
 from frappe.tests import IntegrationTestCase
+from frappe.utils import add_to_date, get_datetime, now_datetime
 
 from docarchive import content
-from docarchive.mail import originals
+from docarchive.mail import archiving, originals
 from docarchive.tests.factories import (
 	eml,
 	make_business_document,
@@ -223,6 +225,52 @@ class TestMailHooks(IntegrationTestCase):
 			self.send(comm)
 		self.assertTrue(frappe.flags.sent_mail)
 		self.assertEqual(self.pending(comm), ("Pending", None))
+
+	def queued_send(self, comm):
+		scheduled = []
+		with patch("docarchive.mail.originals.schedule", side_effect=scheduled.append):
+			self.send(comm)
+		[name] = scheduled
+		self.addCleanup(originals.remove_spool, name)
+		return name
+
+	def stored(self, name):
+		originals.store(name)
+		return frappe.get_doc("Mail Original", name)
+
+	def test_rebuild_records_time_in_original_and_meta(self):
+		before = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+		original = self.stored(self.queued_send(make_communication(self.account.name, "Sent")))
+		self.assertEqual(original.status, "Stored")
+		self.assertGreaterEqual(get_datetime(original.rebuilt_at), before)
+		self.assertLess(get_datetime(original.rebuilt_at), before + timedelta(minutes=5))
+		document = frappe.get_doc("Business Document", archiving.archive(original.name))
+		self.assertEqual(
+			archiving.mail_meta(document)["rebuilt_at"],
+			get_datetime(original.rebuilt_at).isoformat() + "Z",
+		)
+
+	def test_rebuild_window_passed(self):
+		name = self.queued_send(make_communication(self.account.name, "Sent"))
+		queue = frappe.db.get_value("Mail Original", name, "email_queue")
+		frappe.db.set_value(
+			"Email Queue Recipient",
+			{"parent": queue},
+			"modified",
+			add_to_date(now_datetime(), hours=-2),
+			update_modified=False,
+		)
+		original = self.stored(name)
+		self.assertEqual((original.status, original.error), ("Failed", "rebuild window passed"))
+		self.assertFalse(original.file)
+
+	def test_queue_not_capturable_at_job_time_fails(self):
+		name = self.queued_send(make_communication(self.account.name, "Sent"))
+		queue = frappe.db.get_value("Mail Original", name, "email_queue")
+		frappe.db.set_value("Email Queue", queue, "redact_message_after_send", 1)
+		original = self.stored(name)
+		self.assertEqual((original.status, original.attempts), ("Failed", 1))
+		self.assertFalse(original.file)
 
 	def capture(self):
 		comm = make_communication(self.account.name)

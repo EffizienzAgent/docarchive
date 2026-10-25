@@ -1,11 +1,11 @@
 import os
 import time
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 
 import frappe
 from frappe.email.doctype.email_queue.email_queue import SendMailContext
-from frappe.utils import convert_utc_to_system_timezone, now_datetime
+from frappe.utils import convert_utc_to_system_timezone, get_datetime, now_datetime
 
 from docarchive import content
 from docarchive.keys import slug
@@ -26,6 +26,7 @@ JOB = "docarchive.mail.originals.store"
 SPOOL = ("private", "docarchive", "mail-spool")
 ORPHAN_SECONDS = 86400
 ERROR_LENGTH = 500
+REBUILD_WINDOW = timedelta(hours=1)
 
 
 class Unavailable(Exception):
@@ -167,12 +168,16 @@ def _rebuilt(original):
 	queue = frappe.get_doc("Email Queue", original.email_queue)
 	if not _capturable(queue):
 		raise Unavailable(f"Email Queue {queue.name} cannot be rebuilt.")
-	recipient = next((row.recipient for row in queue.recipients if row.is_mail_sent()), None)
+	recipient = next((row for row in queue.recipients if row.is_mail_sent()), None)
 	if not recipient:
 		raise Unavailable(f"Email Queue {queue.name} has no sent recipient.")
+	if now_datetime() - get_datetime(recipient.modified) > REBUILD_WINDOW:
+		raise Unavailable("rebuild window passed")
 	ctx = SendMailContext(queue)
 	ctx.email_account_doc = queue.get_email_account(raise_error=True)
-	return _as_bytes(ctx.build_message(recipient))
+	raw = _as_bytes(ctx.build_message(recipient.recipient))
+	original.rebuilt_at = datetime.now(UTC).replace(tzinfo=None)
+	return raw
 
 
 def _attempted(name, error):
