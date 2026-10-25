@@ -142,12 +142,15 @@
 	flex-direction: column;
 	gap: var(--padding-xs);
 	padding-left: var(--padding-sm);
+	container: docarchive-preview / inline-size;
 }
 
 .docarchive-preview-head {
 	display: flex;
-	align-items: flex-start;
-	gap: var(--padding-xs);
+	align-items: center;
+	gap: var(--padding-sm);
+	height: 28px;
+	flex: none;
 }
 
 .docarchive-preview-title {
@@ -159,28 +162,60 @@
 	white-space: nowrap;
 }
 
-.docarchive-preview-meta,
-.docarchive-preview-links,
-.docarchive-preview-tabs {
+.docarchive-preview-links {
 	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: var(--padding-xs) var(--padding-sm);
-	font-size: var(--text-sm);
+	flex: none;
+	gap: 4px;
+	white-space: nowrap;
 }
 
-.docarchive-preview-meta > span:not(.indicator-pill) + span:not(.indicator-pill)::before {
-	content: "·";
-	margin-right: var(--padding-sm);
+.docarchive-preview-fields {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--padding-xs) var(--padding-md);
+	flex: none;
+}
+
+@container docarchive-preview (min-width: 440px) {
+	.docarchive-preview-fields {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+@container docarchive-preview (min-width: 600px) {
+	.docarchive-preview-fields {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+}
+
+.docarchive-field {
+	min-width: 0;
+	height: 38px;
+}
+
+.docarchive-field-label {
+	font-size: var(--text-xs);
 	color: var(--text-muted);
 }
 
-.docarchive-preview-retain {
+.docarchive-field-value {
 	font-size: var(--text-sm);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.docarchive-empty {
+	color: var(--text-muted);
 }
 
 .docarchive-preview-tabs {
+	display: flex;
+	flex: none;
 	gap: 4px;
+	height: 26px;
+	overflow-x: auto;
+	overflow-y: hidden;
 }
 
 .docarchive-preview-tabs .btn {

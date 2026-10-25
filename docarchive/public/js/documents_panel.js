@@ -68,6 +68,20 @@ function safe_file_name(url) {
 	}
 }
 
+function preview_value(key, doc) {
+	if (key === "status") {
+		const [, label] = STATE_STYLES[core.document_state(doc)];
+		return { text: __(label), html: state_badge(doc) };
+	}
+	if (key === "document_type") return { text: doc.document_type ? __(doc.document_type) : "" };
+	if (key === "document_date") return { text: frappe.datetime.str_to_user(doc.document_date) || "" };
+	if (key === "retain_until") {
+		return { text: doc.retain_until ? docarchive.format_retain_until(doc.retain_until) : "" };
+	}
+	if (key === "legal_hold") return { text: doc.legal_hold ? __("Yes") : "" };
+	return { text: doc[key] || "" };
+}
+
 function preview_files(doc) {
 	const main = doc.file ? [{ file: doc.file, label: __("Main file") }] : [];
 	const attachments = (doc.attachments || []).map((item) => ({
@@ -532,48 +546,26 @@ class DocumentsPanel {
 		const files = preview_files(doc);
 		const current = files[this.preview_file] || files[0];
 		const form = frappe.utils.get_form_link(DOCUMENT, doc.name);
-		const meta = [
-			__(doc.document_type),
-			frappe.datetime.str_to_user(doc.document_date),
-			doc.document_number,
-		]
-			.filter(Boolean)
-			.map((value) => `<span>${esc(value)}</span>`)
-			.join("");
-		const retain = doc.retain_until
-			? `<div class="docarchive-preview-retain text-muted">${esc(
-					__("Kept until {0}", [docarchive.format_retain_until(doc.retain_until)]),
-				)}</div>`
-			: "";
 		const new_tab = current
 			? `<a class="btn btn-default btn-xs" href="${esc(docarchive.file_url(current.file))}" target="_blank"
 				rel="noopener">${frappe.utils.icon("external-link", "xs")} ${esc(__("Open in new tab"))}</a>`
-			: "";
-		const tabs =
-			files.length > 1
-				? `<div class="docarchive-preview-tabs" role="tablist">${files
-						.map(
-							(item, index) =>
-								`<button class="btn btn-xs ${item === current ? "btn-primary" : "btn-default"}"
-									role="tab" aria-selected="${item === current}" data-file-index="${index}"
-									title="${esc(safe_file_name(item.file))}">${esc(item.label)}</button>`,
-						)
-						.join("")}</div>`
-				: "";
+			: `<button class="btn btn-default btn-xs" disabled>${esc(__("Open in new tab"))}</button>`;
+		const actions = `<a class="btn btn-default btn-xs" href="${esc(form)}">${esc(__("Open form"))}</a>
+			${new_tab}
+			<button class="btn btn-xs btn-default" data-action="close-preview"
+				title="${esc(__("Close preview (Esc)"))}" aria-label="${esc(__("Close preview"))}">
+				${frappe.utils.icon("close", "xs")}</button>`;
+		const tabs = files
+			.map(
+				(item, index) =>
+					`<button class="btn btn-xs ${item === current ? "btn-primary" : "btn-default"}"
+						role="tab" aria-selected="${item === current}" data-file-index="${index}"
+						title="${esc(safe_file_name(item.file))}">${esc(item.label)}</button>`,
+			)
+			.join("");
 		const $preview = this.$panel.find(".docarchive-preview");
-		$preview.html(`<div class="docarchive-preview-head">
-				<div class="docarchive-preview-title" title="${esc(doc.title || doc.name)}">${esc(doc.title || doc.name)}</div>
-				<button class="btn btn-xs btn-default" data-action="close-preview"
-					title="${esc(__("Close preview (Esc)"))}" aria-label="${esc(__("Close preview"))}">
-					${frappe.utils.icon("close", "xs")}</button>
-			</div>
-			<div class="docarchive-preview-meta">${meta}${state_badge(doc)}</div>
-			${retain}
-			<div class="docarchive-preview-links">
-				<a class="btn btn-default btn-xs" href="${esc(form)}">${esc(__("Open form"))}</a>
-				${new_tab}
-			</div>
-			${tabs}
+		$preview.html(`${core.preview_header(doc, { t: __, esc, value: preview_value, actions })}
+			<div class="docarchive-preview-tabs" role="tablist">${tabs}</div>
 			<div class="docarchive-preview-stage"></div>`);
 		this.render_stage($preview.find(".docarchive-preview-stage"), current);
 	}

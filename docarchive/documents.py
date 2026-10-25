@@ -83,7 +83,7 @@ def counterparty_panel(counterparty_type: str, counterparty: str) -> dict:
 		reason = archive_refusal(panel, row, archived_types, missing)
 		panel["documents"].append(
 			{
-				**{field: row.get(field) for field in (*DOCUMENT_FIELDS, "file", "retain_until")},
+				**{field: row.get(field) for field in (*DOCUMENT_FIELDS, "file", "retain_until", "counterparty")},
 				"missing": missing,
 				"eligible": not reason,
 				"archive_reason": reason,

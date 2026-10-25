@@ -180,3 +180,30 @@ export function export_defaults(party, docs) {
 		...(types.length === 1 && types[0] ? { document_type: types[0] } : {}),
 	};
 }
+
+export const PREVIEW_FIELDS = [
+	["document_type", "Business Document Type"],
+	["document_date", "Document Date"],
+	["document_number", "Document Number"],
+	["counterparty", "Counterparty"],
+	["status", "Status"],
+	["retain_until", "Retain Until (UTC)"],
+	["legal_hold", "Legal Hold"],
+];
+
+export function preview_header(doc, { t, esc, value, actions = "" }) {
+	const title = doc.title || doc.name;
+	const cells = PREVIEW_FIELDS.map(([key, label]) => {
+		const { text = "", html } = value(key, doc) || {};
+		const shown = text ? html || esc(text) : `<span class="docarchive-empty">–</span>`;
+		return `<div class="docarchive-field" data-field="${key}">
+			<div class="docarchive-field-label">${esc(t(label))}</div>
+			<div class="docarchive-field-value" title="${esc(text)}">${shown}</div>
+		</div>`;
+	}).join("");
+	return `<div class="docarchive-preview-head">
+			<div class="docarchive-preview-title" title="${esc(title)}">${esc(title)}</div>
+			<div class="docarchive-preview-links">${actions}</div>
+		</div>
+		<div class="docarchive-preview-fields">${cells}</div>`;
+}
