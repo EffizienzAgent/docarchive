@@ -4,6 +4,7 @@ import frappe
 from frappe.utils import add_days, now_datetime
 
 from docarchive import mail
+from docarchive.document_types import INTERNAL_CORRESPONDENCE
 from docarchive.mail import archiving, cleanup
 from docarchive.tests.factories import eml, make_communication, make_email_account, make_party
 from docarchive.tests.test_mail_archiving import MailArchivingTestCase
@@ -16,14 +17,14 @@ class TestCleanup(MailArchivingTestCase):
 	def aged(self, doctype, name, days=91):
 		frappe.db.set_value(doctype, name, "creation", add_days(now_datetime(), -days), update_modified=False)
 
-	def original(self, days=91, account=None):
+	def original(self, days=91, account=None, raw=None):
 		comm = make_communication(account or self.account)
-		name = mail.capture(comm, eml(), "t")
+		name = mail.capture(comm, raw or eml(), "t")
 		self.aged(ORIGINAL, name, days)
 		return name
 
-	def archived(self, days=91, account=None):
-		original = self.original(days, account)
+	def archived(self, days=91, account=None, raw=None):
+		original = self.original(days, account, raw)
 		name = archiving.archive(original)
 		self.aged(DOCUMENT, name, days)
 		return name, original
@@ -84,6 +85,16 @@ class TestCleanup(MailArchivingTestCase):
 		self.assertEqual(cleanup.run(), {"originals": 0, "documents": 1})
 		self.assertFalse(frappe.db.exists(DOCUMENT, name))
 		self.assertFalse(frappe.db.exists(ORIGINAL, original))
+
+	def test_internal_document_without_counterparty_kept(self):
+		name, original = self.archived(raw=eml(From="a@acme.test", To="b@acme.test"))
+		self.assertEqual(frappe.db.get_value(DOCUMENT, name, "document_type"), INTERNAL_CORRESPONDENCE)
+		self.assertEqual(cleanup.run()["documents"], 0)
+		self.assertTrue(frappe.db.exists(DOCUMENT, name))
+		self.assertTrue(frappe.db.exists(ORIGINAL, original))
+		with patch.object(cleanup, "_old_documents", return_value=[name]):
+			self.assertEqual(cleanup.run()["documents"], 0)
+		self.assertTrue(frappe.db.exists(DOCUMENT, name))
 
 	def test_old_document_with_counterparty_kept(self):
 		name, _ = self.archived()

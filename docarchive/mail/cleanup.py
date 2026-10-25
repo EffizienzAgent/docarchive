@@ -5,6 +5,7 @@ from docarchive.mail import archiving
 
 ORIGINAL = "Mail Original"
 DOCUMENT = "Business Document"
+TYPE = "Business Document Type"
 SAVEPOINT = "docarchive_mail_cleanup"
 
 
@@ -39,6 +40,7 @@ def _old_documents(email_account, cutoff):
 			"source_account": email_account,
 			"archive_started_at": ("is", "not set"),
 			"counterparty": ("is", "not set"),
+			"document_type": ("in", _types_needing_party() or [""]),
 			"hold_on_archive": 0,
 			"creation": ("<", cutoff),
 		},
@@ -46,15 +48,19 @@ def _old_documents(email_account, cutoff):
 	)
 
 
+def _types_needing_party():
+	return frappe.get_all(TYPE, filters={"counterparty_required": 1}, pluck="name")
+
+
 def _remove_original(name):
 	frappe.delete_doc(ORIGINAL, name, ignore_permissions=True)
 
 
 def _remove_document(name) -> bool:
-	started, party, hold = frappe.db.get_value(
-		DOCUMENT, name, ["archive_started_at", "counterparty", "hold_on_archive"]
+	started, party, hold, doc_type = frappe.db.get_value(
+		DOCUMENT, name, ["archive_started_at", "counterparty", "hold_on_archive", "document_type"]
 	)
-	if started or party or hold:
+	if started or party or hold or not frappe.db.get_value(TYPE, doc_type, "counterparty_required"):
 		return False
 	archiving.remove_document(name)
 	return True
