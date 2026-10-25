@@ -5,7 +5,7 @@ import frappe
 
 from docarchive import expiry, legal_hold, run, store
 from docarchive.document_archive.report.expired_documents import expired_documents as report
-from docarchive.tests.factories import make_document_type, make_manager
+from docarchive.tests.factories import eml, make_document_type, make_manager
 from docarchive.tests.hold_case import DOCUMENT, PAST, HoldTestCase
 
 LOG = "Document Deletion Log"
@@ -377,3 +377,18 @@ class TestDeletionWithAttachments(ExpiryTestCase):
 		self.assertIn("Not all object versions are recorded", row["reason"])
 		self.assertEqual(expiry.run_job([doc.name], "Administrator"), {doc.name: "Skipped"})
 		self.assertEqual(self.deletes(), [])
+
+
+class TestDeletionOfCorrespondence(ExpiryTestCase):
+	def test_deletes_correspondence_with_its_mail_original(self):
+		doc = self.expire(self.archived_mail(eml()))
+		original = frappe.db.get_value("Mail Original", {"business_document": doc.name}, ["name", "file"])
+		self.assertTrue(original)
+		self.assertEqual(self.delete([doc.name]), {doc.name: "Deleted"})
+		doc.reload()
+		self.assertEqual(doc.archive_status, "Deleted")
+		for field in ("thread_key", "mail_message_id", "mail_in_reply_to", "mail_references"):
+			self.assertFalse(doc.get(field), field)
+		self.assertFalse(frappe.db.exists("Mail Original", original[0]))
+		self.assertFalse(frappe.db.exists("File", {"file_url": original[1]}))
+		self.assertFalse(frappe.db.exists("File", {"attached_to_name": original[0]}))

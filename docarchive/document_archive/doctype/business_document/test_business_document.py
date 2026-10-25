@@ -11,14 +11,18 @@ from werkzeug.wrappers import Request
 from docarchive import content
 from docarchive.document_archive.doctype.business_document.business_document import (
 	LOCKED_FIELDS,
+	MAIL_FIELDS,
 	SOURCE_FIELDS,
 	missing_fields,
 	title_from_file_name,
 )
 from docarchive.tests.factories import (
+	EML,
 	PDF,
 	make_business_document,
+	make_communication,
 	make_document_type,
+	make_email_account,
 	make_file,
 	make_manager,
 	make_outsider,
@@ -168,8 +172,11 @@ class TestBusinessDocumentLock(BusinessDocumentTestCase):
 			"counterparty_type": "User",
 			"counterparty": user.name,
 			"file": make_file().file_url,
+			"correspondence_channel": "Fax",
+			"correspondence_direction": "Outgoing",
+			"correspondence_at": "2026-04-01 10:00:00",
 			"hold_on_archive": 1,
-			**{field: "changed" for field in SOURCE_FIELDS},
+			**{field: "changed" for field in (*MAIL_FIELDS, *SOURCE_FIELDS)},
 		}
 		self.assertEqual(set(values), set(LOCKED_FIELDS))
 		for field, value in values.items():
@@ -179,7 +186,7 @@ class TestBusinessDocumentLock(BusinessDocumentTestCase):
 				)
 				if field == "counterparty_type":
 					doc.counterparty = user.name
-				doc.flags.archive_write = field in SOURCE_FIELDS
+				doc.flags.archive_write = field in (*MAIL_FIELDS, *SOURCE_FIELDS)
 				doc.set(field, value)
 				with self.assertRaises(frappe.ValidationError):
 					doc.save()
@@ -553,3 +560,90 @@ class TestBusinessDocumentHardening(IntegrationTestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, "years after"):
 			make_business_document(document_type=contract, contract_end_date="2077-01-01")
 		make_business_document(document_type=contract, contract_end_date="2076-03-15")
+
+
+class TestBusinessDocumentCorrespondence(BusinessDocumentTestCase):
+	def communication(self):
+		return make_communication(make_email_account().name).name
+
+	def test_mail_fields_are_server_only(self):
+		doc = make_business_document(mail_message_id="a@b", thread_key="a@b")
+		self.assertFalse(doc.mail_message_id or doc.thread_key)
+
+	def test_user_sets_channel_and_direction_on_letter(self):
+		doc = make_business_document(correspondence_channel="Letter", correspondence_direction="Incoming")
+		self.assertEqual((doc.correspondence_channel, doc.correspondence_direction), ("Letter", "Incoming"))
+
+	def test_mail_direction_not_changeable_by_user(self):
+		doc = make_business_document(
+			archive_write=True,
+			source_doctype="Communication",
+			source_name=self.communication(),
+			correspondence_channel="E-mail",
+			correspondence_direction="Incoming",
+		)
+		doc.correspondence_direction = "Outgoing"
+		doc.flags.archive_write = False
+		doc.save()
+		self.assertEqual(doc.reload().correspondence_direction, "Incoming")
+
+	def test_correspondence_type_requires_channel_and_direction(self):
+		doc = make_business_document(
+			document_type=make_document_type(is_correspondence=1, counterparty_required=0).name
+		)
+		self.assertEqual(missing_fields(doc), ["Channel", "Direction"])
+		doc.correspondence_channel = "Fax"
+		self.assertEqual(missing_fields(doc), ["Direction"])
+
+	def test_correspondence_fields_locked_after_archive_start(self):
+		doc = make_business_document(
+			document_type=self.contract, **party_fields(make_party()), correspondence_channel="Letter"
+		)
+		doc = start_archive(doc)
+		doc.correspondence_channel = "Fax"
+		with self.assertRaises(frappe.ValidationError):
+			doc.save()
+
+	def test_eml_allowed_for_communication_source(self):
+		file = make_file(content=EML, file_name="m.eml")
+		doc = make_business_document(
+			archive_write=True,
+			file=file.file_url,
+			source_doctype="Communication",
+			source_name=self.communication(),
+		)
+		self.assertTrue(doc.content_sha256)
+
+	def test_eml_allowed_for_server_created_mail_without_communication(self):
+		file = make_file(content=EML, file_name="m.eml")
+		doc = make_business_document(archive_write=True, file=file.file_url, source_system="email")
+		self.assertTrue(doc.content_sha256)
+
+	def test_eml_refused_when_user_claims_email_source(self):
+		file = make_file(content=EML, file_name="m.eml")
+		with self.assertRaises(frappe.ValidationError):
+			make_business_document(file=file.file_url, source_system="email")
+
+	def test_eml_refused_for_other_sources(self):
+		file = make_file(content=EML, file_name="m.eml")
+		with self.assertRaises(frappe.ValidationError):
+			make_business_document(file=file.file_url)
+
+	def test_blanking_source_doctype_does_not_unlock_direction(self):
+		doc = make_business_document(
+			archive_write=True,
+			source_doctype="Communication",
+			source_name=self.communication(),
+			correspondence_direction="Incoming",
+		)
+		doc.flags.archive_write = False
+		doc.source_doctype = None
+		doc.correspondence_direction = "Outgoing"
+		doc.save()
+		doc.reload()
+		self.assertEqual((doc.source_doctype, doc.correspondence_direction), ("Communication", "Incoming"))
+
+	def test_eml_refused_when_user_claims_communication_source(self):
+		file = make_file(content=EML, file_name="m.eml")
+		with self.assertRaises(frappe.ValidationError):
+			make_business_document(file=file.file_url, source_doctype="Communication")

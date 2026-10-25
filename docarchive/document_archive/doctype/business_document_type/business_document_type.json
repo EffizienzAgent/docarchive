@@ -21,7 +21,8 @@
   "requirements_section",
   "counterparty_required",
   "number_required",
-  "contract_end_required"
+  "contract_end_required",
+  "is_correspondence"
  ],
  "fields": [
   {
@@ -83,6 +84,12 @@
    "fieldtype": "Check",
    "label": "Contract End Date Required",
    "depends_on": "eval:doc.retention_from == 'Contract End Date'"
+  },
+  {
+   "fieldname": "is_correspondence",
+   "fieldtype": "Check",
+   "label": "Correspondence",
+   "default": "0"
   }
  ],
  "permissions": [

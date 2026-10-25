@@ -11,7 +11,7 @@ from pathlib import Path, PurePosixPath
 
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
+from frappe.utils import get_datetime, now_datetime
 from frappe.utils.html_utils import sanitize_html
 
 from docarchive import content, retention, run, settings
@@ -21,7 +21,13 @@ VIEWER_CORE = Path(__file__).with_name("export_viewer_core.js")
 DATA_MARKER = "/*DOCARCHIVE_DATA*/"
 CORE_MARKER = "/*DOCARCHIVE_CORE*/"
 LOGO_LIMIT = 200 * 1024
-LOGO_TYPES = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
+LOGO_TYPES = {
+	"png": "image/png",
+	"jpg": "image/jpeg",
+	"jpeg": "image/jpeg",
+	"gif": "image/gif",
+	"webp": "image/webp",
+}
 LOGO_MAGIC = (
 	(b"\x89PNG\r\n\x1a\n", "image/png"),
 	(b"\xff\xd8\xff", "image/jpeg"),
@@ -56,12 +62,6 @@ CSV_FIELDS = (
 	"size",
 	"verified",
 )
-THREAD_FIELDS = {
-	"thread_key": "thread_key",
-	"message_id": "mail_message_id",
-	"in_reply_to": "mail_in_reply_to",
-	"references": "mail_references",
-}
 
 
 def scope_of(export, number, count) -> dict:
@@ -218,10 +218,23 @@ def document_row(doc, copy, entry) -> dict:
 		"lock_mode": copy.lock_mode,
 		"retain_until": iso(copy.retain_until),
 		"legal_hold": bool(doc.get("legal_hold")),
-		**{field: doc.get(source) for field, source in THREAD_FIELDS.items()},
+		**thread_fields(doc, meta),
 		"files": files,
 		"metadata": metadata,
 		"verified": all(value["verified"] for value in objects.values()) and len(objects) > 0,
+	}
+
+
+def thread_fields(doc, meta) -> dict:
+	correspondence = meta.get("correspondence") or {}
+	mail = correspondence.get("mail") or {}
+	at = doc.get("correspondence_at")
+	return {
+		"thread_key": correspondence.get("thread_key") or doc.get("thread_key"),
+		"message_id": mail.get("message_id") or doc.get("mail_message_id"),
+		"in_reply_to": mail.get("in_reply_to") or doc.get("mail_in_reply_to"),
+		"references": mail.get("references") or (doc.get("mail_references") or "").split(),
+		"correspondence_at": correspondence.get("at") or (run.utc_iso(get_datetime(at)) if at else None),
 	}
 
 

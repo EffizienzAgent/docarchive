@@ -293,6 +293,7 @@ class DocumentsPanel {
 		$body.on("click", "[data-action=archive]", (event) =>
 			docarchive.archive_now([name_of(event)], () => this.load()),
 		);
+		$body.on("click", "[data-action=thread]", (event) => docarchive.show_thread(name_of(event)));
 		$body.on("click", "[data-action=preview]", (event) => this.open_preview(name_of(event)));
 		$body.on("click", "tbody tr[data-name]", (event) => {
 			if ($(event.target).closest("a, button, input, label, .docarchive-check").length) return;
@@ -474,6 +475,10 @@ class DocumentsPanel {
 				<a class="btn btn-xs btn-default" href="${esc(docarchive.file_url(doc.file))}" target="_blank"
 					rel="noopener" title="${esc(__("Open in new tab"))}">${frappe.utils.icon("external-link", "xs")}</a>`
 			: "";
+		const thread = doc.thread_key
+			? `<button class="btn btn-xs btn-default" data-action="thread" title="${esc(__("Show thread"))}">
+				${frappe.utils.icon("mail", "xs")}</button>`
+			: "";
 		const archive = doc.eligible
 			? `<button class="btn btn-xs btn-default" data-action="archive">${esc(__("Archive now"))}</button>`
 			: "";
@@ -493,6 +498,7 @@ class DocumentsPanel {
 				${file}
 				<button class="btn btn-xs btn-default" data-action="copy" title="${esc(__("Copy link"))}">
 					${frappe.utils.icon("link", "xs")}</button>
+				${thread}
 				${archive}
 			</td>
 		</tr>`;
@@ -662,11 +668,45 @@ const UPLOAD_COLUMNS = [
 	{ fieldname: "document_date", fieldtype: "Date", label: "Document Date", columns: 2 },
 ];
 
-function ask_details(party, files, on_saved) {
+const CORRESPONDENCE_FIELDS = ["correspondence_channel", "correspondence_direction", "correspondence_at"];
+
+function correspondence_fields() {
+	return [
+		{ fieldname: "correspondence_section", fieldtype: "Section Break", label: __("Correspondence") },
+		{
+			fieldname: "correspondence_channel",
+			fieldtype: "Select",
+			label: __("Channel"),
+			options: ["", "Letter", "Fax", "Other"].map((value) => ({ value, label: value && __(value) })),
+		},
+		{ fieldname: "column_break_correspondence", fieldtype: "Column Break" },
+		{
+			fieldname: "correspondence_direction",
+			fieldtype: "Select",
+			label: __("Direction"),
+			options: ["", "Incoming", "Outgoing"].map((value) => ({ value, label: value && __(value) })),
+		},
+		{ fieldname: "column_break_correspondence_at", fieldtype: "Column Break" },
+		{ fieldname: "correspondence_at", fieldtype: "Datetime", label: __("Received or sent at") },
+	].map((df) => ({ ...df, hidden: 1 }));
+}
+
+function ask_details(party, files, on_saved, extra = {}) {
 	let saved = false;
 	const file_urls = files.map((file) => file.file_url);
-	frappe.xcall(`${METHOD}.upload_defaults`).then((defaults) => {
-		const dialog = new frappe.ui.Dialog({
+	frappe.xcall(`${METHOD}.upload_defaults`).then((server) => {
+		const defaults = { ...server, ...extra };
+		const letters = new Set(defaults.correspondence_types || []);
+		let dialog;
+		const toggle_correspondence = () => {
+			if (!dialog) return;
+			const rows = dialog.get_value("documents") || [];
+			const hidden = !rows.some((row) => letters.has(row.document_type));
+			for (const field of ["correspondence_section", ...CORRESPONDENCE_FIELDS]) {
+				dialog.set_df_property(field, "hidden", hidden);
+			}
+		};
+		dialog = new frappe.ui.Dialog({
 			title: __("Upload documents"),
 			size: "extra-large",
 			fields: [
@@ -682,6 +722,7 @@ function ask_details(party, files, on_saved) {
 						...df,
 						label: df.label && __(df.label),
 						in_list_view: df.hidden ? 0 : 1,
+						onchange: df.fieldname === "document_type" ? () => toggle_correspondence() : undefined,
 					})),
 				},
 				{
@@ -691,6 +732,7 @@ function ask_details(party, files, on_saved) {
 					description: __("The first file is the main file, the others become its attachments."),
 					hidden: file_urls.length < 2,
 				},
+				...correspondence_fields(),
 			],
 			primary_action_label: __("Save"),
 			primary_action(values) {
@@ -700,10 +742,16 @@ function ask_details(party, files, on_saved) {
 					document_type: row.document_type,
 					document_date: row.document_date,
 				}));
+				const source = defaults.source_name
+					? { source_doctype: defaults.source_doctype, source_name: defaults.source_name }
+					: {};
+				const correspondence = Object.fromEntries(
+					CORRESPONDENCE_FIELDS.filter((field) => values[field]).map((field) => [field, values[field]]),
+				);
 				frappe
 					.call({
 						method: `${METHOD}.create_documents`,
-						args: { ...party, documents, combine: values.combine },
+						args: { ...party, documents, combine: values.combine, ...source, ...correspondence },
 						freeze: true,
 					})
 					.then(() => {
@@ -715,10 +763,17 @@ function ask_details(party, files, on_saved) {
 		});
 		dialog.onhide = () => saved || frappe.xcall(`${METHOD}.discard_uploads`, { file_urls });
 		dialog.show();
+		toggle_correspondence();
 	});
 }
 
-docarchive.upload_documents = function ({ counterparty_type, counterparty, files, on_saved }) {
+docarchive.upload_documents = function ({
+	counterparty_type,
+	counterparty,
+	files,
+	on_saved,
+	defaults,
+}) {
 	const uploaded = [];
 	const uploader = new frappe.ui.FileUploader({
 		allow_multiple: true,
@@ -728,8 +783,21 @@ docarchive.upload_documents = function ({ counterparty_type, counterparty, files
 		files,
 		on_success: (file) => uploaded.push({ file_url: file.file_url, file_name: file.file_name }),
 	});
+	const party = { counterparty_type, counterparty };
 	uploader.dialog.onhide = () => {
-		if (uploaded.length) ask_details({ counterparty_type, counterparty }, uploaded, on_saved);
+		const emls = uploaded.filter((file) => docarchive.mail_core.is_eml(file.file_name || file.file_url));
+		const others = uploaded.filter((file) => !emls.includes(file));
+		const details = () => others.length && ask_details(party, others, on_saved, defaults);
+		if (!emls.length) return details();
+		docarchive.archive_emls(emls, {
+			...party,
+			source_doctype: defaults?.source_name ? defaults.source_doctype : undefined,
+			source_name: defaults?.source_name,
+			on_saved: (names) => {
+				if (names.length && on_saved) on_saved();
+				details();
+			},
+		});
 	};
 };
 

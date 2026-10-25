@@ -1,0 +1,173 @@
+{
+ "docstatus": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Document Archive",
+ "custom": 0,
+ "name": "Mail Original",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "field_order": [
+  "communication",
+  "email_account",
+  "origin",
+  "file",
+  "sha256",
+  "size",
+  "direction",
+  "message_id",
+  "in_reply_to",
+  "mail_references",
+  "thread_key",
+  "sender",
+  "to",
+  "cc",
+  "subject",
+  "date_header",
+  "mail_at",
+  "automated",
+  "internal",
+  "business_document"
+ ],
+ "fields": [
+  {
+   "fieldname": "communication",
+   "fieldtype": "Link",
+   "label": "Communication",
+   "read_only": 1,
+   "options": "Communication",
+   "unique": 1
+  },
+  {
+   "fieldname": "email_account",
+   "fieldtype": "Data",
+   "label": "Email Account",
+   "read_only": 1
+  },
+  {
+   "fieldname": "origin",
+   "fieldtype": "Data",
+   "label": "Origin",
+   "read_only": 1
+  },
+  {
+   "fieldname": "file",
+   "fieldtype": "Attach",
+   "label": "File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sha256",
+   "fieldtype": "Data",
+   "label": "SHA-256",
+   "read_only": 1
+  },
+  {
+   "fieldname": "size",
+   "fieldtype": "Int",
+   "label": "Size",
+   "read_only": 1
+  },
+  {
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "label": "Direction",
+   "read_only": 1,
+   "options": "Incoming\nOutgoing"
+  },
+  {
+   "fieldname": "message_id",
+   "fieldtype": "Data",
+   "length": 500,
+   "label": "Message-ID",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "in_reply_to",
+   "fieldtype": "Data",
+   "length": 500,
+   "label": "In-Reply-To",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mail_references",
+   "fieldtype": "Long Text",
+   "label": "References",
+   "read_only": 1
+  },
+  {
+   "fieldname": "thread_key",
+   "fieldtype": "Data",
+   "length": 500,
+   "label": "Thread Key",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "sender",
+   "fieldtype": "Data",
+   "length": 500,
+   "label": "Sender",
+   "read_only": 1
+  },
+  {
+   "fieldname": "to",
+   "fieldtype": "Small Text",
+   "label": "To",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cc",
+   "fieldtype": "Small Text",
+   "label": "Cc",
+   "read_only": 1
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Small Text",
+   "label": "Subject",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_header",
+   "fieldtype": "Data",
+   "label": "Date Header",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mail_at",
+   "fieldtype": "Datetime",
+   "label": "Mail Time",
+   "read_only": 1
+  },
+  {
+   "fieldname": "automated",
+   "fieldtype": "Check",
+   "label": "Automated",
+   "read_only": 1
+  },
+  {
+   "fieldname": "internal",
+   "fieldtype": "Check",
+   "label": "Internal",
+   "read_only": 1
+  },
+  {
+   "fieldname": "business_document",
+   "fieldtype": "Link",
+   "label": "Business Document",
+   "read_only": 1,
+   "options": "Business Document"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "delete": 1
+  }
+ ]
+}

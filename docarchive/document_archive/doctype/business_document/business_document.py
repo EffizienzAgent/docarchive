@@ -16,6 +16,8 @@ SOURCE_FIELDS = (
 	"source_doctype",
 	"source_name",
 )
+CORRESPONDENCE_FIELDS = ("correspondence_channel", "correspondence_direction", "correspondence_at")
+MAIL_FIELDS = ("thread_key", "mail_message_id", "mail_in_reply_to", "mail_references")
 LOCKED_FIELDS = (
 	"own_company",
 	"document_type",
@@ -24,6 +26,8 @@ LOCKED_FIELDS = (
 	"counterparty_type",
 	"counterparty",
 	"file",
+	*CORRESPONDENCE_FIELDS,
+	*MAIL_FIELDS,
 	"hold_on_archive",
 	*SOURCE_FIELDS,
 )
@@ -56,6 +60,7 @@ PROTECTED_FIELDS = (
 	"deleted_at",
 	"source_key",
 	"replaces",
+	*MAIL_FIELDS,
 	*SOURCE_FIELDS,
 )
 ATTACHMENT_PROTECTED = ("content_sha256", "object_key", "archive_size")
@@ -139,6 +144,8 @@ def missing_fields(doc) -> list[str]:
 		("Counterparty", rules.counterparty_required and not doc.counterparty),
 		("Document Number", rules.number_required and not doc.document_number),
 		("Contract End Date", rules.contract_end_required and not doc.contract_end_date),
+		("Channel", rules.is_correspondence and not doc.correspondence_channel),
+		("Direction", rules.is_correspondence and not doc.correspondence_direction),
 	]
 	return [label for label, missing in checks if missing]
 
@@ -193,13 +200,23 @@ class BusinessDocument(Document):
 	def restore_protected(self, before):
 		if self.flags.archive_write:
 			return
-		for field in PROTECTED_FIELDS:
-			self.set(field, before.get(field) if before else self.meta.get_field(field).default)
+		self.reset_fields(PROTECTED_FIELDS, before)
+		if self.is_mail():
+			self.reset_fields(CORRESPONDENCE_FIELDS, before)
 		old = {row.name: row for row in (before.get("attachments") if before else [])}
 		for row in self.get("attachments") or []:
 			prior = old.get(row.name)
 			for field in ATTACHMENT_PROTECTED:
 				row.set(field, prior.get(field) if prior else None)
+
+	def is_mail(self):
+		return bool(
+			self.source_system == "email" or self.source_doctype == "Communication" or self.mail_message_id
+		)
+
+	def reset_fields(self, fields, before):
+		for field in fields:
+			self.set(field, before.get(field) if before else self.meta.get_field(field).default)
 
 	def changed(self, before, field):
 		fieldtype = self.meta.get_field(field).fieldtype
@@ -248,6 +265,10 @@ class BusinessDocument(Document):
 		if not row.is_private:
 			frappe.throw(_("Documents must be uploaded as private files."))
 		allowed = settings.allowed_extensions()
+		if file_url == self.file and (
+			self.source_system == "email" or self.source_doctype == "Communication"
+		):
+			allowed = {*allowed, "eml"}
 		if not {extension(row.file_name), extension(file_url)} <= allowed:
 			frappe.throw(_("Only these file types can be filed: {0}").format(", ".join(sorted(allowed))))
 		data = content.read_bytes(file_url)

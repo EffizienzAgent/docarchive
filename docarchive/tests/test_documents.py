@@ -1,4 +1,5 @@
 import frappe
+from frappe.permissions import add_user_permission
 from frappe.tests import IntegrationTestCase
 
 from docarchive import documents
@@ -55,7 +56,7 @@ class TestCounterpartyDocuments(IntegrationTestCase):
 	def test_upload_defaults_to_setting_without_a_date(self):
 		make_settings(default_own_company=make_own_company().name, default_upload_type=self.type)
 		with self.set_user(make_manager("docs-defaults@example.com")):
-			self.assertEqual(documents.upload_defaults(), {"document_type": self.type})
+			self.assertEqual(documents.upload_defaults()["document_type"], self.type)
 
 	def test_dialog_date_from_file_name_or_left_empty(self):
 		with self.set_user(self.manager("docs-dates@example.com")):
@@ -239,3 +240,64 @@ class TestCounterpartyDocuments(IntegrationTestCase):
 		doc = frappe.get_doc("Business Document", name)
 		self.assertEqual(str(doc.document_date), "2026-08-05")
 		self.assertNotIn("2026", doc.title)
+
+	def test_create_documents_stores_correspondence_fields(self):
+		letter = make_document_type(is_correspondence=1).name
+		with self.set_user(self.manager("docs-letter@example.com")):
+			[name] = documents.create_documents(
+				"Contact",
+				self.party.name,
+				frappe.as_json([make_file().file_url]),
+				letter,
+				"2026-03-15",
+				correspondence_channel="Letter",
+				correspondence_direction="Outgoing",
+				correspondence_at="2026-03-15 10:30:00",
+			)
+		doc = frappe.get_doc("Business Document", name)
+		self.assertEqual((doc.correspondence_channel, doc.correspondence_direction), ("Letter", "Outgoing"))
+		self.assertEqual(str(doc.correspondence_at), "2026-03-15 10:30:00")
+
+	def test_correspondence_fields_skip_other_types(self):
+		with self.set_user(self.manager("docs-not-letter@example.com")):
+			[name] = self.create_with(correspondence_channel="Letter")
+		self.assertFalse(frappe.db.get_value("Business Document", name, "correspondence_channel"))
+
+	def test_create_documents_links_the_source_document(self):
+		source = make_business_document(**party_fields(self.party))
+		with self.set_user(self.manager("docs-source@example.com")):
+			[name] = self.create_with(source_doctype="Business Document", source_name=source.name)
+		self.assertEqual(
+			frappe.db.get_value("Business Document", name, ["source_doctype", "source_name"]),
+			("Business Document", source.name),
+		)
+
+	def test_source_document_must_be_readable(self):
+		hidden = make_business_document(own_company=make_own_company().name, **party_fields(self.party))
+		user = self.manager("docs-source-hidden@example.com")
+		add_user_permission("Own Company", self.company, user)
+		with self.set_user(user):
+			with self.assertRaises(frappe.PermissionError):
+				self.create_with(source_doctype="Business Document", source_name=hidden.name)
+
+	def test_source_must_be_a_business_document(self):
+		with self.set_user(self.manager("docs-source-other@example.com")):
+			with self.assertRaises(frappe.ValidationError):
+				self.create_with(source_doctype="Contact", source_name=self.party.name)
+
+	def test_upload_defaults_list_correspondence_types(self):
+		letter = make_document_type(is_correspondence=1).name
+		with self.set_user(self.manager("docs-defaults-letter@example.com")):
+			types = documents.upload_defaults()["correspondence_types"]
+		self.assertIn(letter, types)
+		self.assertNotIn(self.type, types)
+
+	def create_with(self, **fields):
+		return documents.create_documents(
+			"Contact",
+			self.party.name,
+			frappe.as_json([make_file().file_url]),
+			self.type,
+			"2026-03-15",
+			**fields,
+		)

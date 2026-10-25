@@ -9,19 +9,28 @@ required_apps = ["s3storage"]
 
 app_include_js = "docarchive.bundle.js"
 app_include_css = "docarchive.bundle.css"
+doctype_js = {"Communication": "public/js/communication.js"}
+doctype_list_js = {"Communication": "public/js/communication_list.js"}
 
 after_install = "docarchive.setup.apply_defaults"
 after_migrate = "docarchive.setup.apply_defaults"
 
 doc_events = {
 	"File": {"before_validate": "docarchive.guards.protect_file_change"},
+	"Communication": {"on_trash": "docarchive.mail.originals.on_communication_trash"},
 	"*": {"before_rename": "docarchive.guards.protect_party"},
+}
+extend_doctype_class = {
+	"Email Account": ["docarchive.mail.extensions.EmailAccountArchive"],
+	"Email Queue": ["docarchive.mail.extensions.EmailQueueArchive"],
 }
 scheduler_events = {
 	"cron": {"30 2 * * *": ["docarchive.run.schedule"]},
-	"daily": ["docarchive.export.expire"],
+	"daily": ["docarchive.mail.cleanup.run", "docarchive.export.expire"],
 }
 has_permission = {"File": "docarchive.guards.file_permission"}
+docarchive_assign = ["docarchive.mail.archiving.assign"]
+mailsync_mail_read = ["docarchive.mail.originals.from_mailsync"]
 s3storage_before_file_delete = ["docarchive.guards.protect_file"]
 s3storage_before_object_delete = ["docarchive.guards.protect_object"]
 s3storage_before_object_write = ["docarchive.guards.protect_object"]

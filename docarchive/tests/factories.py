@@ -178,3 +178,64 @@ def make_manager(email):
 
 def make_outsider(email):
 	return make_user(email, [make_role("Archive Outsider")])
+
+
+def make_email_account(email_id=None, **fields):
+	email_id = email_id or f"{unique('info')}@acme.test"
+	return frappe.get_doc(
+		{
+			"doctype": "Email Account",
+			"email_account_name": unique("account"),
+			"email_id": email_id,
+			"enable_incoming": 0,
+			"enable_outgoing": 0,
+			**fields,
+		}
+	).insert(ignore_permissions=True)
+
+
+def make_mail_settings(email_account, **fields):
+	settings = frappe.get_single("Archive Settings")
+	settings.set("mail_accounts", [])
+	settings.append("mail_accounts", {"email_account": email_account, **fields})
+	settings.save(ignore_permissions=True)
+	return settings.mail_accounts[0]
+
+
+def make_communication(email_account, sent_or_received="Received", **fields):
+	return frappe.get_doc(
+		{
+			"doctype": "Communication",
+			"communication_type": "Communication",
+			"communication_medium": "Email",
+			"email_account": email_account,
+			"sent_or_received": sent_or_received,
+			"subject": "Offer",
+			"content": "Hello",
+			"sender": "client@example.test",
+			"recipients": "info@acme.test",
+			**fields,
+		}
+	).insert(ignore_permissions=True)
+
+
+def eml(**headers):
+	headers = {
+		"From": "Client <client@example.test>",
+		"To": "info@acme.test",
+		"Subject": "Offer",
+		"Date": "Tue, 10 Mar 2026 09:30:00 +0000",
+		"Message-ID": f"<{uuid.uuid4().hex}@example.test>",
+		**headers,
+	}
+	lines = [f"{name}: {value}" for name, value in headers.items()]
+	return ("\r\n".join(lines) + "\r\n\r\nHello\r\n").encode()
+
+
+EML = eml()
+
+
+def restrict_to_own_company(user, own_company):
+	frappe.get_doc(
+		{"doctype": "User Permission", "user": user, "allow": "Own Company", "for_value": own_company}
+	).insert(ignore_permissions=True)

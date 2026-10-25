@@ -12,6 +12,10 @@ frappe.listview_settings["Business Document"] = {
 		listview.page.add_actions_menu_item(__("Assign"), () =>
 			docarchive.triage(listview.get_checked_items(true), { on_close: refresh }),
 		);
+		listview.page.add_actions_menu_item(__("Discard"), () => {
+			const names = listview.get_checked_items(true);
+			if (names.length) docarchive.discard_documents(names, refresh);
+		});
 		listview.page.add_actions_menu_item(__("Extend retention"), () => {
 			const names = listview.get_checked_items(true);
 			if (names.length) docarchive.extend_many({ names }, refresh);

@@ -206,6 +206,66 @@ Retention History,Verlauf der Aufbewahrung
 Pending Extension Metadata,Metadaten der ausstehenden Verlängerung
 Skipped,Übersprungen
 The recorded version of {0} is missing on the storage target.,Die gespeicherte Version von {0} fehlt auf dem Speicherziel.
+Archive Internal Mails,Interne E-Mails archivieren
+Archive Mail Account,Archiv-E-Mail-Konto
+Automated,Automatisch erzeugt
+Automatic,Automatisch
+Capture and archive business e-mails of these accounts.,Geschäftliche E-Mails dieser Konten erfassen und archivieren.
+Cc,Cc
+Comma-separated. Empty: the domain of the account's address.,Kommagetrennt. Leer: die Domain der Adresse des Kontos.
+Communication,Kommunikation
+Contacts Count as Counterparty,Kontakte gelten als Gegenpartei
+Correspondence,Korrespondenz
+Internal Correspondence,Interne Korrespondenz
+Date Header,Datumskopfzeile
+Direction,Richtung
+E-Mail Accounts,E-Mail-Konten
+E-mail account {0} is listed more than once.,Das E-Mail-Konto {0} ist mehr als einmal aufgeführt.
+Email Account,E-Mail-Konto
+In-Reply-To,Antwort auf
+Incoming,Eingehend
+Internal,Intern
+Internal Domains,Interne Domains
+Keep Unarchived Originals (Days),Nicht archivierte Originale aufbewahren (Tage)
+Keep days must be at least 1.,Die Aufbewahrungstage müssen mindestens 1 betragen.
+Mail Original,E-Mail-Original
+Mail Time,E-Mail-Zeitpunkt
+Manual,Manuell
+Message-ID,Message-ID
+Mode,Modus
+Off,Aus
+Origin,Herkunft
+Outgoing,Ausgehend
+References,Referenzen
+SHA-256,SHA-256
+Sender,Absender
+Size,Größe
+Subject,Betreff
+Thread Key,Thread-Schlüssel
+To,An
+Channel,Kanal
+E-mail,E-Mail
+Letter,Brief
+Fax,Fax
+Other,Sonstige
+Correspondence Time,Zeitpunkt der Korrespondenz
+Outgoing Originals From,Originale ausgehender Mails aus
+Frappe,Frappe
+Sent Folder,Gesendet-Ordner
+"Sent Folder: originals of sent mails come from the IMAP Sent folder through mailsync instead of being rebuilt after sending. Only for IMAP accounts.","Gesendet-Ordner: Die Originale gesendeter Mails stammen über mailsync aus dem IMAP-Gesendet-Ordner, statt nach dem Versand neu aufgebaut zu werden. Nur für IMAP-Konten."
+"{0} does not use IMAP, so its sent mails cannot be read from the Sent folder.","{0} nutzt kein IMAP, daher können die gesendeten Mails nicht aus dem Gesendet-Ordner gelesen werden."
+(no subject),(kein Betreff)
+Archived documents cannot be discarded.,Archivierte Dokumente können nicht verworfen werden.
+No original was captured for this e-mail.,Für diese E-Mail wurde kein Original erfasst.
+Only e-mail documents can be discarded.,Nur E-Mail-Dokumente können verworfen werden.
+The captured original of this e-mail is missing.,Das erfasste Original dieser E-Mail fehlt.
+This attachment does not exist.,Dieser Anhang existiert nicht.
+This document is not an archived e-mail.,Dieses Dokument ist keine archivierte E-Mail.
+The e-mail file of this document is missing.,Die E-Mail-Datei dieses Dokuments fehlt.
+Please upload the e-mail as a private .eml file.,Bitte lade die E-Mail als private .eml-Datei hoch.
+The direction must be Incoming or Outgoing.,Die Richtung muss Eingehend oder Ausgehend sein.
+This e-mail is not the missing one: its Message-ID is {0}.,Diese E-Mail ist nicht die fehlende: Ihre Message-ID ist {0}.
+This file is not an e-mail.,Diese Datei ist keine E-Mail.
 Archive Attachment Copy,Archivkopie der Anlage
 At most {0} attachments can be sent.,Es können höchstens {0} Anlagen gesendet werden.
 Attachment,Anlage
@@ -378,7 +438,6 @@ Legal hold is set on every copy.,Legal Hold ist auf allen Kopien gesetzt.
 "Name of the site config key that holds the admin access key, e.g. s3_archive_admin_access_key.","Name des Site-Config-Schlüssels mit dem Admin-Zugangsschlüssel, z. B. s3_archive_admin_access_key."
 "Name of the site config key that holds the admin secret key, e.g. s3_archive_admin_secret_key.","Name des Site-Config-Schlüssels mit dem Admin-Geheimschlüssel, z. B. s3_archive_admin_secret_key."
 Not all object versions are recorded: {0},Nicht alle Objektversionen sind erfasst: {0}
-Off,Aus
 On,An
 Only archived documents can be put on legal hold.,Nur archivierte Dokumente können unter Legal Hold gestellt werden.
 Optional. Needed to release legal holds and to delete expired documents. Leave empty to switch these features off.,"Optional. Nötig, um Legal Holds aufzuheben und abgelaufene Dokumente zu löschen. Leer lassen, um diese Funktionen abzuschalten."
@@ -438,7 +497,6 @@ All counterparties,Alle Gegenparteien
 All own companies,Alle eigenen Firmen
 Archive Export,Archiv-Export
 Archive Export Part,Teil eines Archiv-Exports
-Cc,Cc
 Checksum Mismatches,Prüfsummen-Abweichungen
 Checksum mismatch,Prüfsumme weicht ab
 Checksum mismatch or missing object,Prüfsumme weicht ab oder Objekt fehlt
@@ -514,9 +572,7 @@ Show more,Mehr anzeigen
 Size (Bytes),Größe (Bytes)
 Start export,Export starten
 Storage Target,Speicherziel
-Subject,Betreff
 The start date must not be after the end date.,Das Startdatum darf nicht nach dem Enddatum liegen.
-To,An
 To Date,Bis Datum
 Unknown counterparty type {0}.,Unbekannte Art der Gegenpartei {0}.
 Unknown storage target {0}.,Unbekanntes Speicherziel {0}.
@@ -524,6 +580,44 @@ of,von
 {0} objects could not be verified. See manifest.json.,{0} Objekte konnten nicht geprüft werden. Siehe manifest.json.
 {0} objects could not be verified. See Mismatch Details.,{0} Objekte konnten nicht geprüft werden. Siehe Details zu Abweichungen.
 Main,Hauptdatei
+Documents marked for legal hold cannot be discarded.,"Dokumente, die für einen Legal Hold vorgemerkt sind, können nicht verworfen werden."
+Archive e-mails,E-Mails archivieren
+Archive it anyway?,Trotzdem archivieren?
+Archived as {0},Archiviert als {0}
+Checksum does not match,Prüfsumme stimmt nicht überein
+Checksum matches,Prüfsumme stimmt überein
+Discard,Verwerfen
+Discard {0} document(s) and their captured e-mails? This cannot be undone. Archived documents are kept.,{0} Dokument(e) und die erfassten E-Mails verwerfen? Das kann nicht rückgängig gemacht werden. Archivierte Dokumente bleiben erhalten.
+{0} document(s) discarded.,{0} Dokument(e) verworfen.
+{0} e-mail file(s) will be archived as correspondence.,{0} E-Mail-Datei(en) werden als Korrespondenz archiviert.
+File as document,Als Dokument ablegen
+Gap,Lücke
+"In Frappe, no original","In Frappe, ohne Original"
+Load images,Bilder laden
+Not in Frappe,Nicht in Frappe
+Only a Business Document can be the source of an upload.,Nur ein Geschäftsdokument kann die Quelle eines Uploads sein.
+Origin: {0},Herkunft: {0}
+Original available,Original vorhanden
+Archived in another thread,In einem anderen Thread archiviert
+Read from the mailbox by mailsync,Von mailsync aus dem Postfach gelesen
+Rebuilt by Frappe after sending,Von Frappe nach dem Versand neu aufgebaut
+Received by Frappe,Von Frappe empfangen
+Received or sent at,Empfangen oder gesendet am
+Remote images are blocked.,Externe Bilder sind blockiert.
+Sender or recipient,Absender oder Empfänger
+Show e-mail,E-Mail anzeigen
+Show thread,Verlauf anzeigen
+The attachment could not be loaded.,Der Anhang konnte nicht geladen werden.
+This document has no thread.,Dieses Dokument hat keinen Verlauf.
+"This e-mail looks automated, e.g. a newsletter or an automatic reply.","Diese E-Mail sieht automatisch erzeugt aus, z. B. ein Newsletter oder eine automatische Antwort."
+This e-mail only has internal addresses.,Diese E-Mail hat nur interne Adressen.
+Thread,Verlauf
+Upload .eml,.eml hochladen
+Upload e-mails,E-Mails hochladen
+Uploaded as .eml by a person,Von einer Person als .eml hochgeladen
+Received through Frappe Mail,Über Frappe Mail empfangen
+"Of {0} selected e-mails, {1} look automated and {2} only have internal addresses. Archive them anyway?",Von {0} ausgewählten E-Mails sehen {1} automatisch erzeugt aus und {2} haben nur interne Adressen. Trotzdem archivieren?
+This e-mail is archived.,Diese E-Mail ist archiviert.
 Another export is still running. Please wait until it is done.,"Ein anderer Export läuft noch. Bitte warten, bis er fertig ist."
 The export was interrupted.,Der Export wurde unterbrochen.
 "This file type is only offered as a download, so it cannot run in the viewer.","Dieser Dateityp wird nur zum Herunterladen angeboten, damit er im Viewer nicht ausgeführt werden kann."

@@ -15,6 +15,7 @@ from docarchive.document_archive.doctype.business_document.business_document imp
 	missing_fields,
 	own_file,
 )
+from docarchive.mail import archiving
 
 DOCUMENT = "Business Document"
 SAVEPOINT = "docarchive_save"
@@ -463,6 +464,18 @@ def counterparty(doc):
 	return {"doctype": doc.counterparty_type, "id": doc.counterparty, "name": party.get_title() or party.name}
 
 
+def correspondence_meta(doc):
+	if not frappe.get_cached_value("Business Document Type", doc.document_type, "is_correspondence"):
+		return None
+	return {
+		"channel": doc.correspondence_channel,
+		"direction": doc.correspondence_direction,
+		"at": utc_iso(frappe.utils.get_datetime(doc.correspondence_at)) if doc.correspondence_at else None,
+		"thread_key": doc.thread_key,
+		"mail": archiving.mail_meta(doc),
+	}
+
+
 def meta(doc, years, until) -> dict:
 	file = own_file(doc) if doc.file else None
 	document_type = frappe.get_cached_doc("Business Document Type", doc.document_type)
@@ -498,6 +511,7 @@ def meta(doc, years, until) -> dict:
 			"own_company": doc.own_company,
 		},
 		"counterparty": counterparty(doc),
+		"correspondence": correspondence_meta(doc),
 		"einvoice": json.loads(doc.einvoice_data) if doc.get("einvoice_data") else None,
 		"file": main,
 		"files": [main, *attachments],

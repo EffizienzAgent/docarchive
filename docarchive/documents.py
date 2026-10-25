@@ -26,7 +26,9 @@ PANEL_FIELDS = [
 	"contract_end_date",
 	"own_company",
 	"einvoice_needs_review",
+	"thread_key",
 ]
+PANEL_ROW_FIELDS = (*DOCUMENT_FIELDS, "file", "retain_until", "counterparty", "thread_key")
 
 
 @frappe.whitelist()
@@ -83,7 +85,7 @@ def counterparty_panel(counterparty_type: str, counterparty: str) -> dict:
 		reason = archive_refusal(panel, row, archived_types, missing)
 		panel["documents"].append(
 			{
-				**{field: row.get(field) for field in (*DOCUMENT_FIELDS, "file", "retain_until", "counterparty")},
+				**{field: row.get(field) for field in PANEL_ROW_FIELDS},
 				"missing": missing,
 				"eligible": not reason,
 				"archive_reason": reason,
@@ -134,7 +136,11 @@ def upload_defaults() -> dict:
 		limit=1,
 	)
 	fallback = frappe.db.get_single_value("Archive Settings", "default_upload_type")
-	return {"document_type": last[0] if last else fallback}
+	return {"document_type": last[0] if last else fallback, "correspondence_types": correspondence_types()}
+
+
+def correspondence_types() -> list[str]:
+	return frappe.get_all("Business Document Type", filters={"is_correspondence": 1}, pluck="name")
 
 
 def upload_rows(file_urls, document_type, document_date, documents):
@@ -155,12 +161,25 @@ def create_documents(
 	document_date: str | None = None,
 	documents=None,
 	combine: bool = False,
+	source_doctype: str | None = None,
+	source_name: str | None = None,
+	correspondence_channel: str | None = None,
+	correspondence_direction: str | None = None,
+	correspondence_at: str | None = None,
 ) -> list:
 	frappe.has_permission(counterparty_type, "read", counterparty, throw=True)
+	check_source(source_doctype, source_name)
 	rows = upload_rows(file_urls, document_type, document_date, documents)
 	groups = [rows] if frappe.utils.cint(combine) and rows else [[row] for row in rows]
-	return [
-		frappe.get_doc(
+	letters = set(correspondence_types())
+	correspondence = {
+		"correspondence_channel": correspondence_channel,
+		"correspondence_direction": correspondence_direction,
+		"correspondence_at": correspondence_at,
+	}
+	names = []
+	for main, *rest in groups:
+		doc = frappe.get_doc(
 			{
 				"doctype": DOCUMENT,
 				"counterparty_type": counterparty_type,
@@ -170,12 +189,22 @@ def create_documents(
 				"title": main.get("title"),
 				"file": main["file_url"],
 				"attachments": [{"file": row["file_url"], "title": row.get("title")} for row in rest],
+				**(correspondence if main.get("document_type") in letters else {}),
 			}
 		)
-		.insert()
-		.name
-		for main, *rest in groups
-	]
+		if source_doctype:
+			doc.update({"source_doctype": source_doctype, "source_name": source_name})
+			doc.flags.archive_write = True
+		names.append(doc.insert().name)
+	return names
+
+
+def check_source(source_doctype, source_name):
+	if not (source_doctype or source_name):
+		return
+	if source_doctype != DOCUMENT or not source_name:
+		frappe.throw(_("Only a Business Document can be the source of an upload."))
+	frappe.has_permission(DOCUMENT, "read", source_name, throw=True)
 
 
 @frappe.whitelist(methods=["POST"])

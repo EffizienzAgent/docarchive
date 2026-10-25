@@ -1,0 +1,80 @@
+{
+ "docstatus": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Document Archive",
+ "custom": 0,
+ "name": "Archive Mail Account",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "editable_grid": 1,
+ "field_order": [
+  "email_account",
+  "mode",
+  "outgoing_source",
+  "archive_internal",
+  "contacts_as_counterparty",
+  "keep_days",
+  "own_company",
+  "internal_domains"
+ ],
+ "fields": [
+  {
+   "fieldname": "email_account",
+   "fieldtype": "Link",
+   "label": "Email Account",
+   "options": "Email Account",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "label": "Mode",
+   "options": "Off\nManual\nAutomatic",
+   "default": "Off",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "outgoing_source",
+   "fieldtype": "Select",
+   "label": "Outgoing Originals From",
+   "options": "Frappe\nSent Folder",
+   "default": "Frappe",
+   "description": "Sent Folder: originals of sent mails come from the IMAP Sent folder through mailsync instead of being rebuilt after sending. Only for IMAP accounts."
+  },
+  {
+   "fieldname": "archive_internal",
+   "fieldtype": "Check",
+   "label": "Archive Internal Mails",
+   "default": "0"
+  },
+  {
+   "fieldname": "contacts_as_counterparty",
+   "fieldtype": "Check",
+   "label": "Contacts Count as Counterparty",
+   "default": "0"
+  },
+  {
+   "fieldname": "keep_days",
+   "fieldtype": "Int",
+   "label": "Keep Unarchived Originals (Days)",
+   "default": "90"
+  },
+  {
+   "fieldname": "own_company",
+   "fieldtype": "Link",
+   "label": "Own Company",
+   "options": "Own Company"
+  },
+  {
+   "fieldname": "internal_domains",
+   "fieldtype": "Small Text",
+   "label": "Internal Domains",
+   "description": "Comma-separated. Empty: the domain of the account's address."
+  }
+ ],
+ "permissions": []
+}
