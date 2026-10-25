@@ -147,6 +147,24 @@ class TestCounterpartyDocuments(IntegrationTestCase):
 			(["Document Number"], False),
 		)
 		self.assertEqual(rows[ready.name]["file"], ready.file)
+		self.assertIsNone(rows[ready.name]["archive_reason"])
+		self.assertIn("Document Number", rows[incomplete.name]["archive_reason"])
+
+	def test_panel_lists_attachments(self):
+		files = [make_file(file_name="Rechnung.pdf"), make_file(file_name="Anlage.pdf")]
+		[name] = documents.create_documents(
+			"Contact",
+			self.party.name,
+			documents=frappe.as_json(
+				[{"file_url": f.file_url, "document_type": self.type, "title": "Anlage"} for f in files]
+			),
+			combine=True,
+		)
+		[row] = documents.counterparty_panel("Contact", self.party.name)["documents"]
+		self.assertEqual(row["name"], name)
+		self.assertEqual(
+			[(item["file"], item["title"]) for item in row["attachments"]], [(files[1].file_url, "Anlage")]
+		)
 
 	def test_panel_shows_legal_hold_and_hides_deleted_documents(self):
 		held = make_business_document(document_type=self.type, **party_fields(self.party))
@@ -166,6 +184,7 @@ class TestCounterpartyDocuments(IntegrationTestCase):
 		panel = documents.counterparty_panel("Contact", self.party.name)
 		self.assertFalse(panel["archiving"])
 		self.assertEqual([row["eligible"] for row in panel["documents"]], [False])
+		self.assertEqual(panel["documents"][0]["archive_reason"], "Archiving is switched off.")
 
 	def test_panel_is_empty_for_outsiders(self):
 		make_business_document(**party_fields(self.party))

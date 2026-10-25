@@ -1,13 +1,18 @@
 import * as core from "./documents_core";
+import { local_file_url } from "./triage_core";
 
 frappe.provide("docarchive");
 docarchive.documents_core = core;
 
 const METHOD = "docarchive.documents";
 const DOCUMENT = "Business Document";
+const WIDTH_KEY = "docarchive.preview_width";
+const MIN_PREVIEW = 280;
+const MIN_LIST = 320;
 const esc = (value) => frappe.utils.escape_html(value ?? "");
 const panels = new Set();
 let listening = false;
+let panel_ids = 0;
 
 const STATE_STYLES = {
 	open: ["orange", "Open"],
@@ -45,6 +50,66 @@ function select(name, label, options, value) {
 	return `<select class="form-control input-xs" data-filter="${name}" aria-label="${esc(label)}">${html}</select>`;
 }
 
+function selection_hint(doc) {
+	if (doc.archive_status === core.DELETED) return __("Deleted documents cannot be changed.");
+	if (doc.archive_status === "Archived" || !doc.archive_reason) {
+		return __("No bulk action is available for this document.");
+	}
+	return doc.archive_reason;
+}
+
+const file_name = (url) => decodeURIComponent((url || "").split(/[?#]/)[0].split("/").pop() || "");
+
+function safe_file_name(url) {
+	try {
+		return file_name(url);
+	} catch {
+		return url;
+	}
+}
+
+function preview_value(key, doc) {
+	if (key === "status") {
+		const [, label] = STATE_STYLES[core.document_state(doc)];
+		return { text: __(label), html: state_badge(doc) };
+	}
+	if (key === "document_type") return { text: doc.document_type ? __(doc.document_type) : "" };
+	if (key === "document_date") return { text: frappe.datetime.str_to_user(doc.document_date) || "" };
+	if (key === "retain_until") {
+		return { text: doc.retain_until ? docarchive.format_retain_until(doc.retain_until) : "" };
+	}
+	if (key === "legal_hold") return { text: doc.legal_hold ? __("Yes") : "" };
+	return { text: doc[key] || "" };
+}
+
+function preview_files(doc) {
+	const main = doc.file ? [{ file: doc.file, label: __("Main file") }] : [];
+	const attachments = (doc.attachments || []).map((item) => ({
+		file: item.file,
+		label: item.title || safe_file_name(item.file),
+	}));
+	return [...main, ...attachments];
+}
+
+function read_width() {
+	try {
+		return Number(storage().getItem(WIDTH_KEY)) || null;
+	} catch {
+		return null;
+	}
+}
+
+function save_width(width) {
+	try {
+		storage().setItem(WIDTH_KEY, String(Math.round(width)));
+	} catch {
+		// storage can be unavailable or full
+	}
+}
+
+const is_typing = (target) =>
+	target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName);
+
 const sort_label = (filters) => (filters.oldest_first ? __("Oldest first") : __("Newest first"));
 const name_of = (event) => $(event.currentTarget).closest("tr").attr("data-name");
 
@@ -52,32 +117,64 @@ class DocumentsPanel {
 	constructor($wrapper, party) {
 		this.$wrapper = $wrapper;
 		this.party = party;
+		this.id = ++panel_ids;
 		this.key = core.filter_key(party.counterparty_type, party.counterparty);
 		this.filters = core.load_filters(storage, this.key);
 		this.selected = new Set();
+		this.previewing = null;
+		this.preview_file = 0;
 	}
 
 	load() {
-		return frappe.xcall(`${METHOD}.counterparty_panel`, this.party).then((data) => {
+		return frappe.xcall(`${METHOD}.counterparty_panel`, this.party).then(async (data) => {
 			this.data = data;
-			const eligible = new Set(data.documents.filter((doc) => doc.eligible).map((doc) => doc.name));
-			this.selected = new Set([...this.selected].filter((name) => eligible.has(name)));
+			this.access = {
+				extend: data.can_extend,
+				export: data.can_export,
+				hold: await this.hold_allowed(data),
+			};
 			this.render();
 			return data.documents;
 		});
 	}
 
+	hold_allowed(data) {
+		const archived = data.documents.some((doc) => doc.archive_status === "Archived");
+		if (!archived || !docarchive.hold_access) return false;
+		return docarchive
+			.hold_access()
+			.then((access) => Boolean(access.set))
+			.catch(() => false);
+	}
+
 	render() {
 		this.$wrapper.html(`<div class="docarchive-panel">
 			${this.data.documents.length ? this.toolbar() : ""}
-			<div class="docarchive-body"></div>
-			<div class="docarchive-footer text-muted small"></div>
+			<div class="docarchive-bulkbar hidden" role="toolbar" aria-label="${esc(__("Selection"))}"></div>
+			<div class="docarchive-split">
+				<div class="docarchive-main">
+					<div class="docarchive-body"></div>
+					<div class="docarchive-footer text-muted small"></div>
+				</div>
+				<div class="docarchive-resizer hidden" role="separator" aria-orientation="vertical"
+					tabindex="0" title="${esc(__("Drag to resize"))}"></div>
+				<aside class="docarchive-preview hidden" aria-label="${esc(__("Preview"))}"></aside>
+			</div>
 		</div>`);
 		this.$panel = this.$wrapper.find(".docarchive-panel");
 		this.bind_toolbar();
+		this.bind_bulkbar();
 		this.bind_body();
+		this.bind_preview();
 		if (this.data.can_create) this.bind_drop();
 		this.render_body();
+		const doc = this.doc(this.previewing);
+		if (doc) this.open_preview(doc.name, { keep_file: true });
+		else this.close_preview();
+	}
+
+	doc(name) {
+		return name ? this.data.documents.find((doc) => doc.name === name) : null;
 	}
 
 	toolbar() {
@@ -125,7 +222,6 @@ class DocumentsPanel {
 					: ""
 			}
 			<span class="docarchive-spacer"></span>
-			<button class="btn btn-default btn-xs hidden" data-action="bulk-archive"></button>
 			${extend}
 			${exporter}
 			${upload}
@@ -149,9 +245,27 @@ class DocumentsPanel {
 		$toolbar.on("click", "[data-action=extend-all]", () =>
 			docarchive.extend_many(this.party, () => this.load()),
 		);
-		$toolbar.on("click", "[data-action=bulk-archive]", () =>
-			docarchive.archive_now([...this.selected], () => this.load()),
-		);
+	}
+
+	bind_bulkbar() {
+		const $bar = this.$panel.find(".docarchive-bulkbar");
+		const reload = () => this.load();
+		const run = (action) => {
+			const names = core.bulk_targets(this.rows, this.selected, this.access)[action];
+			if (!names.length) return;
+			if (action === "archive") docarchive.archive_now(names, reload);
+			if (action === "extend") docarchive.extend_many({ names }, reload);
+			if (action === "hold") docarchive.set_legal_hold(names, reload);
+			if (action === "export") {
+				const docs = this.rows.filter((doc) => names.includes(doc.name));
+				docarchive.export_archive(core.export_defaults(this.party, docs));
+			}
+		};
+		$bar.on("click", "[data-bulk]", (event) => run(event.currentTarget.dataset.bulk));
+		$bar.on("click", "[data-action=clear-selection]", () => {
+			this.selected = new Set();
+			this.update_selection();
+		});
 	}
 
 	bind_body() {
@@ -160,14 +274,16 @@ class DocumentsPanel {
 			const name = event.currentTarget.dataset.select;
 			if (event.currentTarget.checked) this.selected.add(name);
 			else this.selected.delete(name);
-			this.render_body();
+			this.update_selection();
 		});
 		$body.on("change", "[data-select-all]", (event) => {
-			for (const doc of this.rows.filter((row) => row.eligible)) {
-				if (event.currentTarget.checked) this.selected.add(doc.name);
-				else this.selected.delete(doc.name);
-			}
-			this.render_body();
+			this.selected = core.toggle_all(
+				this.rows,
+				this.selected,
+				this.access,
+				event.currentTarget.checked,
+			);
+			this.update_selection();
 		});
 		$body.on("click", "[data-action=copy]", (event) =>
 			frappe.utils.copy_to_clipboard(
@@ -178,10 +294,61 @@ class DocumentsPanel {
 			docarchive.archive_now([name_of(event)], () => this.load()),
 		);
 		$body.on("click", "[data-action=thread]", (event) => docarchive.show_thread(name_of(event)));
+		$body.on("click", "[data-action=preview]", (event) => this.open_preview(name_of(event)));
+		$body.on("click", "tbody tr[data-name]", (event) => {
+			if ($(event.target).closest("a, button, input, label, .docarchive-check").length) return;
+			this.open_preview(event.currentTarget.dataset.name);
+		});
 		$body.on("click", ".docarchive-dropzone", () => this.upload());
 		$body.on("keydown", ".docarchive-dropzone", (event) => {
 			if (event.key === "Enter" || event.key === " ") this.upload();
 		});
+	}
+
+	bind_preview() {
+		const $preview = this.$panel.find(".docarchive-preview");
+		$preview.on("click", "[data-action=close-preview]", () => this.close_preview());
+		$preview.on("click", "[data-file-index]", (event) => {
+			this.preview_file = Number(event.currentTarget.dataset.fileIndex);
+			this.render_preview();
+		});
+		const $resizer = this.$panel.find(".docarchive-resizer");
+		$resizer.on("pointerdown", (event) => this.start_resize(event));
+		$resizer.on("dblclick", () => this.set_width(null));
+		$resizer.on("keydown", (event) => {
+			const delta = { ArrowLeft: 32, ArrowRight: -32 }[event.key];
+			if (!delta) return;
+			event.preventDefault();
+			this.set_width(this.$panel.find(".docarchive-preview").outerWidth() + delta);
+		});
+	}
+
+	start_resize(event) {
+		event.preventDefault();
+		const $split = this.$panel.find(".docarchive-split").addClass("docarchive-resizing");
+		const right = $split[0].getBoundingClientRect().right;
+		const move = (e) => this.set_width(right - e.clientX, false);
+		const stop = () => {
+			$(document).off(`.docarchive-resize-${this.id}`);
+			$split.removeClass("docarchive-resizing");
+			save_width(this.$panel.find(".docarchive-preview").outerWidth());
+		};
+		$(document)
+			.on(`pointermove.docarchive-resize-${this.id}`, (e) => move(e.originalEvent || e))
+			.on(`pointerup.docarchive-resize-${this.id} pointercancel.docarchive-resize-${this.id}`, stop);
+	}
+
+	set_width(width, persist = true) {
+		const $split = this.$panel.find(".docarchive-split");
+		if (!width) {
+			$split[0].style.removeProperty("--docarchive-preview-width");
+			if (persist) save_width("");
+			return;
+		}
+		const max = Math.max($split.width() - MIN_LIST, MIN_PREVIEW);
+		const clamped = Math.min(Math.max(width, MIN_PREVIEW), max);
+		$split[0].style.setProperty("--docarchive-preview-width", `${clamped}px`);
+		if (persist) save_width(clamped);
 	}
 
 	bind_drop() {
@@ -218,16 +385,47 @@ class DocumentsPanel {
 	render_body() {
 		const { documents } = this.data;
 		this.rows = core.filter_documents(documents, this.filters);
+		this.selected = core.prune_selection(this.rows, this.selected, this.access);
 		const $body = this.$panel.find(".docarchive-body");
 		if (!documents.length) $body.html(this.empty_state());
 		else if (!this.rows.length) {
 			$body.html(`<p class="text-muted">${esc(__("No documents match the filters."))}</p>`);
 		} else $body.html(this.table(this.rows));
 		this.render_footer();
-		this.$panel
-			.find("[data-action=bulk-archive]")
-			.toggleClass("hidden", !this.selected.size)
-			.text(`${__("Archive now")} (${this.selected.size})`);
+		this.update_selection();
+	}
+
+	update_selection() {
+		const state = core.selection_state(this.rows, this.selected, this.access);
+		const $body = this.$panel.find(".docarchive-body");
+		$body.find("[data-select]").each((_, input) => {
+			input.checked = this.selected.has(input.dataset.select);
+			$(input).closest("tr").toggleClass("docarchive-selected", input.checked);
+		});
+		$body
+			.find("[data-select-all]")
+			.prop({ checked: state.all, indeterminate: state.indeterminate });
+		this.render_bulkbar(state.count);
+	}
+
+	render_bulkbar(count) {
+		const $bar = this.$panel.find(".docarchive-bulkbar").toggleClass("hidden", !count);
+		if (!count) return $bar.empty();
+		const targets = core.bulk_targets(this.rows, this.selected, this.access);
+		const labels = {
+			archive: __("Archive now"),
+			extend: __("Extend term"),
+			hold: __("Legal Hold"),
+			export: __("Export"),
+		};
+		const buttons = core.BULK_ACTIONS.filter((action) => targets[action].length).map((action) => {
+			const n = targets[action].length;
+			const label = n < count ? `${labels[action]} (${n})` : labels[action];
+			return `<button class="btn btn-default btn-xs" data-bulk="${action}">${esc(label)}</button>`;
+		});
+		$bar.html(`<span class="docarchive-bulk-count">${esc(__("{0} selected", [count]))}</span>
+			${buttons.join("")}
+			<button class="btn btn-link btn-xs" data-action="clear-selection">${esc(__("Clear selection"))}</button>`);
 	}
 
 	empty_state() {
@@ -239,37 +437,43 @@ class DocumentsPanel {
 	}
 
 	table(rows) {
-		const selectable = this.data.archiving && this.data.can_write;
-		const eligible = rows.filter((doc) => doc.eligible);
-		const all = eligible.length && eligible.every((doc) => this.selected.has(doc.name));
-		const select_all = selectable
-			? `<th class="docarchive-check"><input type="checkbox" data-select-all ${all ? "checked" : ""}
-				${eligible.length ? "" : "disabled"} aria-label="${esc(__("Select all"))}"></th>`
+		const checks = this.data.documents.some((doc) => core.is_selectable(doc, this.access));
+		const any = rows.some((doc) => core.is_selectable(doc, this.access));
+		const select_all = any
+			? `<input type="checkbox" class="list-row-checkbox" data-select-all aria-label="${esc(__("Select all"))}">`
 			: "";
 		const headers = [
-			"Title",
-			"Business Document Type",
-			"Document Number",
-			"Document Date",
-			"Retain Until (UTC)",
-			"Status",
+			["Title", ""],
+			["Business Document Type", ""],
+			["Document Number", "docarchive-optional"],
+			["Document Date", ""],
+			["Retain Until (UTC)", "docarchive-optional"],
+			["Status", ""],
 		];
 		return `<table class="table table-condensed docarchive-table">
-			<thead><tr>${select_all}${headers.map((h) => `<th>${esc(__(h))}</th>`).join("")}<th></th></tr></thead>
-			<tbody>${rows.map((doc) => this.row(doc, selectable)).join("")}</tbody>
+			<thead><tr>
+				${checks ? `<th class="docarchive-check">${select_all}</th>` : ""}
+				${headers.map(([h, cls]) => `<th class="${cls}">${esc(__(h))}</th>`).join("")}
+				<th class="docarchive-optional"></th>
+			</tr></thead>
+			<tbody>${rows.map((doc) => this.row(doc, checks)).join("")}</tbody>
 		</table>`;
 	}
 
-	row(doc, selectable) {
+	row(doc, checks) {
 		const href = frappe.utils.get_form_link(DOCUMENT, doc.name);
 		const missing = (doc.missing || []).map((field) => __("{0} missing", [__(field)])).join(", ");
-		const checked = this.selected.has(doc.name) ? "checked" : "";
-		const check = doc.eligible
-			? `<input type="checkbox" data-select="${esc(doc.name)}" ${checked} aria-label="${esc(__("Select"))}">`
-			: "";
+		const check = core.is_selectable(doc, this.access)
+			? `<input type="checkbox" class="list-row-checkbox" data-select="${esc(doc.name)}"
+				aria-label="${esc(__("Select {0}", [doc.title || doc.name]))}">`
+			: `<span class="docarchive-check-disabled" title="${esc(selection_hint(doc))}">
+				<input type="checkbox" class="list-row-checkbox" disabled tabindex="-1"
+					aria-label="${esc(selection_hint(doc))}"></span>`;
 		const file = doc.file
-			? `<a class="btn btn-xs btn-default" href="${esc(docarchive.file_url(doc.file))}" target="_blank"
-				rel="noopener" title="${esc(__("Open file"))}">${frappe.utils.icon("file-text", "xs")}</a>`
+			? `<button class="btn btn-xs btn-default" data-action="preview" title="${esc(__("Preview"))}">
+					${frappe.utils.icon("eye", "xs")}</button>
+				<a class="btn btn-xs btn-default" href="${esc(docarchive.file_url(doc.file))}" target="_blank"
+					rel="noopener" title="${esc(__("Open in new tab"))}">${frappe.utils.icon("external-link", "xs")}</a>`
 			: "";
 		const thread = doc.thread_key
 			? `<button class="btn btn-xs btn-default" data-action="thread" title="${esc(__("Show thread"))}">
@@ -278,18 +482,19 @@ class DocumentsPanel {
 		const archive = doc.eligible
 			? `<button class="btn btn-xs btn-default" data-action="archive">${esc(__("Archive now"))}</button>`
 			: "";
-		return `<tr data-name="${esc(doc.name)}">
-			${selectable ? `<td class="docarchive-check">${check}</td>` : ""}
+		const active = doc.name === this.previewing ? "docarchive-active" : "";
+		return `<tr data-name="${esc(doc.name)}" class="${active}">
+			${checks ? `<td class="docarchive-check">${check}</td>` : ""}
 			<td>
 				<a href="${esc(href)}">${esc(doc.title || doc.name)}</a>
 				${missing ? `<a href="${esc(href)}" class="docarchive-missing">${esc(missing)}</a>` : ""}
 			</td>
 			<td>${esc(__(doc.document_type))}</td>
-			<td class="docarchive-nowrap">${esc(doc.document_number)}</td>
+			<td class="docarchive-nowrap docarchive-optional">${esc(doc.document_number)}</td>
 			<td class="docarchive-nowrap">${esc(frappe.datetime.str_to_user(doc.document_date))}</td>
-			<td class="docarchive-nowrap">${esc(doc.retain_until ? frappe.datetime.str_to_user(doc.retain_until.slice(0, 10)) : "")}</td>
+			<td class="docarchive-nowrap docarchive-optional">${esc(doc.retain_until ? frappe.datetime.str_to_user(doc.retain_until.slice(0, 10)) : "")}</td>
 			<td class="docarchive-nowrap">${state_badge(doc)}</td>
-			<td class="docarchive-actions">
+			<td class="docarchive-actions docarchive-optional">
 				${file}
 				<button class="btn btn-xs btn-default" data-action="copy" title="${esc(__("Copy link"))}">
 					${frappe.utils.icon("link", "xs")}</button>
@@ -297,6 +502,123 @@ class DocumentsPanel {
 				${archive}
 			</td>
 		</tr>`;
+	}
+
+	open_preview(name, { keep_file = false } = {}) {
+		if (!this.doc(name)) return;
+		if (!keep_file || name !== this.previewing) this.preview_file = 0;
+		this.previewing = name;
+		this.$panel.addClass("docarchive-previewing");
+		this.$panel.find(".docarchive-preview, .docarchive-resizer").removeClass("hidden");
+		const width = read_width();
+		if (width) this.set_width(width, false);
+		const $rows = this.$panel.find("tbody tr[data-name]").removeClass("docarchive-active");
+		const $row = $rows.filter((_, row) => row.dataset.name === name).addClass("docarchive-active");
+		$row[0]?.scrollIntoView?.({ block: "nearest" });
+		this.render_preview();
+		this.listen_keys();
+	}
+
+	close_preview() {
+		this.previewing = null;
+		this.preview_request = null;
+		this.$panel.removeClass("docarchive-previewing");
+		this.$panel.find(".docarchive-preview").addClass("hidden").empty();
+		this.$panel.find(".docarchive-resizer").addClass("hidden");
+		this.$panel.find("tbody tr.docarchive-active").removeClass("docarchive-active");
+		$(document).off(`keydown.docarchive-preview-${this.id}`);
+	}
+
+	listen_keys() {
+		const namespace = `keydown.docarchive-preview-${this.id}`;
+		$(document)
+			.off(namespace)
+			.on(namespace, (event) => {
+				if (!this.$wrapper[0].isConnected) return $(document).off(namespace);
+				if (!this.$panel.is(":visible") || is_typing(event.target)) return;
+				if (document.querySelector(".modal.show")) return;
+				const action = core.preview_key(event);
+				if (!action) return;
+				event.preventDefault();
+				if (action === "close") return this.close_preview();
+				const names = this.rows.map((doc) => doc.name);
+				const next = core.step(names, this.previewing, action === "next" ? 1 : -1);
+				if (next && next !== this.previewing) this.open_preview(next);
+			});
+	}
+
+	render_preview() {
+		const doc = this.doc(this.previewing);
+		const files = preview_files(doc);
+		const current = files[this.preview_file] || files[0];
+		const form = frappe.utils.get_form_link(DOCUMENT, doc.name);
+		const new_tab = current
+			? `<a class="btn btn-default btn-xs" href="${esc(docarchive.file_url(current.file))}" target="_blank"
+				rel="noopener">${frappe.utils.icon("external-link", "xs")} ${esc(__("Open in new tab"))}</a>`
+			: `<button class="btn btn-default btn-xs" disabled>${esc(__("Open in new tab"))}</button>`;
+		const actions = `<a class="btn btn-default btn-xs" href="${esc(form)}">${esc(__("Open form"))}</a>
+			${new_tab}
+			<button class="btn btn-xs btn-default" data-action="close-preview"
+				title="${esc(__("Close preview (Esc)"))}" aria-label="${esc(__("Close preview"))}">
+				${frappe.utils.icon("close", "xs")}</button>`;
+		const tabs = files
+			.map(
+				(item, index) =>
+					`<button class="btn btn-xs ${item === current ? "btn-primary" : "btn-default"}"
+						role="tab" aria-selected="${item === current}" data-file-index="${index}"
+						title="${esc(safe_file_name(item.file))}">${esc(item.label)}</button>`,
+			)
+			.join("");
+		const $preview = this.$panel.find(".docarchive-preview");
+		$preview.html(`${core.preview_header(doc, { t: __, esc, value: preview_value, actions })}
+			<div class="docarchive-preview-tabs" role="tablist">${tabs}</div>
+			<div class="docarchive-preview-stage"></div>`);
+		this.render_stage($preview.find(".docarchive-preview-stage"), current);
+	}
+
+	render_stage($stage, current) {
+		const request = (this.preview_request = {});
+		if (!current) return $stage.html(this.stage_message(__("No file")));
+		const url = current.file;
+		const name = safe_file_name(url);
+		const kind = core.viewer_kind(url);
+		if (kind === "pdf") {
+			return $stage.html(`<iframe class="docarchive-preview-frame" src="${esc(url)}" title="${esc(name)}"></iframe>`);
+		}
+		if (kind === "image") {
+			return $stage.html(`<img class="docarchive-preview-image" src="${esc(url)}" alt="${esc(name)}">`);
+		}
+		if (kind === "html" && typeof docarchive.html_preview === "function") {
+			$stage.html(this.stage_message(__("Loading preview...")));
+			return Promise.resolve(docarchive.html_preview(url, name))
+				.then((frame) => {
+					if (request !== this.preview_request) return frame?.discard?.();
+					$(frame).addClass("docarchive-preview-frame");
+					$stage.empty().append(frame);
+				})
+				.catch(() => request === this.preview_request && $stage.html(this.download(url, name)));
+		}
+		$stage.html(this.download(url, name, kind === "html"));
+	}
+
+	stage_message(text) {
+		return `<div class="docarchive-preview-empty text-muted">${esc(text)}</div>`;
+	}
+
+	download(url, name, html = false) {
+		const href = local_file_url(url);
+		const link = html
+			? `<a class="btn btn-default btn-sm" href="${esc(docarchive.file_url(url))}" target="_blank"
+				rel="noopener">${esc(__("Open in new tab"))}</a>`
+			: href
+				? `<a class="btn btn-default btn-sm" href="${esc(href)}" download>${esc(__("Download"))}</a>`
+				: "";
+		const note = html ? __("HTML files are only shown in the viewer.") : __("No preview available.");
+		return `<div class="docarchive-preview-empty">
+			<p class="docarchive-preview-file">${esc(name)}</p>
+			<p class="text-muted">${esc(note)}</p>
+			${link}
+		</div>`;
 	}
 
 	render_footer() {

@@ -33,6 +33,11 @@
   "export_section",
   "export_part_size_mb",
   "export_expiry_days",
+  "export_brand_section",
+  "export_brand_name",
+  "export_brand_logo",
+  "export_brand_color",
+  "export_show_credit",
   "granted_permissions"
  ],
  "fields": [
@@ -168,7 +173,7 @@
    "label": "Export Part Size (MB)",
    "default": "2048",
    "non_negative": 1,
-   "description": "Exports above this size are split into several ZIP files."
+   "description": "Exports above this size are split into several ZIP files. At most 4096 MB."
   },
   {
    "fieldname": "export_expiry_days",
@@ -177,6 +182,36 @@
    "default": "7",
    "non_negative": 1,
    "description": "Export files are deleted after this many days."
+  },
+  {
+   "fieldname": "export_brand_section",
+   "fieldtype": "Section Break",
+   "label": "Export Viewer",
+   "collapsible": 1,
+   "description": "Shown in the offline viewer (index.html) of every export. Leave empty for a neutral viewer."
+  },
+  {
+   "fieldname": "export_brand_name",
+   "fieldtype": "Data",
+   "label": "Brand Name"
+  },
+  {
+   "fieldname": "export_brand_logo",
+   "fieldtype": "Attach Image",
+   "label": "Brand Logo",
+   "description": "PNG, JPEG, GIF or WebP, at most 200 KB. It is embedded into the viewer, so nothing loads from the internet."
+  },
+  {
+   "fieldname": "export_brand_color",
+   "fieldtype": "Data",
+   "label": "Brand Color",
+   "description": "Hex color, for example #1a7f37."
+  },
+  {
+   "fieldname": "export_show_credit",
+   "fieldtype": "Check",
+   "label": "Show \"Made with docarchive\"",
+   "default": "1"
   },
   {
    "fieldname": "granted_permissions",

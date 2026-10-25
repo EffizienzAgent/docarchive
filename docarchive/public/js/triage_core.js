@@ -45,6 +45,12 @@ export class Queue {
 		this.index -= 1;
 		return true;
 	}
+
+	remove_current() {
+		this.names.splice(this.index, 1);
+		this.index = Math.min(this.index, Math.max(this.names.length - 1, 0));
+		return this.names.length > 0;
+	}
 }
 
 export function local_file_url(file_url) {

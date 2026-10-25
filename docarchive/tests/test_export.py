@@ -2,6 +2,9 @@ import email
 import email.policy
 import io
 import json
+import os
+import tempfile
+import time
 import zipfile
 from datetime import timedelta
 from unittest.mock import patch
@@ -11,7 +14,7 @@ from frappe.utils import now_datetime
 
 from docarchive import export, export_package, run
 from docarchive.permissions import ADMIN_ROLE
-from docarchive.tests.factories import eml, make_manager, make_party, make_user, party_fields
+from docarchive.tests.factories import eml, make_document_type, make_manager, make_party, make_user, party_fields
 from docarchive.tests.hold_case import DOCUMENT, HoldTestCase
 from docarchive.tests.test_attachments import attachment, xml_file
 
@@ -261,3 +264,82 @@ class TestPaths(ExportTestCase):
 	def test_archive_paths_stay_inside_the_package(self):
 		self.assertEqual(export_package.archive_path("../../etc/passwd"), "documents/etc/passwd")
 		self.assertEqual(export_package.preview_path("a/b.eml"), "previews/a/b.eml.html")
+
+
+class TestHardening(ExportTestCase):
+	def test_viewer_data_cannot_break_out_of_the_script(self):
+		doc = self.archived(title="<!--<script \u2028 & </script>")
+		result = self.export()
+		self.assertEqual((result.status, result.error), ("Completed", None))
+		[archive] = self.zips(result)
+		viewer = archive.read("index.html").decode()
+		payload = viewer.split("const DATA = ", 1)[1].split(";\n", 1)[0]
+		for char in ("<", ">", "&", "\u2028"):
+			self.assertNotIn(char, payload)
+		self.assertIn("<!--<script", doc.title)
+		self.assertEqual(json.loads(payload)["documents"][0]["title"], doc.title)
+
+	def test_only_one_export_at_a_time(self):
+		export.start_export({})
+		with self.assertRaises(frappe.ValidationError):
+			export.start_export({})
+
+	def test_part_size_is_capped(self):
+		frappe.db.set_single_value("Archive Settings", "export_part_size_mb", 999999)
+		self.assertEqual(export.part_limit(), export.MAX_PART_MB * 1024 * 1024)
+
+	def test_stale_exports_and_temp_dirs_are_cleaned_up(self):
+		name = export.start_export({})
+		frappe.db.set_value(EXPORT, name, "status", "Running")
+		old = now_datetime() - timedelta(hours=export.STALE_HOURS + 1)
+		frappe.db.set_value(EXPORT, name, "modified", old, update_modified=False)
+		stale_dir = tempfile.mkdtemp(prefix=export.TEMP_PREFIX)
+		fresh_dir = tempfile.mkdtemp(prefix=export.TEMP_PREFIX)
+		past = time.time() - (export.STALE_HOURS + 1) * 3600
+		os.utime(stale_dir, (past, past))
+		export.expire()
+		self.assertEqual(frappe.db.get_value(EXPORT, name, "status"), "Failed")
+		self.assertFalse(os.path.exists(stale_dir))
+		self.assertTrue(os.path.exists(fresh_dir))
+		os.rmdir(fresh_dir)
+
+	def test_failing_cleanup_still_marks_the_export_failed(self):
+		self.archived()
+		with (
+			patch("docarchive.export.build_part", side_effect=RuntimeError("boom")),
+			patch("docarchive.export.delete_files", side_effect=RuntimeError("gone")),
+		):
+			result = self.export()
+		self.assertEqual(result.status, "Failed")
+
+	def test_export_files_need_the_archive_admin_role(self):
+		self.archived()
+		result = self.export()
+		file = frappe.get_doc("File", {"file_url": result.parts[0].file})
+		self.assertTrue(frappe.has_permission("File", "read", file, user=ADMIN))
+		frappe.db.set_value("File", file.name, "owner", "export-manager@example.com")
+		manager = make_manager("export-manager@example.com")
+		file.reload()
+		self.assertFalse(frappe.has_permission("File", "read", file, user=manager))
+
+	def test_user_permissions_limit_the_export(self):
+		other_type = make_document_type(default_retention_years=8)
+		allowed = self.archived()
+		self.archived(document_type=other_type.name)
+		frappe.set_user("Administrator")
+		frappe.get_doc(
+			{
+				"doctype": "User Permission",
+				"user": ADMIN,
+				"allow": "Business Document Type",
+				"for_value": allowed.document_type,
+			}
+		).insert(ignore_permissions=True)
+		frappe.set_user(ADMIN)
+		try:
+			[archive] = self.zips(self.export())
+			self.assertEqual([row["id"] for row in self.manifest(archive)["documents"]], [allowed.name])
+		finally:
+			frappe.set_user("Administrator")
+			for name in frappe.get_all("User Permission", filters={"user": ADMIN}, pluck="name"):
+				frappe.delete_doc("User Permission", name, ignore_permissions=True)

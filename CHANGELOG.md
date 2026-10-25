@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.6.0](https://github.com/EffizienzAgent/docarchive/compare/v0.5.0...v0.6.0) (2026-10-25)
+
+
+### Features
+
+* **export viewer:** keyboard navigation (English and German shortcut help), a fixed metadata header and branding ([#29](https://github.com/EffizienzAgent/docarchive/pull/29)) ([c215457](https://github.com/EffizienzAgent/docarchive/commit/c215457ee7344422b7bcd530eec95ad4364edabe), [31ea0f8](https://github.com/EffizienzAgent/docarchive/commit/31ea0f8ce6eea2118f58fbcd392449cb5dc0bad3))
+* **documents panel:** the preview header stays fixed while scrolling ([#29](https://github.com/EffizienzAgent/docarchive/pull/29)) ([744cbe0](https://github.com/EffizienzAgent/docarchive/commit/744cbe052f0c556a801f4c1b1a8f7fe9f4f7c9b0))
+
+## [0.5.0](https://github.com/EffizienzAgent/docarchive/compare/v0.4.1...v0.5.0) (2026-10-25)
+
+
+### Features
+
+* open or delete the current document from triage ([f6f83f4](https://github.com/EffizienzAgent/docarchive/commit/f6f83f41040905ca0767edb4ba73806c3edeba6f))
+* row selection, bulk bar and side preview in the documents panel ([4c9c2b3](https://github.com/EffizienzAgent/docarchive/commit/4c9c2b39d66779020462358735f834f4b5a0258a))
+
+## [0.4.1](https://github.com/EffizienzAgent/docarchive/compare/v0.4.0...v0.4.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* harden the archive export: safe viewer data, recovery of interrupted exports, one export at a time, download-only active files, User Permissions and admin-only export downloads ([c1fa7bd](https://github.com/EffizienzAgent/docarchive/commit/c1fa7bdbfd95341ac1e0146091b55318a207d162))
+
 ## [0.4.0](https://github.com/EffizienzAgent/docarchive/compare/v0.3.0...v0.4.0) (2026-10-25)
 
 

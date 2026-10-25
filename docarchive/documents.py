@@ -28,7 +28,7 @@ PANEL_FIELDS = [
 	"einvoice_needs_review",
 	"thread_key",
 ]
-PANEL_ROW_FIELDS = (*DOCUMENT_FIELDS, "file", "retain_until", "thread_key")
+PANEL_ROW_FIELDS = (*DOCUMENT_FIELDS, "file", "retain_until", "counterparty", "thread_key")
 
 
 @frappe.whitelist()
@@ -79,21 +79,49 @@ def counterparty_panel(counterparty_type: str, counterparty: str) -> dict:
 		limit=PANEL_LIMIT + 1,
 	)
 	archived_types = set(frappe.get_all("Business Document Type", filters={"archive": 1}, pluck="name"))
+	attachments = attachments_of([row.name for row in rows[:PANEL_LIMIT]])
 	for row in rows[:PANEL_LIMIT]:
 		missing = missing_fields(row)
+		reason = archive_refusal(panel, row, archived_types, missing)
 		panel["documents"].append(
 			{
 				**{field: row.get(field) for field in PANEL_ROW_FIELDS},
 				"missing": missing,
-				"eligible": panel["archiving"]
-				and panel["can_write"]
-				and not row.archive_started_at
-				and row.document_type in archived_types
-				and not missing,
+				"eligible": not reason,
+				"archive_reason": reason,
+				"attachments": attachments.get(row.name, []),
 			}
 		)
 	panel["truncated"] = len(rows) > PANEL_LIMIT
 	return panel
+
+
+def archive_refusal(panel, row, archived_types, missing) -> str | None:
+	if not panel["archiving"]:
+		return _("Archiving is switched off.")
+	if not panel["can_write"]:
+		return _("You cannot change this document.")
+	if row.archive_started_at:
+		return _("Archiving has already started.")
+	if row.document_type not in archived_types:
+		return _("Documents of this type are not archived.")
+	if missing:
+		return _("Missing before archiving: {0}").format(", ".join(_(field) for field in missing))
+	return None
+
+
+def attachments_of(names) -> dict:
+	by_parent = {}
+	if not names:
+		return by_parent
+	for row in frappe.get_all(
+		"Business Document Attachment",
+		filters={"parenttype": DOCUMENT, "parent": ("in", names), "file": ("is", "set")},
+		fields=["parent", "file", "title", "role"],
+		order_by="idx asc",
+	):
+		by_parent.setdefault(row.pop("parent"), []).append(row)
+	return by_parent
 
 
 @frappe.whitelist()

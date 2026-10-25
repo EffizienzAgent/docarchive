@@ -75,7 +75,7 @@ File deletion runs inside the File controller, before any `doc_events` hook. So 
 
 ### Counterparty panel
 
-The app's JS bundle offers a panel for any form: the record's documents with search, filters (type, year, status) and sorting, row actions (open, open file, copy link, show thread for mails, archive now, also for several at once) and an upload with drag and drop. `.eml` files dropped there are filed as e-mails for the counterparty (see [Correspondence](#correspondence)). The upload dialog has one row per file with title, type and date. A date in the file name (`2026-08-05`, `2026_08_05`, `20260805` or `05.08.2026`) becomes the document date and is left out of the title. Uploads without a date take it from an e-invoice or the file name on the server too; otherwise the document stays without a date and is listed as missing it. With several files, the dialog can file them as one document: the first row becomes the main file, the others its attachments.
+The app's JS bundle offers a panel for any form: the record's documents with search, filters (type, year, status) and sorting, row actions (preview, open in a new tab, copy link, show thread for mails, archive now) and an upload with drag and drop. `.eml` files dropped there are filed as e-mails for the counterparty (see [Correspondence](#correspondence)). The upload dialog has one row per file with title, type and date. A date in the file name (`2026-08-05`, `2026_08_05`, `20260805` or `05.08.2026`) becomes the document date and is left out of the title. Uploads without a date take it from an e-invoice or the file name on the server too; otherwise the document stays without a date and is listed as missing it. With several files, the dialog can file them as one document: the first row becomes the main file, the others its attachments.
 
 ```js
 frappe.ui.form.on("Customer", {
@@ -87,9 +87,11 @@ frappe.ui.form.on("Customer", {
 
 `docarchive.render_documents($wrapper, { counterparty_type, counterparty })` and `docarchive.upload_documents({ counterparty_type, counterparty, files, on_saved, defaults })` are available for custom layouts (`defaults` may hold `document_date`, `source_doctype` and `source_name`). `docarchive.show_mail(name)` and `docarchive.show_thread(name)` open the mail viewer and the thread. Set `docarchive.file_url = (file_url) => url` to open files in your own viewer.
 
+Rows the user can act on have a checkbox. A bar above the list then offers "Archive now", "Extend term", "Legal Hold" and, for Archive Admins, "Export" for the selected rows; rows without any of these show a disabled checkbox with the reason. Clicking a row opens a preview pane on the right (an overlay on narrow screens) with a fixed header (the same labelled fields for every document, empty ones as "–") and the main file and attachments as tabs. Up/Down or j/k move through the list, Esc closes, and the pane can be resized. PDFs and images show inline, other files as a download. HTML is never rendered by docarchive itself: set `docarchive.html_preview = (file_url, title) => Promise<HTMLIFrameElement>` to return a sandboxed frame from your app, otherwise the pane links to `docarchive.file_url`.
+
 ### Triage
 
-`docarchive.triage(names, { start, on_close })` opens a dialog that walks through documents one by one: the fields and what is still missing on the left, and the file on the right (PDF and images inline, other types as a download). "Save and next" (Ctrl/Cmd+Enter), "Skip", "Back" and Alt+Left/Right move through the list; Esc closes. Each save is a normal `doc.save()` with permission checks, and validation errors stay inline. `docarchive.triage_all()` opens it on every document that still needs work. The Business Document list has "Assign" for selected documents and "Assign all".
+`docarchive.triage(names, { start, on_close })` opens a dialog that walks through documents one by one: the fields and what is still missing on the left, and the file on the right (PDF and images inline, other types as a download). "Save and next" (Ctrl/Cmd+Enter), "Skip", "Back" and Alt+Left/Right move through the list; Esc closes. "Open document" opens the form in a new tab, so the dialog and unsaved input stay; documents that are not archived yet can be deleted from the dialog. Each save is a normal `doc.save()` with permission checks, and validation errors stay inline. `docarchive.triage_all()` opens it on every document that still needs work. The Business Document list has "Assign" for selected documents and "Assign all".
 
 ### Dashboard helpers
 
@@ -373,19 +375,22 @@ An Archive Admin selects rows and clicks **Delete Selected**, or uses **Delete E
 
 The export runs on the long queue:
 
+- Only one export runs at a time. Starting another one while an export is queued or running is refused.
+- The selection uses the requesting user's permissions, so User Permissions on the Archive Admin limit the export.
 - It includes documents with an archived copy on the chosen target whose versions are all recorded; others are counted as "Not on Storage Target".
 - It reads every recorded version (file, attachments, `.meta.json`, extension sidecars) from storage with the archive key, never from the Frappe file, through `store.download`, the only function that calls `GetObject`. Four objects are fetched in parallel, each streamed to a temp file, retried up to three times.
 - Each object's SHA-256 is checked against the recorded checksum (sidecars: against the stored `sha256` metadata). A mismatch or an unreadable object is listed in the record and in `manifest.json` and does not stop the export.
-- Above **Export Part Size (MB)** (Archive Settings, default 2048) the export is split into parts, each a complete package. Before writing, it checks the free disk space for the largest part.
+- Above **Export Part Size (MB)** (Archive Settings, default 2048, at most 4096) the export is split into parts, each a complete package. Before each part, it checks the free disk space for that part.
 - Each ZIP (ZIP64; PDFs and images stored without compression) is uploaded with `s3storage.backend.insert_file` as a private File attached to the record, in parts and without loading it into memory. Downloads support `Range`, so they can resume.
-- After **Keep Exports For (Days)** (default 7) a daily job deletes the files and sets the record to Expired.
+- After **Keep Exports For (Days)** (default 7) a daily job deletes the files and sets the record to Expired. The same job marks exports that are still queued or running after 7 hours as Failed (the job timeout is 6 hours) and removes their files and temp directories.
+- Export files can only be downloaded by users with the role Archive Admin, also by the user who started the export.
 
 Each ZIP contains:
 
 - `documents/<object key>`: the archived objects with their exact bytes,
 - `manifest.json` and `manifest.csv`: scope, every document with its metadata (taken from the archived `.meta.json` or the newest sidecar), retention, lock mode, legal hold, and per object the key, version ID, SHA-256, size and check result,
 - `previews/<object key>.html`: for `.eml` files a rendered, sanitized preview (HTML body or plain text) with a Content-Security-Policy that blocks scripts and remote content,
-- `index.html`: an offline viewer in one file, without network requests. It lists all documents with search and filters (type, counterparty, own company, year, legal hold, problems), shows the metadata and retention trail, previews PDFs, images, XML and mail, and always links the original to open or download. Documents with a `thread_key` show their conversation in date order.
+- `index.html`: an offline viewer in one file, without network requests. It lists all documents with search and filters (type, counterparty, own company, year, legal hold, problems), shows the metadata and retention trail, previews PDFs, images, XML and mail, and always links the original to open or download. Files that a browser could run (HTML, SVG, XSLT and similar) are only offered as a download. The embedded data escapes `<`, `>`, `&`, U+2028 and U+2029, so no document text can end the script block. Documents with a `thread_key` show their conversation in date order. The metadata block always shows the same fields with labels (empty ones as "–"), so the file starts at the same position for every document. Keyboard: j/k or ↑/↓ move through the list, Enter opens the preview, `/` focuses the search, Esc clears the search or closes, ←/→ switch attachments and `?` shows all shortcuts; none of them fire while typing. Under "Export Viewer" in Archive Settings you can set a brand name, a logo (PNG, JPEG, GIF or WebP up to 200 KB, embedded as a data URI) and a hex accent color, and turn off the "Made with docarchive" footer link. Without these the viewer stays neutral.
 
 ### Archive now
 

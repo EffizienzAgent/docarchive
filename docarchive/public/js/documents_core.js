@@ -1,3 +1,5 @@
+import { local_file_url, preview_kind } from "./triage_core.js";
+
 export const MIN_YEAR = 1990;
 export const STATES = ["open", "complete", "archived", "failed"];
 
@@ -101,4 +103,107 @@ export function save_filters(get_storage, key, filters) {
 	} catch {
 		// storage can be unavailable or full
 	}
+}
+
+export const BULK_ACTIONS = ["archive", "extend", "hold", "export"];
+
+export function bulk_actions(doc, access = {}) {
+	if (doc.archive_status === DELETED) return [];
+	const archived = doc.archive_status === "Archived";
+	return BULK_ACTIONS.filter((action) => {
+		if (action === "archive") return Boolean(doc.eligible);
+		if (!archived) return false;
+		if (action === "hold") return Boolean(access.hold && !doc.legal_hold);
+		return Boolean(access[action]);
+	});
+}
+
+export const is_selectable = (doc, access) => bulk_actions(doc, access).length > 0;
+
+export function selection_state(rows, selected, access) {
+	const selectable = rows.filter((doc) => is_selectable(doc, access)).map((doc) => doc.name);
+	const count = selectable.filter((name) => selected.has(name)).length;
+	return {
+		selectable,
+		count,
+		all: count > 0 && count === selectable.length,
+		indeterminate: count > 0 && count < selectable.length,
+	};
+}
+
+export function toggle_all(rows, selected, access, checked) {
+	const { selectable } = selection_state(rows, selected, access);
+	return checked ? new Set([...selected, ...selectable]) : new Set();
+}
+
+export function prune_selection(rows, selected, access) {
+	return new Set(selection_state(rows, selected, access).selectable.filter((name) => selected.has(name)));
+}
+
+export function bulk_targets(rows, selected, access) {
+	const targets = Object.fromEntries(BULK_ACTIONS.map((action) => [action, []]));
+	for (const doc of rows) {
+		if (!selected.has(doc.name)) continue;
+		for (const action of bulk_actions(doc, access)) targets[action].push(doc.name);
+	}
+	return targets;
+}
+
+export function preview_key(event) {
+	if (event.ctrlKey || event.metaKey || event.altKey) return null;
+	if (event.key === "Escape") return "close";
+	if (event.key === "ArrowDown" || event.key === "j") return "next";
+	if (event.key === "ArrowUp" || event.key === "k") return "previous";
+	return null;
+}
+
+export function step(names, current, delta) {
+	if (!names.length) return null;
+	const index = names.indexOf(current);
+	if (index < 0) return names[0];
+	return names[Math.min(Math.max(index + delta, 0), names.length - 1)];
+}
+
+export function viewer_kind(file_url) {
+	const kind = preview_kind(file_url);
+	if (kind !== "other") return kind;
+	const name = (file_url || "").split(/[?#]/)[0].toLowerCase();
+	return local_file_url(file_url) && /\.html?$/.test(name) ? "html" : "other";
+}
+
+export function export_defaults(party, docs) {
+	const dates = docs.map((doc) => doc.document_date).filter(Boolean).sort();
+	const types = [...new Set(docs.map((doc) => doc.document_type))];
+	return {
+		...party,
+		...(dates.length ? { date_from: dates[0], date_to: dates[dates.length - 1] } : {}),
+		...(types.length === 1 && types[0] ? { document_type: types[0] } : {}),
+	};
+}
+
+export const PREVIEW_FIELDS = [
+	["document_type", "Business Document Type"],
+	["document_date", "Document Date"],
+	["document_number", "Document Number"],
+	["counterparty", "Counterparty"],
+	["status", "Status"],
+	["retain_until", "Retain Until (UTC)"],
+	["legal_hold", "Legal Hold"],
+];
+
+export function preview_header(doc, { t, esc, value, actions = "" }) {
+	const title = doc.title || doc.name;
+	const cells = PREVIEW_FIELDS.map(([key, label]) => {
+		const { text = "", html } = value(key, doc) || {};
+		const shown = text ? html || esc(text) : `<span class="docarchive-empty">–</span>`;
+		return `<div class="docarchive-field" data-field="${key}">
+			<div class="docarchive-field-label">${esc(t(label))}</div>
+			<div class="docarchive-field-value" title="${esc(text)}">${shown}</div>
+		</div>`;
+	}).join("");
+	return `<div class="docarchive-preview-head">
+			<div class="docarchive-preview-title" title="${esc(title)}">${esc(title)}</div>
+			<div class="docarchive-preview-links">${actions}</div>
+		</div>
+		<div class="docarchive-preview-fields">${cells}</div>`;
 }
