@@ -702,3 +702,7 @@ Thread Root,Gesprächsursprung
 "Filed as {0}, not yet archived","Abgelegt als {0}, noch nicht festgeschrieben"
 Archived as {0} until {1},Archiviert als {0} bis {1}
 Archiving {0} failed,Festschreiben von {0} fehlgeschlagen
+Archive later mails of an archived thread automatically,Folgemails eines archivierten Verlaufs automatisch archivieren
+Archive Reason,Ablagegrund
+Archived automatically because the thread is archived,"Automatisch archiviert, weil der Verlauf archiviert ist"
+Archive {0} earlier e-mails of this thread,{0} frühere E-Mails dieses Verlaufs archivieren

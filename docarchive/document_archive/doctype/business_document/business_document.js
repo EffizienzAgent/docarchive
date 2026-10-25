@@ -94,6 +94,9 @@ frappe.ui.form.on("Business Document", {
 		}
 		add_correspondence_buttons(frm);
 		render_audit(frm);
+		if (frm.doc.filing_reason === "Thread") {
+			frm.set_intro(__("Archived automatically because the thread is archived"), "blue");
+		}
 		const status = frm.doc.archive_status || "Pending";
 		frm.page.set_indicator(__(status), ARCHIVE_COLORS[status]);
 		if (!frm.doc.archive_started_at && frm.perm[0].write && !frm.is_dirty()) {

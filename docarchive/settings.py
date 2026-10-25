@@ -4,7 +4,13 @@ from frappe.utils import getdate
 
 DEFAULT_EXTENSIONS = "pdf\npng\njpg\njpeg\ntif\ntiff\nxml"
 SETTINGS = "Archive Settings"
-DEFAULTS = {"export_show_credit": 1, "overdue_hours": 48, "export_expiry_days": 7, "mail_write_timeout": 30}
+DEFAULTS = {
+	"export_show_credit": 1,
+	"overdue_hours": 48,
+	"export_expiry_days": 7,
+	"mail_write_timeout": 30,
+	"follow_threads": 1,
+}
 
 
 def allowed_extensions() -> set[str]:

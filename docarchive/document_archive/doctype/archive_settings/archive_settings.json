@@ -31,6 +31,7 @@
   "mail_section",
   "mail_accounts",
   "mail_write_timeout",
+  "follow_threads",
   "export_section",
   "export_part_size_mb",
   "export_expiry_days",
@@ -175,6 +176,12 @@
    "default": "30",
    "non_negative": 1,
    "description": "If writing a received mail to the file storage takes longer than this, the next mails are kept in the database for 5 minutes instead. 1 to 30."
+  },
+  {
+   "fieldname": "follow_threads",
+   "fieldtype": "Check",
+   "label": "Archive later mails of an archived thread automatically",
+   "default": "1"
   },
   {
    "fieldname": "export_section",

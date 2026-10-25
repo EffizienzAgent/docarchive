@@ -54,7 +54,13 @@ class TestSettingsDefaults(IntegrationTestCase):
 		values = frappe.db.get_values_from_single(list(settings.DEFAULTS), None, SETTINGS, as_dict=True)[0]
 		self.assertEqual(
 			{field: int(values[field]) for field in settings.DEFAULTS},
-			{"export_show_credit": 1, "overdue_hours": 48, "export_expiry_days": 7, "mail_write_timeout": 30},
+			{
+				"export_show_credit": 1,
+				"overdue_hours": 48,
+				"export_expiry_days": 7,
+				"mail_write_timeout": 30,
+				"follow_threads": 1,
+			},
 		)
 
 	def test_save_fills_empty_values_and_keeps_zero(self):

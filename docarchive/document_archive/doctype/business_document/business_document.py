@@ -33,6 +33,7 @@ LOCKED_FIELDS = (
 )
 PROTECTED_FIELDS = (
 	"content_sha256",
+	"filing_reason",
 	"archive_status",
 	"archive_started_at",
 	"archived_at",

@@ -4,7 +4,7 @@ import frappe
 
 from docarchive import audit, mail
 from docarchive.mail import archiving, cleanup, inbox
-from docarchive.tests.factories import eml
+from docarchive.tests.factories import eml, make_settings
 from docarchive.tests.test_mail_archiving import MailArchivingTestCase
 from docarchive.tests.test_mail_upload import upload
 
@@ -50,6 +50,8 @@ class TestMailAudit(MailArchivingTestCase):
 		)
 
 	def test_existing_document_is_linked(self):
+		make_settings(default_own_company=self.company, follow_threads=0)
+		self.configure()
 		raw = eml()
 		first = self.capture(raw)
 		archiving.archive(first)

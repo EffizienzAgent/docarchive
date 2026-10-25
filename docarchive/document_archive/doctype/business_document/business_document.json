@@ -37,6 +37,7 @@
   "column_break_correspondence",
   "thread_key",
   "thread_root",
+  "filing_reason",
   "mail_message_id",
   "mail_in_reply_to",
   "mail_references",
@@ -242,6 +243,13 @@
    "read_only": 1,
    "hidden": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "filing_reason",
+   "fieldtype": "Select",
+   "label": "Archive Reason",
+   "options": "\nManual\nAutomatic\nThread",
+   "read_only": 1
   },
   {
    "fieldname": "mail_message_id",

@@ -10,6 +10,7 @@ from docarchive.mail import thread as threads
 DOCUMENT = "Business Document"
 ORIGINAL = "Mail Original"
 COMMUNICATION = "Communication"
+MANUAL, AUTOMATIC, THREAD = "Manual", "Automatic", "Thread"
 DIRECTIONS = ("Incoming", "Outgoing")
 SAVEPOINT = "docarchive_mail_archive"
 SEND_NOTE = "Copies to other recipients differ only in tracking and unsubscribe links."
@@ -23,18 +24,18 @@ def archive(
 	return archive_with_outcome(original_name, own_company, check_permission, raw)[0]
 
 
-def archive_with_outcome(original_name, own_company=None, check_permission=False, raw=None):
+def archive_with_outcome(original_name, own_company=None, check_permission=False, raw=None, reason=MANUAL):
 	original = frappe.get_doc(ORIGINAL, original_name)
 	if original.business_document:
 		return original.business_document, "skipped"
-	reason = refusal(original_name)
-	if reason:
-		frappe.throw(reason)
+	refused = refusal(original_name)
+	if refused:
+		frappe.throw(refused)
 	row = accounts.account_row(original.email_account) or frappe._dict()
 	own_company = settings.own_company_for(original.mail_at, own_company or row.own_company)
 	name, outcome = _existing(original, own_company), "linked"
 	if not name:
-		name, outcome = _create(original, own_company, check_permission, raw), "created"
+		name, outcome = _create(original, own_company, check_permission, raw, reason), "created"
 	original.db_set("business_document", name, update_modified=False)
 	return name, outcome
 
@@ -57,16 +58,18 @@ def auto_archive(original_name: str, raw=None) -> str | None:
 		ORIGINAL, original_name, ["email_account", "automated", "internal", "communication"], as_dict=True
 	)
 	row = accounts.account_settings(original.email_account)
-	if (
-		not row
-		or row.mode != "Automatic"
-		or original.automated
-		or (original.internal and not row.archive_internal)
-	):
+	if not row:
 		return None
-	name, outcome = archive_with_outcome(original_name, raw=raw)
+	if row.mode == "Automatic" and not original.automated and (row.archive_internal or not original.internal):
+		reason = AUTOMATIC
+	elif threads.follows(original_name, row):
+		reason = THREAD
+	else:
+		return None
+	name, outcome = archive_with_outcome(original_name, raw=raw, reason=reason)
 	if outcome != "skipped":
-		frappe.db.set_value(ORIGINAL, original_name, "audit_pending", outcome, update_modified=False)
+		pending = f"{reason.lower()}:{outcome}"
+		frappe.db.set_value(ORIGINAL, original_name, "audit_pending", pending, update_modified=False)
 		events.changed("archived", [original_name], [original.communication])
 	return name
 
@@ -78,8 +81,12 @@ def log_automatic() -> int:
 		fields=["name", "business_document", "audit_pending"],
 		order_by="creation asc",
 	)
-	documents = [(DOCUMENT, row.business_document, row.audit_pending) for row in rows]
-	audit_log(audit.MAIL_ARCHIVED, documents, _counted({"how": "automatic"}, documents, {}))
+	by_how = {}
+	for row in rows:
+		how, _sep, outcome = row.audit_pending.rpartition(":")
+		by_how.setdefault(how or "automatic", []).append((DOCUMENT, row.business_document, outcome))
+	for how, documents in by_how.items():
+		audit_log(audit.MAIL_ARCHIVED, documents, _counted({"how": how}, documents, {}))
 	if rows:
 		frappe.db.set_value(
 			ORIGINAL,
@@ -418,7 +425,7 @@ def _existing_document(message_id, sha256, own_company):
 	return frappe.db.get_value(DOCUMENT, filters)
 
 
-def _create(original, own_company, check_permission=False, raw=None):
+def _create(original, own_company, check_permission=False, raw=None, reason=MANUAL):
 	doc = frappe.get_doc(
 		{
 			"doctype": DOCUMENT,
@@ -436,6 +443,7 @@ def _create(original, own_company, check_permission=False, raw=None):
 			"correspondence_at": original.mail_at,
 			"thread_key": original.thread_key,
 			"thread_root": original.thread_key,
+			"filing_reason": reason,
 			"mail_message_id": original.message_id,
 			"mail_in_reply_to": original.in_reply_to,
 			"mail_references": original.mail_references,

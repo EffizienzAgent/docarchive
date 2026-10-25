@@ -1,4 +1,8 @@
 import frappe
+from frappe.utils import cint, get_datetime
+
+from docarchive import settings
+from docarchive.mail import access
 
 DOCUMENT = "Business Document"
 ORIGINAL = "Mail Original"
@@ -198,3 +202,107 @@ def _readable_communication(message_id):
 		frappe.has_permission(COMMUNICATION, "read", name)
 		for name in frappe.get_all(COMMUNICATION, filters={"message_id": message_id}, pluck="name")
 	)
+
+
+def follows(original_name: str, row) -> bool:
+	if not cint(settings.get().get("follow_threads")):
+		return False
+	original = frappe.db.get_value(
+		ORIGINAL,
+		original_name,
+		["thread_key", "message_id", "in_reply_to", "mail_references", "mail_at"],
+		as_dict=True,
+	)
+	if not (original and original.thread_key and original.mail_at):
+		return False
+	try:
+		own_company = settings.own_company_for(original.mail_at, row.own_company)
+	except frappe.ValidationError:
+		return False
+	ids = _original_ids(original)
+	related = frappe.get_all(
+		DOCUMENT,
+		filters={"own_company": own_company},
+		or_filters=[
+			["thread_key", "=", original.thread_key],
+			["thread_root", "=", original.thread_key],
+			["mail_message_id", "in", ids or [""]],
+		],
+		fields=["thread_root", "thread_key"],
+		limit=MAX_MAILS,
+	)
+	roots = list({row.thread_root or row.thread_key for row in related})
+	if not roots:
+		return False
+	earliest = frappe.get_all(
+		DOCUMENT,
+		filters={"own_company": own_company, "thread_root": ("in", roots)},
+		fields=["correspondence_at"],
+		order_by="correspondence_at asc",
+		limit=1,
+	)
+	at = earliest[0].correspondence_at if earliest else None
+	return bool(at) and get_datetime(at) <= get_datetime(original.mail_at)
+
+
+@frappe.whitelist()
+def thread_pending(communication: str) -> dict:
+	empty = {"count": 0, "items": []}
+	if communication not in access.readable([communication]):
+		return empty
+	original = frappe.db.get_value(
+		ORIGINAL,
+		{"communication": communication},
+		[
+			"name",
+			"thread_key",
+			"message_id",
+			"in_reply_to",
+			"mail_references",
+			"mail_at",
+			"business_document",
+		],
+		as_dict=True,
+	)
+	if not (original and original.thread_key):
+		return empty
+	keys, ids = {original.thread_key}, set(_original_ids(original))
+	if original.business_document and frappe.has_permission(DOCUMENT, "read", original.business_document):
+		start = frappe.db.get_value(
+			DOCUMENT,
+			original.business_document,
+			[*FIELDS, "thread_key", "thread_root", "own_company"],
+			as_dict=True,
+		)
+		for mail in _collect(start):
+			keys.update(filter(None, (mail.thread_key, mail.thread_root)))
+			ids.update(filter(None, (mail.mail_message_id, *_referenced(mail))))
+	rows = frappe.get_all(
+		ORIGINAL,
+		filters={
+			"status": "Stored",
+			"business_document": None,
+			"name": ("!=", original.name),
+			"mail_at": ("<=", original.mail_at),
+		},
+		or_filters=[
+			["thread_key", "in", list(keys)],
+			["message_id", "in", list(ids) or [""]],
+			["in_reply_to", "in", list(ids) or [""]],
+		],
+		fields=["name", "communication", "subject", "mail_at"],
+		order_by="mail_at desc",
+		limit=MAX_MAILS,
+	)
+	allowed = access.readable(row.communication for row in rows)
+	items = [
+		{"name": row.name, "communication": row.communication, "subject": row.subject, "date": row.mail_at}
+		for row in rows
+		if row.communication in allowed
+	]
+	return {"count": len(items), "items": items}
+
+
+def _original_ids(original):
+	ids = [*(original.mail_references or "").split(), original.in_reply_to, original.message_id]
+	return [message_id for message_id in dict.fromkeys(ids) if message_id]
