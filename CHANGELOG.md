@@ -5,53 +5,22 @@
 
 ### Features
 
-* add ignored fields and candidate indexes to Mail Original ([c9a2a1e](https://github.com/EffizienzAgent/docarchive/commit/c9a2a1eb3f09d2f7749897b7c08bf7acdd6b4832))
-* archive later mails of an archived thread automatically ([d10bd0a](https://github.com/EffizienzAgent/docarchive/commit/d10bd0a9afafe118f9120abe425f84479cc9d67a))
-* archive status headline for e-mails ([686d53c](https://github.com/EffizienzAgent/docarchive/commit/686d53c555308e4e726bff5466150c7717f2a22b))
-* archive, show and ignore mails from the Mail Original form and list ([164b72a](https://github.com/EffizienzAgent/docarchive/commit/164b72ad9980977480b8f3dc1e9ab6cca22b26b7))
-* blank expired audit entries, one entry per transaction for pre-archive changes ([91fe8ee](https://github.com/EffizienzAgent/docarchive/commit/91fe8ee60790be4f00fbe2540777c65a50b380dd))
-* blank expired audit entries, one entry per transaction for pre-archive changes ([8ff4699](https://github.com/EffizienzAgent/docarchive/commit/8ff4699880bcf47201b9345fbeafdc24a702a888))
-* counterparty name on business documents ([3eaac96](https://github.com/EffizienzAgent/docarchive/commit/3eaac9636a4bc594d6b848639292832dad0526fc))
-* keep unarchived mail originals 14 days by default ([311407b](https://github.com/EffizienzAgent/docarchive/commit/311407b807cfd871a4e67717e4e5c749d324c7b3))
-* list, count, ignore and archive mail candidates for host apps ([b6071ef](https://github.com/EffizienzAgent/docarchive/commit/b6071ef4bf10759ccf3e6e84bd33c9eac028eccd))
-* mail candidates, follow thread and archive status ([ef61779](https://github.com/EffizienzAgent/docarchive/commit/ef61779435976347460b7b846e29791564add3c5))
-* mail preview with inline images and attachments, new object key scheme ([e1d6439](https://github.com/EffizienzAgent/docarchive/commit/e1d6439d428e09896db60edd0a391030d4aa84a6))
-* mail preview with inline images and attachments, new object key scheme ([8968db1](https://github.com/EffizienzAgent/docarchive/commit/8968db186db5fcfbb23cbbb5e4dcad07c4c84950))
-* make the mail write budget configurable ([f3fb609](https://github.com/EffizienzAgent/docarchive/commit/f3fb609df5e517da76b1886b02cb72a79e413133))
-* newest mail first in threads ([a438928](https://github.com/EffizienzAgent/docarchive/commit/a4389281bb8d6c77e4e70b2029908f81fff335f4))
-* record mail archiving, upload, discard and ignore in the audit log ([68b1266](https://github.com/EffizienzAgent/docarchive/commit/68b1266bee270067ff6341e716c620c0838206e6))
-* report the document's archive status for mails and source records ([465de3d](https://github.com/EffizienzAgent/docarchive/commit/465de3d83c3179bf9d508f1bb1388afbe6fd6196))
-* show and check unarchived mail originals on the server ([b0d3ab3](https://github.com/EffizienzAgent/docarchive/commit/b0d3ab3162647a2a834ba5f5a3d166f5738671e1))
-* show the export counterparty as name (ID) with its type ([1385068](https://github.com/EffizienzAgent/docarchive/commit/13850682c301fc6bf1bd31ed273412ddb29add65))
+* **correspondence:** candidates API for host apps — `docarchive.mail.candidates()` and `count_candidates()` list captured, unfiled mails of Manual accounts with expiry and a suggested counterparty; `ignore`/`unignore`, bulk `archive_originals`; hook `docarchive_mail_changed` after commit; new accounts keep unarchived originals 14 days by default ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* **correspondence:** follow thread (on by default) — later e-mails of a filed conversation are filed automatically, respecting the account's automated and internal rules; `docarchive.mail.thread_pending()` offers the rest of the conversation ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* **correspondence:** archive status headline (filed, archived until, failed, deleted) via `docarchive.set_archive_headline`; `status()` returns archive_status and retain_until ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* **correspondence:** archive, show, ignore and bulk archive on Mail Original; threads newest first; configurable mail write budget (`mail_write_timeout`, default 30 s); mail actions in the audit log ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* counterparty shown as "Name (ID)" with its type in exports, and `counterparty_name` in the Business Document list ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* **export viewer:** `.eml` preview with inline images and attachment chips, downloads via Blob ([#45](https://github.com/EffizienzAgent/docarchive/pull/45))
+* new object key scheme `<doc-id>_<date>_<number or title slug>.<ext>` for new archive starts; export paths use it for all documents ([#45](https://github.com/EffizienzAgent/docarchive/pull/45))
+* **documents panel:** optional `docarchive.eml_preview` hook, falling back to the mail viewer ([#45](https://github.com/EffizienzAgent/docarchive/pull/45))
+* **audit log:** entries past their lock are pruned daily from the database; pre-archive changes give one entry per transaction ([#44](https://github.com/EffizienzAgent/docarchive/pull/44))
 
 
 ### Bug Fixes
 
-* always link a copy of a filed mail, also when it is automated or internal ([3d81ce7](https://github.com/EffizienzAgent/docarchive/commit/3d81ce7e43fb61c029251a80f2d7b52427eff556))
-* apply archive settings defaults on install and on save ([da419e0](https://github.com/EffizienzAgent/docarchive/commit/da419e0fc2ebfcf26bce54d1347b05cadcc51b5f))
-* archive settings defaults on existing sites ([aa5ed15](https://github.com/EffizienzAgent/docarchive/commit/aa5ed15c094dc7c02d6122508a14e30bdc1d03c9))
-* backfill counterparty names of archived documents from their metadata ([e171902](https://github.com/EffizienzAgent/docarchive/commit/e17190214d3d19d6396b84a83a0d6861b32b987a))
-* bound thread joins and never let them fail archiving ([08dbac7](https://github.com/EffizienzAgent/docarchive/commit/08dbac7116b0eba08450ba98854088f03619ad40))
-* distinct wording for filed and archived mails, deleted and undated headlines ([b20f330](https://github.com/EffizienzAgent/docarchive/commit/b20f330d5af1f854203af1d2ee9d89932eaa7553))
-* drop source_status again; the CRM resolves documents by source_key ([6d75adf](https://github.com/EffizienzAgent/docarchive/commit/6d75adff6ddc2eb10199a9229e0f3b20f76499a2))
-* follow threads by the account rules and join threads in their own job ([1da2155](https://github.com/EffizienzAgent/docarchive/commit/1da2155ae84575264c2f7fe0a19466e050555dbb))
-* give the mail store job a 1500 second timeout ([3c674cc](https://github.com/EffizienzAgent/docarchive/commit/3c674ccb06bf97c6d80e94df56f25016329e31a0))
-* index audit_pending and drop the stale mail candidate index ([947e29d](https://github.com/EffizienzAgent/docarchive/commit/947e29d0b51d172fd95a54f54bb83bb5cd998fc5))
-* join existing threads by the same rule as archiving ([8388a3d](https://github.com/EffizienzAgent/docarchive/commit/8388a3d7eb374cba897d464458dc580768ece055))
-* keep split mail conversations together in the thread view ([6fdde22](https://github.com/EffizienzAgent/docarchive/commit/6fdde222f792157065d8c5e5b9451e2615f463b2))
-* keep the 0.8.1 CSV column order and cut counterparty names to 140 characters ([f22a77e](https://github.com/EffizienzAgent/docarchive/commit/f22a77e6abeda4fef3b21f4eb03a8a394aab0c2c))
-* never write back a stale thread_root when saving a document ([f9eeb5e](https://github.com/EffizienzAgent/docarchive/commit/f9eeb5ed868c330f2a85ee617b17219e242f0504))
-* pause mail file writes after a write slower than 10 seconds ([6a5c0e2](https://github.com/EffizienzAgent/docarchive/commit/6a5c0e2e28ce7039fbd6934bc5aa81e1fafd8255))
-* refuse mail bulk actions per item and log automatic archiving daily ([af94166](https://github.com/EffizienzAgent/docarchive/commit/af94166d4d87addbaf6f10ed623dbe5883d76ae9))
-* run the thread follow-up in its own job and never surface its errors ([b8311ed](https://github.com/EffizienzAgent/docarchive/commit/b8311ed016f20f5ae81bb88c564d83a303f48a94))
-* store mail originals on the default queue so sent mails beat the rebuild window ([87ed1eb](https://github.com/EffizienzAgent/docarchive/commit/87ed1eb2863574d53043955be5eba071c67509e3))
-* take the thread counterparty from the same party's earliest document ([5ed1496](https://github.com/EffizienzAgent/docarchive/commit/5ed1496768d0faea545fae9b67fc4624b0e79657))
-* use the mail read scope for the Communication archive status ([26817e4](https://github.com/EffizienzAgent/docarchive/commit/26817e4a09e7d360d2aa67c32ab81a20d18f30a4))
-
-
-### Documentation
-
-* thread_root and counterparty label in exports ([8cbe1bc](https://github.com/EffizienzAgent/docarchive/commit/8cbe1bc2f31b9bd53816472d586ebe66749939dd))
+* **correspondence:** conversations archived in separate runs or with incomplete References no longer show false gaps ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* **correspondence:** the mail store job runs on the default queue with a 1500 s timeout, so a busy long queue can't push sent mails past the rebuild window ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* Archive Settings defaults are filled on fresh and existing sites; Overdue After (Hours) 0 turns the check off ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
 
 ## [0.8.1](https://github.com/EffizienzAgent/docarchive/compare/v0.8.0...v0.8.1) (2026-10-25)
 
