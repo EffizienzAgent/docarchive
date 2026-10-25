@@ -95,3 +95,20 @@ class TestArchiveNow(ArchiveRunTestCase):
 		doc.reload()
 		self.assertEqual([c.status for c in doc.archive_copies], ["Archived", "Failed"])
 		self.assertIn(doc.name, run.eligible())
+
+	def test_marks_documents_as_queued_until_the_job_ran(self):
+		doc = self.document(age_hours=0)
+		self.enqueue.side_effect = None
+		archive_now.archive_now([doc.name])
+		self.assertTrue(frappe.db.get_value(DOCUMENT, doc.name, "archive_queued_at"))
+		run_now(self.enqueue.call_args.args[0], **self.enqueue.call_args.kwargs)
+		self.assertEqual(
+			frappe.db.get_value(DOCUMENT, doc.name, ["archive_status", "archive_queued_at"]),
+			("Archived", None),
+		)
+
+	def test_failed_run_clears_the_queued_mark(self):
+		doc = self.document(age_hours=0)
+		self.fakes["archive-secondary"] = self.fake("secondary").__class__(fail={"put_object"})
+		archive_now.archive_now([doc.name])
+		self.assertIsNone(frappe.db.get_value(DOCUMENT, doc.name, "archive_queued_at"))

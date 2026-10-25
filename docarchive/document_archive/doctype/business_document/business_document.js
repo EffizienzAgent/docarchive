@@ -55,6 +55,18 @@ function add_correspondence_buttons(frm) {
 	}
 }
 
+const standalone = () =>
+	window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+
+function open_files_in_app(frm) {
+	frm.get_field("file").$wrapper
+		.off("click.docarchive")
+		.on("click.docarchive", "a.attached-file-link", (event) => {
+			if (!frappe.is_mobile() && !standalone()) return;
+			if (docarchive.show_file(frm.doc.file)) event.preventDefault();
+		});
+}
+
 function render_audit(frm) {
 	const wrapper = frm.get_field("audit_html").$wrapper;
 	frappe.xcall("docarchive.audit.entries_for", { doctype: frm.doctype, name: frm.doc.name }).then((entries) => {
@@ -93,13 +105,18 @@ frappe.ui.form.on("Business Document", {
 			});
 		}
 		add_correspondence_buttons(frm);
+		open_files_in_app(frm);
 		render_audit(frm);
 		if (frm.doc.filing_reason === "Thread") {
 			frm.set_intro(__("Filed automatically because the thread is filed"), "blue");
 		}
 		const status = frm.doc.archive_status || "Pending";
-		frm.page.set_indicator(__(status), ARCHIVE_COLORS[status]);
-		if (!frm.doc.archive_started_at && frm.perm[0].write && !frm.is_dirty()) {
+		if (frm.doc.archive_queued_at && status !== "Archived") {
+			frm.page.set_indicator(__("Archiving"), "blue");
+		} else {
+			frm.page.set_indicator(__(status), ARCHIVE_COLORS[status]);
+		}
+		if (!frm.doc.archive_started_at && !frm.doc.archive_queued_at && frm.perm[0].write && !frm.is_dirty()) {
 			frappe
 				.xcall("docarchive.archive_now.preview", { names: [frm.doc.name] })
 				.then(([row]) => {

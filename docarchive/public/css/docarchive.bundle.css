@@ -427,3 +427,46 @@
 	gap: var(--padding-xs);
 	margin-bottom: var(--padding-sm);
 }
+
+.docarchive-thread-id {
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+	.docarchive-thread thead {
+		display: none;
+	}
+
+	.docarchive-thread,
+	.docarchive-thread tbody,
+	.docarchive-thread tr,
+	.docarchive-thread td {
+		display: block;
+	}
+
+	.docarchive-thread tr {
+		padding: var(--padding-sm) 0;
+		border-top: 1px solid var(--border-color);
+	}
+
+	.docarchive-thread td {
+		padding: 2px 0;
+		border: 0;
+	}
+
+	.docarchive-thread .docarchive-thread-meta {
+		display: inline-block;
+		margin-right: var(--padding-sm);
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+	}
+
+	.docarchive-thread .docarchive-actions {
+		text-align: left;
+		white-space: normal;
+	}
+
+	.docarchive-thread .docarchive-actions:empty {
+		display: none;
+	}
+}

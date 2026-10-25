@@ -64,6 +64,7 @@
   "archive_section",
   "archive_status",
   "archive_started_at",
+  "archive_queued_at",
   "archived_at",
   "archive_attempts",
   "archive_error",
@@ -422,6 +423,12 @@
    "fieldname": "archive_started_at",
    "fieldtype": "Datetime",
    "label": "Archive Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_queued_at",
+   "fieldtype": "Datetime",
+   "label": "Archiving Queued At",
    "read_only": 1
   },
   {

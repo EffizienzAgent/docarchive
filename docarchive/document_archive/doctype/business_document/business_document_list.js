@@ -1,5 +1,5 @@
 frappe.listview_settings["Business Document"] = {
-	add_fields: ["archive_status", "legal_hold", "counterparty"],
+	add_fields: ["archive_status", "archive_queued_at", "legal_hold", "counterparty"],
 	formatters: {
 		counterparty_name(value, _df, doc) {
 			return frappe.utils.escape_html(docarchive.documents_core.party_label(value, doc.counterparty));
@@ -32,6 +32,9 @@ frappe.listview_settings["Business Document"] = {
 	get_indicator(doc) {
 		const colors = { Pending: "orange", Archived: "green", Failed: "red", Deleted: "gray" };
 		const status = doc.archive_status || "Pending";
+		if (doc.archive_queued_at && status !== "Archived" && status !== "Deleted") {
+			return [__("Archiving"), "blue", "archive_queued_at,is,set"];
+		}
 		return [__(status), colors[status], `archive_status,=,${status}`];
 	},
 };
