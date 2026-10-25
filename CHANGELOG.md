@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.0](https://github.com/EffizienzAgent/docarchive/compare/v0.8.1...v0.9.0) (2026-10-25)
+
+
+### Features
+
+* **correspondence:** candidates API for host apps — `docarchive.mail.candidates()` and `count_candidates()` list captured, unfiled mails of Manual accounts with expiry and a suggested counterparty; `ignore`/`unignore`, bulk `archive_originals`; hook `docarchive_mail_changed` after commit; new accounts keep unarchived originals 14 days by default ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* **correspondence:** follow thread (on by default) — later e-mails of a filed conversation are filed automatically, respecting the account's automated and internal rules; `docarchive.mail.thread_pending()` offers the rest of the conversation ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* **correspondence:** archive status headline (filed, archived until, failed, deleted) via `docarchive.set_archive_headline`; `status()` returns archive_status and retain_until ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* **correspondence:** archive, show, ignore and bulk archive on Mail Original; threads newest first; configurable mail write budget (`mail_write_timeout`, default 30 s); mail actions in the audit log ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* counterparty shown as "Name (ID)" with its type in exports, and `counterparty_name` in the Business Document list ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* **export viewer:** `.eml` preview with inline images and attachment chips, downloads via Blob ([#45](https://github.com/EffizienzAgent/docarchive/pull/45))
+* new object key scheme `<doc-id>_<date>_<number or title slug>.<ext>` for new archive starts; export paths use it for all documents ([#45](https://github.com/EffizienzAgent/docarchive/pull/45))
+* **documents panel:** optional `docarchive.eml_preview` hook, falling back to the mail viewer ([#45](https://github.com/EffizienzAgent/docarchive/pull/45))
+* **audit log:** entries past their lock are pruned daily from the database; pre-archive changes give one entry per transaction ([#44](https://github.com/EffizienzAgent/docarchive/pull/44))
+
+
+### Bug Fixes
+
+* **correspondence:** conversations archived in separate runs or with incomplete References no longer show false gaps ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* **correspondence:** the mail store job runs on the default queue with a 1500 s timeout, so a busy long queue can't push sent mails past the rebuild window ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+* Archive Settings defaults are filled on fresh and existing sites; Overdue After (Hours) 0 turns the check off ([#43](https://github.com/EffizienzAgent/docarchive/pull/43))
+
 ## [0.8.1](https://github.com/EffizienzAgent/docarchive/compare/v0.8.0...v0.8.1) (2026-10-25)
 
 
