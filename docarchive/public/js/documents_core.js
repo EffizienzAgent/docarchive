@@ -207,3 +207,8 @@ export function preview_header(doc, { t, esc, value, actions = "" }) {
 		</div>
 		<div class="docarchive-preview-fields">${cells}</div>`;
 }
+
+export function party_label(name, id) {
+	if (!id) return name || "";
+	return name && name !== id ? `${name} · ${id}` : id;
+}

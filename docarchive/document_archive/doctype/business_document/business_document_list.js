@@ -1,5 +1,10 @@
 frappe.listview_settings["Business Document"] = {
-	add_fields: ["archive_status", "legal_hold"],
+	add_fields: ["archive_status", "legal_hold", "counterparty"],
+	formatters: {
+		counterparty_name(value, _df, doc) {
+			return frappe.utils.escape_html(docarchive.documents_core.party_label(value, doc.counterparty));
+		},
+	},
 	onload(listview) {
 		docarchive.legal_hold_list_actions(listview);
 		docarchive.add_export_button(listview);

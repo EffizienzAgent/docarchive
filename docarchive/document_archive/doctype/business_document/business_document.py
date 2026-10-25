@@ -165,6 +165,7 @@ class BusinessDocument(Document):
 		self.restore_protected(before)
 		if before and before.archive_started_at:
 			self.enforce_lock(before)
+			self.counterparty_name = before.counterparty_name
 		else:
 			self.validate_file(before)
 			self.validate_attachments(before)
@@ -175,6 +176,7 @@ class BusinessDocument(Document):
 			assignment.assign(self)
 			self.resolve_own_company()
 			einvoice.record_conflicts(self)
+			self.counterparty_name = counterparty.title_of(self.counterparty_type, self.counterparty)
 		counterparty.validate(self)
 		self.validate_dates()
 		self.validate_contract_end()
