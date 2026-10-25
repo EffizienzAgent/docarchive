@@ -15,7 +15,7 @@ def run() -> dict:
 			continue
 		cutoff = add_days(now_datetime(), -row.keep_days)
 		result["originals"] += _remove(_old_originals(row.email_account, cutoff), _remove_original)
-		result["documents"] += _remove(_old_documents(row.email_account, cutoff), archiving.remove_document)
+		result["documents"] += _remove(_old_documents(row.email_account, cutoff), _remove_document)
 	return result
 
 
@@ -49,13 +49,20 @@ def _remove_original(name):
 	frappe.delete_doc(ORIGINAL, name, ignore_permissions=True)
 
 
+def _remove_document(name) -> bool:
+	started, party = frappe.db.get_value(DOCUMENT, name, ["archive_started_at", "counterparty"])
+	if started or party:
+		return False
+	archiving.remove_document(name)
+	return True
+
+
 def _remove(names, remover) -> int:
 	removed = 0
 	for name in names:
 		try:
 			frappe.db.savepoint(SAVEPOINT)
-			remover(name)
-			removed += 1
+			removed += remover(name) is not False
 		except Exception:
 			frappe.db.rollback(save_point=SAVEPOINT)
 			frappe.log_error(title=f"docarchive mail cleanup: {name}")
