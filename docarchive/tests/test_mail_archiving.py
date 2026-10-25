@@ -322,8 +322,7 @@ class TestDeskApi(MailArchivingTestCase):
 		comm = self.communication()
 		frappe.set_user(make_outsider(address("warnings-outsider")))
 		self.addCleanup(frappe.set_user, "Administrator")
-		with self.assertRaises(frappe.PermissionError):
-			archiving.warnings([comm.name])
+		self.assertEqual(archiving.warnings([comm.name]), {"automated": [], "internal": []})
 
 	def test_archive_communications(self):
 		comm = self.communication()

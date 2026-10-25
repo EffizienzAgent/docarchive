@@ -8,14 +8,13 @@ from frappe.utils import cint, flt, now_datetime
 
 from docarchive import audit
 from docarchive.mail import archiving, events
+from docarchive.mail.access import readable
 from docarchive.mail.cleanup import DEFAULT_KEEP_DAYS
 
 ORIGINAL = "Mail Original"
 DOCUMENT = "Business Document"
-COMMUNICATION = "Communication"
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
-CHUNK = 500
 FIELDS = [
 	"name",
 	"message_id",
@@ -59,39 +58,32 @@ def count_candidates(expiring_within_days: float | None = None) -> int:
 
 @frappe.whitelist(methods=["POST"])
 def ignore(names) -> dict:
-	communications = _checked(names)
-	changed = _set_ignored(communications, 1)
-	archiving.audit_log(audit.MAIL_IGNORED, [(ORIGINAL, name, "ignored") for name in changed])
-	events.changed("ignored", changed, [communications[name] for name in changed])
-	return {"ignored": changed}
+	return _toggle(names, 1, "ignored", audit.MAIL_IGNORED)
 
 
 @frappe.whitelist(methods=["POST"])
 def unignore(names) -> dict:
-	communications = _checked(names)
-	changed = _set_ignored(communications, 0)
-	archiving.audit_log(audit.MAIL_UNIGNORED, [(ORIGINAL, name, "unignored") for name in changed])
-	events.changed("unignored", changed, [communications[name] for name in changed])
-	return {"unignored": changed}
+	return _toggle(names, 0, "unignored", audit.MAIL_UNIGNORED)
 
 
 @frappe.whitelist(methods=["POST"])
 def archive_originals(names) -> dict:
-	communications = _checked(names)
+	communications, refused = _checked(names)
 	return archiving.archive_each(
-		[(name, name, communication) for name, communication in communications.items()]
+		[(name, name, communication) for name, communication in communications.items()], refused
 	)
 
 
-def readable(communications) -> set[str]:
-	communications = [name for name in communications if name]
-	found = set()
-	for start in range(0, len(communications), CHUNK):
-		chunk = communications[start : start + CHUNK]
-		found.update(
-			frappe.get_list(COMMUNICATION, filters={"name": ("in", chunk)}, pluck="name", limit=len(chunk))
-		)
-	return found
+def _toggle(names, ignored, action, audit_action):
+	communications, refused = _checked(names)
+	changed = _set_ignored(communications, ignored)
+	archiving.audit_log(audit_action, [(ORIGINAL, name, action) for name in changed])
+	events.changed(action, changed, [communications[name] for name in changed])
+	return {
+		action: changed,
+		"skipped": [name for name in communications if name not in changed],
+		"refused": refused,
+	}
 
 
 def _accounts():
@@ -111,7 +103,7 @@ def _filters(account, keep, within):
 		"email_account": account,
 		"status": "Stored",
 		"ignored": 0,
-		"business_document": ("is", "not set"),
+		"business_document": None,
 		"communication": ("is", "set"),
 	}
 	if within is not None:
@@ -180,22 +172,22 @@ def _item(row, items, titles):
 	}
 
 
-def _checked(names) -> dict[str, str]:
+def _checked(names) -> tuple[dict[str, str], dict[str, str]]:
 	names = archiving._names(names)
 	frappe.has_permission(DOCUMENT, "create", throw=True)
-	communications = dict(
+	rows = dict(
 		frappe.get_all(
 			ORIGINAL, filters={"name": ("in", names or [""])}, fields=["name", "communication"], as_list=True
 		)
 	)
-	allowed = readable(communications.values())
+	allowed = readable(rows.values())
+	communications, refused = {}, {}
 	for name in names:
-		if communications.get(name) not in allowed:
-			frappe.throw(
-				_("Mail Original {0} does not exist or you cannot read its e-mail.").format(name),
-				frappe.PermissionError,
-			)
-	return {name: communications[name] for name in names}
+		if rows.get(name) in allowed:
+			communications[name] = rows[name]
+		else:
+			refused[name] = _("This e-mail original does not exist or you cannot read its e-mail.")
+	return communications, refused
 
 
 def _set_ignored(communications, ignored):

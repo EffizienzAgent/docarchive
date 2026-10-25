@@ -688,4 +688,6 @@ Document Archive,Dokumentenarchiv
 Ignored,Ignoriert
 Ignored By,Ignoriert von
 Ignored At,Ignoriert am
-Mail Original {0} does not exist or you cannot read its e-mail.,Das E-Mail-Original {0} existiert nicht oder Sie dürfen seine E-Mail nicht lesen.
+This e-mail original does not exist or you cannot read its e-mail.,Dieses E-Mail-Original existiert nicht oder Sie dürfen seine E-Mail nicht lesen.
+You cannot read this e-mail.,Sie dürfen diese E-Mail nicht lesen.
+Audit Pending,Protokollierung ausstehend

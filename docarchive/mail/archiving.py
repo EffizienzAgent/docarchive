@@ -4,7 +4,7 @@ from frappe.utils import get_datetime, getdate
 
 from docarchive import audit, content, counterparty, settings
 from docarchive.document_types import CORRESPONDENCE, INTERNAL_CORRESPONDENCE
-from docarchive.mail import accounts, events, headers
+from docarchive.mail import access, accounts, events, headers
 
 DOCUMENT = "Business Document"
 ORIGINAL = "Mail Original"
@@ -64,9 +64,30 @@ def auto_archive(original_name: str, raw=None) -> str | None:
 	):
 		return None
 	name, outcome = archive_with_outcome(original_name, raw=raw)
-	audit_log(audit.MAIL_ARCHIVED, [(DOCUMENT, name, outcome)], {"how": "automatic"})
-	events.changed("archived", [original_name], [original.communication])
+	if outcome != "skipped":
+		frappe.db.set_value(ORIGINAL, original_name, "audit_pending", outcome, update_modified=False)
+		events.changed("archived", [original_name], [original.communication])
 	return name
+
+
+def log_automatic() -> int:
+	rows = frappe.get_all(
+		ORIGINAL,
+		filters={"audit_pending": ("is", "set")},
+		fields=["name", "business_document", "audit_pending"],
+		order_by="creation asc",
+	)
+	documents = [(DOCUMENT, row.business_document, row.audit_pending) for row in rows]
+	audit_log(audit.MAIL_ARCHIVED, documents, _counted({"how": "automatic"}, documents, {}))
+	if rows:
+		frappe.db.set_value(
+			ORIGINAL,
+			{"name": ("in", [row.name for row in rows])},
+			"audit_pending",
+			None,
+			update_modified=False,
+		)
+	return len(rows)
 
 
 def remove_document(name: str) -> None:
@@ -159,9 +180,8 @@ def status(communication: str) -> dict:
 
 @frappe.whitelist()
 def warnings(names) -> dict:
-	names = _names(names)
-	for name in names:
-		frappe.has_permission(COMMUNICATION, "read", name, throw=True)
+	allowed = access.readable(_names(names))
+	names = [name for name in _names(names) if name in allowed]
 	rows = frappe.get_all(
 		ORIGINAL,
 		filters={"communication": ("in", names or [""]), "business_document": ("is", "not set")},
@@ -179,15 +199,21 @@ def warnings(names) -> dict:
 def archive_communications(names) -> dict:
 	names = _names(names)
 	frappe.has_permission(DOCUMENT, "create", throw=True)
-	for name in names:
-		frappe.has_permission(COMMUNICATION, "read", name, throw=True)
-	return archive_each(
-		[(name, frappe.db.get_value(ORIGINAL, {"communication": name}), name) for name in names]
+	allowed = access.readable(names)
+	originals = dict(
+		frappe.get_all(
+			ORIGINAL,
+			filters={"communication": ("in", list(allowed) or [""])},
+			fields=["communication", "name"],
+			as_list=True,
+		)
 	)
+	refused = {name: _("You cannot read this e-mail.") for name in names if name not in allowed}
+	return archive_each([(name, originals.get(name), name) for name in names if name in allowed], refused)
 
 
-def archive_each(items) -> dict:
-	result = {"archived": {}, "refused": {}}
+def archive_each(items, refused=None) -> dict:
+	result = {"archived": {}, "refused": dict(refused or {})}
 	archived, documents = [], []
 	for key, original, communication in items:
 		reason = refusal(original)
@@ -199,8 +225,9 @@ def archive_each(items) -> dict:
 			frappe.db.savepoint(SAVEPOINT)
 			name, outcome = archive_with_outcome(original, check_permission=True)
 			result["archived"][key] = name
-			archived.append((original, communication))
 			documents.append((DOCUMENT, name, outcome))
+			if outcome != "skipped":
+				archived.append((original, communication))
 		except (frappe.ValidationError, frappe.PermissionError) as error:
 			frappe.db.rollback(save_point=SAVEPOINT)
 			del frappe.local.message_log[messages:]
@@ -270,6 +297,12 @@ def archive_upload(
 		audit_log(
 			audit.MAIL_UPLOADED,
 			[(DOCUMENT, name, "created")],
+			{"direction": direction, "gap": bool(gap_message_id)},
+		)
+	else:
+		audit_log(
+			audit.MAIL_UPLOADED,
+			[(DOCUMENT, name, "linked")],
 			{"direction": direction, "gap": bool(gap_message_id)},
 		)
 	frappe.delete_doc("File", file_name, ignore_permissions=True)

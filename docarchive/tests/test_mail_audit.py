@@ -3,7 +3,7 @@ import json
 import frappe
 
 from docarchive import audit, mail
-from docarchive.mail import archiving, inbox
+from docarchive.mail import archiving, cleanup, inbox
 from docarchive.tests.factories import eml
 from docarchive.tests.test_mail_archiving import MailArchivingTestCase
 from docarchive.tests.test_mail_upload import upload
@@ -64,12 +64,39 @@ class TestMailAudit(MailArchivingTestCase):
 		mail.archive_originals([original])
 		self.assertEqual(self.entries(audit.MAIL_ARCHIVED), [])
 
-	def test_automatic_archive(self):
+	def test_automatic_archive_is_logged_once_a_day(self):
 		self.configure(mode="Automatic")
-		original = self.capture()
+		raw = eml()
+		first, second = self.capture(), self.capture()
+		linked = self.capture(raw)
+		archiving.auto_archive(linked)
+		self.assertEqual(self.entries(audit.MAIL_ARCHIVED), [])
+		cleanup.run()
+		documents = [(DOCUMENT, self.document_of(name), "created") for name in (first, second, linked)]
 		self.assertEqual(
 			self.entries(audit.MAIL_ARCHIVED),
-			[({"how": "automatic"}, [(DOCUMENT, self.document_of(original), "created")])],
+			[({"how": "automatic", "counts": {"created": 3}}, documents)],
+		)
+		cleanup.run()
+		self.assertEqual(len(self.entries(audit.MAIL_ARCHIVED)), 1)
+
+	def test_automatic_linked_document(self):
+		self.configure(mode="Automatic")
+		raw = eml()
+		first = self.capture(raw)
+		second = self.capture(raw)
+		archiving.log_automatic()
+		(entry,) = self.entries(audit.MAIL_ARCHIVED)
+		self.assertEqual(entry[1][1], (DOCUMENT, self.document_of(first), "linked"))
+		self.assertEqual(self.document_of(second), self.document_of(first))
+
+	def test_upload_of_existing_document_is_linked(self):
+		raw = eml()
+		name = archiving.archive_upload(upload(raw).file_url, "Incoming")
+		self.assertEqual(archiving.archive_upload(upload(raw).file_url, "Incoming"), name)
+		self.assertEqual(
+			[documents for _details, documents in self.entries(audit.MAIL_UPLOADED)],
+			[[(DOCUMENT, name, "created")], [(DOCUMENT, name, "linked")]],
 		)
 
 	def test_discard(self):

@@ -7,7 +7,7 @@ from frappe.utils import get_datetime, now_datetime
 from docarchive import mail
 from docarchive.mail import archiving, cleanup, events, inbox
 from docarchive.permissions import MANAGER_ROLE
-from docarchive.tests.factories import eml, make_email_account, make_user
+from docarchive.tests.factories import eml, make_communication, make_email_account, make_user
 from docarchive.tests.test_mail_archiving import MailArchivingTestCase, address, make_contact, make_note
 
 ORIGINAL = "Mail Original"
@@ -47,8 +47,6 @@ class CandidatesTestCase(MailArchivingTestCase):
 		settings.save(ignore_permissions=True)
 
 	def capture_in(self, account, raw=None):
-		from docarchive.tests.factories import make_communication
-
 		return mail.capture(make_communication(account), raw or eml(), "t")
 
 	def as_user(self, *roles, accounts=()):
@@ -177,6 +175,18 @@ class TestCandidates(CandidatesTestCase):
 			self.capture_in(account)
 		self.assertEqual(mail.count_candidates(), len(mail.candidates()))
 
+	def test_query_can_use_the_candidate_index(self):
+		original = self.capture()
+		self.assertEqual(
+			frappe.db.sql("select business_document is null from `tabMail Original` where name=%s", original),
+			((1,),),
+		)
+		sql = str(
+			frappe.get_all(ORIGINAL, filters=inbox._filters(self.account, 14, None), pluck="name", run=0)
+		)
+		self.assertIn("`business_document` IS NULL", sql)
+		self.assertNotIn("`business_document`=''", sql)
+
 	def test_query_count_does_not_grow_with_items(self):
 		def make(count):
 			for _ in range(count):
@@ -202,13 +212,16 @@ class TestCandidates(CandidatesTestCase):
 class TestIgnore(CandidatesTestCase):
 	def test_ignore_and_unignore_in_bulk(self):
 		first, second = self.capture(), self.capture()
-		self.assertEqual(inbox.ignore(frappe.as_json([first, second])), {"ignored": [first, second]})
+		self.assertEqual(
+			inbox.ignore(frappe.as_json([first, second])),
+			{"ignored": [first, second], "skipped": [], "refused": {}},
+		)
 		row = frappe.db.get_value(ORIGINAL, first, ["ignored", "ignored_by", "ignored_at"], as_dict=True)
 		self.assertEqual((row.ignored, row.ignored_by), (1, "Administrator"))
 		self.assertTrue(row.ignored_at)
 		self.assertEqual((mail.candidates(), mail.count_candidates()), ([], 0))
-		self.assertEqual(inbox.ignore([first]), {"ignored": []})
-		self.assertEqual(inbox.unignore([first]), {"unignored": [first]})
+		self.assertEqual(inbox.ignore([first]), {"ignored": [], "skipped": [first], "refused": {}})
+		self.assertEqual(inbox.unignore([first])["unignored"], [first])
 		row = frappe.db.get_value(ORIGINAL, first, ["ignored", "ignored_by", "ignored_at"], as_dict=True)
 		self.assertEqual((row.ignored, row.ignored_by, row.ignored_at), (0, None, None))
 		self.assertEqual(self.names(), [first])
@@ -237,12 +250,19 @@ class TestIgnore(CandidatesTestCase):
 		other = make_email_account().name
 		self.accounts((self.account, "Manual", 14), (other, "Manual", 14))
 		original = self.capture_in(other)
+		own = self.capture_in(self.account)
 		self.as_user(MANAGER_ROLE, "Inbox User", accounts=[self.account])
-		for action in (inbox.ignore, inbox.unignore, mail.archive_originals):
-			with self.assertRaises(frappe.PermissionError):
-				action([original])
+		reason = "This e-mail original does not exist or you cannot read its e-mail."
+		result = inbox.ignore([original, own, "missing"])
+		self.assertEqual(
+			result, {"ignored": [own], "skipped": [], "refused": {original: reason, "missing": reason}}
+		)
+		self.assertEqual(inbox.unignore([original])["refused"], {original: reason})
+		result = mail.archive_originals([original])
+		self.assertEqual((result["archived"], result["refused"]), ({}, {original: reason}))
 		frappe.set_user("Administrator")
 		self.assertFalse(frappe.db.get_value(ORIGINAL, original, "ignored"))
+		self.assertFalse(frappe.db.get_value(ORIGINAL, original, "business_document"))
 
 
 class TestArchiveOriginals(CandidatesTestCase):
@@ -311,6 +331,16 @@ class TestChangedHook(CandidatesTestCase):
 			],
 		)
 
+	def test_no_call_for_already_archived(self):
+		comm = self.communication()
+		original = self.capture(comm=comm)
+		archiving.archive(original)
+		mail.archive_originals([original])
+		archiving.archive_communications([comm.name])
+		self.configure(mode="Automatic")
+		archiving.auto_archive(original)
+		self.assertEqual(self.changes(), [])
+
 	def test_no_call_without_change(self):
 		original = self.capture()
 		inbox.unignore([original])
@@ -318,3 +348,34 @@ class TestChangedHook(CandidatesTestCase):
 
 	def test_registered_hook_name(self):
 		self.assertEqual(events.HOOK, "docarchive_mail_changed")
+
+
+class TestInboxUserScope(CandidatesTestCase):
+	def setUp(self):
+		super().setUp()
+		self.other = make_email_account().name
+		self.accounts((self.account, "Manual", 14), (self.other, "Manual", 14))
+
+	def test_sees_and_archives_only_own_account_mails(self):
+		own_comm = make_communication(self.account)
+		own = mail.capture(own_comm, eml(), "t")
+		foreign_comm = make_communication(self.other)
+		foreign = mail.capture(foreign_comm, eml(), "t")
+		self.as_user(MANAGER_ROLE, "Inbox User", accounts=[self.account])
+		self.assertEqual(self.names(), [own])
+		result = archiving.archive_communications([foreign_comm.name, own_comm.name])
+		self.assertEqual(list(result["archived"]), [own_comm.name])
+		self.assertEqual(result["refused"], {foreign_comm.name: "You cannot read this e-mail."})
+		self.assertEqual(archiving.warnings([foreign_comm.name]), {"automated": [], "internal": []})
+		frappe.set_user("Administrator")
+		self.assertFalse(frappe.db.get_value(ORIGINAL, foreign, "business_document"))
+
+	def test_archives_mail_referencing_an_unreadable_document(self):
+		hidden = frappe.log_error(title="hidden")
+		comm = make_communication(self.account, reference_doctype="Error Log", reference_name=hidden.name)
+		original = mail.capture(comm, eml(), "t")
+		self.as_user(MANAGER_ROLE, "Inbox User", accounts=[self.account])
+		self.assertFalse(frappe.has_permission("Communication", "read", comm.name))
+		self.assertEqual(self.names(), [original])
+		result = mail.archive_originals([original])
+		self.assertEqual(list(result["archived"]), [original])

@@ -38,7 +38,8 @@
   "business_document",
   "ignored",
   "ignored_by",
-  "ignored_at"
+  "ignored_at",
+  "audit_pending"
  ],
  "fields": [
   {
@@ -53,8 +54,7 @@
    "fieldname": "email_account",
    "fieldtype": "Data",
    "label": "Email Account",
-   "read_only": 1,
-   "search_index": 1
+   "read_only": 1
   },
   {
    "fieldname": "origin",
@@ -220,8 +220,7 @@
    "fieldname": "ignored",
    "fieldtype": "Check",
    "label": "Ignored",
-   "read_only": 1,
-   "search_index": 1
+   "read_only": 1
   },
   {
    "fieldname": "ignored_by",
@@ -235,6 +234,13 @@
    "fieldtype": "Datetime",
    "label": "Ignored At",
    "read_only": 1
+  },
+  {
+   "fieldname": "audit_pending",
+   "fieldtype": "Data",
+   "label": "Audit Pending",
+   "read_only": 1,
+   "hidden": 1
   }
  ],
  "permissions": [
