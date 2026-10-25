@@ -174,7 +174,7 @@ There is no storage target named {0}.,Es gibt kein Speicherziel namens {0}.
 Archive now,Jetzt festschreiben
 Archiving started.,Archivierung gestartet.
 Archive status: {0},Archivstatus: {0}
-"After this, the file and the archived fields of {0} document(s) can no longer be changed or deleted. They are kept unchangeable until {1} (mode {2}).","Danach können die Datei und die archivierten Felder von {0} Dokument(en) nicht mehr geändert oder gelöscht werden. Sie werden bis {1} unveränderbar aufbewahrt (Modus {2})."
+"After this, the file and the archived fields of {0} document(s) can no longer be changed or deleted. They are kept unchangeable until {1} (mode {2}).",Danach können die Datei und die archivierten Felder von {0} Dokument(en) nicht mehr geändert oder gelöscht werden. Sie werden bis {1} unveränderbar aufbewahrt (Modus {2}).
 {0} selected document(s) cannot be archived yet and are skipped.,{0} der ausgewählten Dokumente können noch nicht archiviert werden und werden übersprungen.
 Archiving is switched off.,Die Archivierung ist ausgeschaltet.
 Archiving has already started.,Die Archivierung hat bereits begonnen.
@@ -322,6 +322,94 @@ The new date can be at most {0} years from today.,Das neue Datum darf höchstens
 Deleted documents cannot be extended.,Gelöschte Dokumente können nicht verlängert werden.
 These storage targets hold a copy but are not enabled: {0},"Diese Speicherziele haben eine Kopie, sind aber nicht aktiv: {0}"
 "Someone else changed this document in the meantime. It was reloaded, please check it again.","Jemand anderes hat dieses Dokument inzwischen geändert. Es wurde neu geladen, bitte noch einmal prüfen."
+A retention extension is still running.,Eine Verlängerung der Aufbewahrung läuft noch.
+Action,Aktion
+Admin Access Key,Admin-Zugangsschlüssel
+Admin Access Key Config Key,Site-Config-Schlüssel für Admin-Zugangsschlüssel
+Admin Key,Admin-Schlüssel
+Admin Secret Key,Admin-Geheimschlüssel
+Admin Secret Key Config Key,Site-Config-Schlüssel für Admin-Geheimschlüssel
+At,Zeitpunkt
+Copies locked in COMPLIANCE mode cannot be deleted early.,Kopien im COMPLIANCE-Modus können nicht vorzeitig gelöscht werden.
+Delete,Löschen
+Delete Early,Vorzeitig löschen
+Delete Early (GOVERNANCE only),Vorzeitig löschen (nur GOVERNANCE)
+Delete Expired Document,Abgelaufenes Dokument löschen
+Delete Expired Documents,Abgelaufene Dokumente löschen
+Delete Selected,Auswahl löschen
+Deleted At,Gelöscht am
+Deleted By,Gelöscht von
+Deleted Early,Vorzeitig gelöscht
+Deleted documents cannot be changed.,Gelöschte Dokumente können nicht geändert werden.
+Deletion log entries cannot be changed.,Einträge im Löschprotokoll können nicht geändert werden.
+Deletion log entries cannot be deleted.,Einträge im Löschprotokoll können nicht gelöscht werden.
+Deletion started in the background,Löschung im Hintergrund gestartet
+Deletion status: {0},Löschstatus: {0}
+Document Deletion Log,Löschprotokoll
+Documents Due for Deletion,Dokumente zur Löschung fällig
+Done,Erledigt
+Expired Documents,Abgelaufene Dokumente
+Archive Admin,Archiv-Administration
+I confirm that the legal hold may be released.,"Ich bestätige, dass der Legal Hold aufgehoben werden darf."
+I confirm that these documents are deleted on every storage target. This cannot be undone.,"Ich bestätige, dass diese Dokumente auf allen Speicherzielen gelöscht werden. Das kann nicht rückgängig gemacht werden."
+Legal Hold,Legal Hold
+Legal Hold Log,Legal-Hold-Protokoll
+Legal Hold Log Entry,Legal-Hold-Protokolleintrag
+Legal Hold Reason,Grund für Legal Hold
+Legal hold is released on every copy.,Legal Hold ist auf allen Kopien aufgehoben.
+Legal hold is set on every copy.,Legal Hold ist auf allen Kopien gesetzt.
+"Name of the site config key that holds the admin access key, e.g. s3_archive_admin_access_key.","Name des Site-Config-Schlüssels mit dem Admin-Zugangsschlüssel, z. B. s3_archive_admin_access_key."
+"Name of the site config key that holds the admin secret key, e.g. s3_archive_admin_secret_key.","Name des Site-Config-Schlüssels mit dem Admin-Geheimschlüssel, z. B. s3_archive_admin_secret_key."
+Not all object versions are recorded: {0},Nicht alle Objektversionen sind erfasst: {0}
+Off,Aus
+On,An
+Only archived documents can be put on legal hold.,Nur archivierte Dokumente können unter Legal Hold gestellt werden.
+Optional. Needed to release legal holds and to delete expired documents. Leave empty to switch these features off.,"Optional. Nötig, um Legal Holds aufzuheben und abgelaufene Dokumente zu löschen. Leer lassen, um diese Funktionen abzuschalten."
+Partly Deleted,Teilweise gelöscht
+Please confirm the deletion.,Bitte bestätige die Löschung.
+Please confirm the release.,Bitte bestätige die Aufhebung.
+Please give a reason.,Bitte gib einen Grund an.
+Please select at least one document.,Bitte wähle mindestens ein Dokument aus.
+Please select at most {0} documents.,Bitte wähle höchstens {0} Dokumente aus.
+Please type {0} to confirm.,Bitte gib zur Bestätigung {0} ein.
+Problem,Problem
+Release,Aufheben
+Release Legal Hold,Legal Hold aufheben
+Result,Ergebnis
+Retention period still runs until {0},Aufbewahrungsfrist läuft noch bis {0}
+Set,Setzen
+Set Legal Hold,Legal Hold setzen
+Sidecar Versions,Versionen der Zusatzdateien
+Storage target {0} has no admin key.,Speicherziel {0} hat keinen Admin-Schlüssel.
+"Storage target {0} needs both admin key config keys as site config key names, or neither.",Speicherziel {0} braucht beide Admin-Schlüsselnamen als Site-Config-Schlüssel oder keinen.
+"Storage target {0} needs both an admin access key and an admin secret key, or neither.",Speicherziel {0} braucht einen Admin-Zugangsschlüssel und einen Admin-Geheimschlüssel oder keinen von beiden.
+The admin key for storage target {0} is not configured.,Der Admin-Zugang für Speicherziel {0} ist nicht eingerichtet.
+The contract has no end date yet.,Der Vertrag hat noch kein Enddatum.
+The document is already deleted.,Das Dokument ist bereits gelöscht.
+The document is being processed. Please try again later.,Das Dokument wird gerade bearbeitet. Bitte versuche es später erneut.
+The document is not fully archived.,Das Dokument ist nicht vollständig archiviert.
+The document is not under legal hold.,Das Dokument steht nicht unter Legal Hold.
+The document is under legal hold.,Das Dokument steht unter Legal Hold.
+The legal hold is not confirmed on every copy.,Der Legal Hold ist nicht auf allen Kopien bestätigt.
+The legal hold on {0} could not be verified.,Der Legal Hold auf {0} konnte nicht geprüft werden.
+The legal hold on {0} is still set.,Der Legal Hold auf {0} ist noch gesetzt.
+The retention period runs until {0}.,Die Aufbewahrungsfrist läuft noch bis {0}.
+The storage refused the deletion. The document cannot be deleted yet.,Der Speicher hat die Löschung abgelehnt. Das Dokument kann noch nicht gelöscht werden.
+The storage refused the early deletion. The admin key needs s3:BypassGovernanceRetention.,Der Speicher hat die vorzeitige Löschung abgelehnt. Der Admin-Schlüssel braucht s3:BypassGovernanceRetention.
+The storage target is not configured.,Das Speicherziel ist nicht eingerichtet.
+These documents cannot be deleted early,Diese Dokumente können nicht vorzeitig gelöscht werden
+Type {0} to confirm,Zur Bestätigung {0} eingeben
+User,Benutzer
+You may not put {0} on legal hold.,Du darfst {0} nicht unter Legal Hold stellen.
+{0} is locked until {1}.,{0} ist bis {1} gesperrt.
+{0} is not locked in GOVERNANCE mode.,{0} ist nicht im GOVERNANCE-Modus gesperrt.
+{0} is under legal hold.,{0} steht unter Legal Hold.
+{0} still exists after deleting it.,{0} ist nach dem Löschen noch vorhanden.
+Set Legal Hold When Archiving,Legal Hold beim Festschreiben setzen
+Every archived object gets a legal hold at upload. It can only be released with the admin key.,Jedes archivierte Objekt bekommt beim Hochladen einen Legal Hold. Er lässt sich nur mit dem Admin-Schlüssel aufheben.
+Set when archiving.,Beim Festschreiben gesetzt.
+{0} must be true or false.,{0} muss true oder false sein.
+Only under legal hold,Nur unter Legal Hold
 Add attachment,Anlage hinzufügen
 Confirmation,Bestätigung
 E-Invoice Checked,E-Rechnung geprüft

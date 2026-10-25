@@ -4,13 +4,16 @@ from frappe import _
 from docarchive import counterparty
 
 DOCUMENT = "Business Document"
+DELETED = "Deleted"
 FILE_LINK_FIELDS = ("file_url", "is_private", "attached_to_doctype", "attached_to_name", "attached_to_field")
 OBJECT_FIELDS = ("file_url", "content_hash", "thumbnail_url", "is_private")
 URL_PREFIXES = {"private/files/": "/private/files/", "public/files/": "/files/"}
 
 
 def archive_started(filters):
-	return frappe.db.exists(DOCUMENT, {**filters, "archive_started_at": ("is", "set")})
+	return frappe.db.exists(
+		DOCUMENT, {**filters, "archive_started_at": ("is", "set"), "archive_status": ("!=", DELETED)}
+	)
 
 
 def archived_rows(**filters) -> list[frappe._dict]:
@@ -27,6 +30,7 @@ def archived_rows(**filters) -> list[frappe._dict]:
 			filters={
 				"name": ("in", [r.attached_to_name for r in rows]),
 				"archive_started_at": ("is", "set"),
+				"archive_status": ("!=", DELETED),
 			},
 			pluck="name",
 		)

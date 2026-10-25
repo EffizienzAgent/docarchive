@@ -1,6 +1,7 @@
 frappe.listview_settings["Business Document"] = {
-	add_fields: ["archive_status"],
+	add_fields: ["archive_status", "legal_hold"],
 	onload(listview) {
+		docarchive.legal_hold_list_actions(listview);
 		if (!frappe.model.can_write("Business Document")) return;
 		const refresh = () => listview.refresh();
 		listview.page.add_actions_menu_item(__("Archive now"), () => {
@@ -19,7 +20,7 @@ frappe.listview_settings["Business Document"] = {
 		);
 	},
 	get_indicator(doc) {
-		const colors = { Pending: "orange", Archived: "green", Failed: "red" };
+		const colors = { Pending: "orange", Archived: "green", Failed: "red", Deleted: "gray" };
 		const status = doc.archive_status || "Pending";
 		return [__(status), colors[status], `archive_status,=,${status}`];
 	},

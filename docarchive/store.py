@@ -10,10 +10,12 @@ from docarchive import storage_targets
 
 MODES = ("GOVERNANCE", "COMPLIANCE")
 CLIENT_FIELDS = ("endpoint", "region", "bucket", "access_key", "secret_key")
+ADMIN_FIELDS = ("admin_access_key", "admin_secret_key")
 MISSING = ("404", "NoSuchKey", "NotFound")
 SMOKE_PREFIX = "_smoke/"
 SMOKE_KEY = re.compile(r"^_smoke/\d{8}T\d{6}Z-[0-9a-f]{8}\.txt$")
 REFUSED = ("AccessDenied", "ObjectLocked")
+HOLD_ON, HOLD_OFF = "ON", "OFF"
 
 
 class LockError(frappe.ValidationError):
@@ -25,11 +27,12 @@ class VerifyError(frappe.ValidationError):
 
 
 class Target:
-	def __init__(self, name, bucket, lock_mode, client):
+	def __init__(self, name, bucket, lock_mode, client, admin_client=None):
 		self.name = name
 		self.bucket = bucket
 		self.lock_mode = lock_mode
 		self._client = client
+		self._admin_client = admin_client
 
 
 def _client_for(config):
@@ -39,7 +42,21 @@ def _client_for(config):
 
 
 def from_config(config) -> Target:
-	return Target(config.name, config.bucket, config.lock_mode, _client_for(config))
+	admin = None
+	if all(config.get(field) for field in ADMIN_FIELDS):
+		admin = _client_for(
+			{**config, "access_key": config.admin_access_key, "secret_key": config.admin_secret_key}
+		)
+	return Target(config.name, config.bucket, config.lock_mode, _client_for(config), admin)
+
+
+def has_admin_access(target) -> bool:
+	return target._admin_client is not None
+
+
+def require_admin(target):
+	if not has_admin_access(target):
+		raise LockError(_("Storage target {0} has no admin key.").format(target.name))
 
 
 def targets() -> list[Target] | None:
@@ -75,7 +92,9 @@ def validate_lock(mode, retain_until) -> datetime:
 	return retain_until.astimezone(UTC)
 
 
-def put_locked(target, key, body, mode, retain_until, content_type="application/octet-stream") -> dict:
+def put_locked(
+	target, key, body, mode, retain_until, content_type="application/octet-stream", legal_hold=False
+) -> dict:
 	retain_until = validate_lock(mode, retain_until)
 	if not key or not isinstance(body, bytes):
 		raise LockError(_("An archive object needs a key and bytes."))
@@ -89,6 +108,7 @@ def put_locked(target, key, body, mode, retain_until, content_type="application/
 		Metadata={"sha256": sha256},
 		ObjectLockMode=mode,
 		ObjectLockRetainUntilDate=retain_until,
+		**({"ObjectLockLegalHoldStatus": HOLD_ON} if legal_hold else {}),
 	)
 	return {"sha256": sha256, "version_id": response.get("VersionId")}
 
@@ -148,11 +168,13 @@ def retention(target, key, version_id) -> dict:
 	return {"mode": value.get("Mode"), "retain_until": value.get("RetainUntilDate")}
 
 
-def verify(target, key, version_id, sha256, mode, retain_until):
+def verify(target, key, version_id, sha256, mode, retain_until, legal_hold=False):
 	retain_until = validate_lock(mode, retain_until)
 	found = head(target, key, version_id)
 	if not found:
 		raise VerifyError(_("{0} is missing on the storage target.").format(key))
+	if legal_hold and found.get("ObjectLockLegalHoldStatus") != HOLD_ON:
+		raise VerifyError(_("The legal hold on {0} could not be verified.").format(key))
 	until = found.get("ObjectLockRetainUntilDate")
 	if found.get("ObjectLockMode") != mode or not until or until < retain_until:
 		raise VerifyError(_("{0} is not locked as expected.").format(key))
@@ -167,3 +189,64 @@ def smoke_delete(target, key, version_id, bypass=False):
 		raise LockError(_("Only smoke test objects may be deleted."))
 	kwargs = {"BypassGovernanceRetention": True} if bypass else {}
 	target._client.delete_object(Bucket=target.bucket, Key=key, VersionId=version_id, **kwargs)
+
+
+def hold_status(target, key, version_id) -> str:
+	found = head(target, key, versioned(version_id)["VersionId"])
+	if not found:
+		raise VerifyError(_("{0} is missing on the storage target.").format(key))
+	return found.get("ObjectLockLegalHoldStatus") or HOLD_OFF
+
+
+def set_hold(target, key, version_id):
+	_admin_hold(target, key, version_id, HOLD_ON)
+	if hold_status(target, key, version_id) != HOLD_ON:
+		raise VerifyError(_("The legal hold on {0} could not be verified.").format(key))
+
+
+def release_hold(target, key, version_id):
+	_admin_hold(target, key, version_id, HOLD_OFF)
+	if hold_status(target, key, version_id) != HOLD_OFF:
+		raise VerifyError(_("The legal hold on {0} is still set.").format(key))
+
+
+def _admin_hold(target, key, version_id, status):
+	require_admin(target)
+	target._admin_client.put_object_legal_hold(
+		Bucket=target.bucket, Key=key, **versioned(version_id), LegalHold={"Status": status}
+	)
+
+
+def deletable(target, key, version_id, early=False) -> dict | None:
+	require_admin(target)
+	found = head(target, key, versioned(version_id)["VersionId"])
+	if not found:
+		return None
+	if found.get("ObjectLockLegalHoldStatus") == HOLD_ON:
+		raise LockError(_("{0} is under legal hold.").format(key))
+	until = found.get("ObjectLockRetainUntilDate")
+	if early and found.get("ObjectLockMode") != "GOVERNANCE":
+		raise LockError(_("{0} is not locked in GOVERNANCE mode.").format(key))
+	if not early and until and until > datetime.now(UTC):
+		raise LockError(_("{0} is locked until {1}.").format(key, until.isoformat()))
+	return found
+
+
+def delete_expired(target, key, version_id) -> bool:
+	if not deletable(target, key, version_id):
+		return False
+	_admin_delete(target, key, version_id)
+	return True
+
+
+def delete_early(target, key, version_id) -> bool:
+	if not deletable(target, key, version_id, early=True):
+		return False
+	_admin_delete(target, key, version_id, BypassGovernanceRetention=True)
+	return True
+
+
+def _admin_delete(target, key, version_id, **options):
+	target._admin_client.delete_object(Bucket=target.bucket, Key=key, **versioned(version_id), **options)
+	if head(target, key, version_id):
+		raise VerifyError(_("{0} still exists after deleting it.").format(key))

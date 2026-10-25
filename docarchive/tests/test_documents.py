@@ -147,6 +147,19 @@ class TestCounterpartyDocuments(IntegrationTestCase):
 		)
 		self.assertEqual(rows[ready.name]["file"], ready.file)
 
+	def test_panel_shows_legal_hold_and_hides_deleted_documents(self):
+		held = make_business_document(document_type=self.type, **party_fields(self.party))
+		deleted = make_business_document(document_type=self.type, **party_fields(self.party))
+		frappe.db.set_value("Business Document", held.name, "legal_hold", 1)
+		frappe.db.set_value("Business Document", deleted.name, "archive_status", "Deleted")
+		rows = {
+			row["name"]: row for row in documents.counterparty_panel("Contact", self.party.name)["documents"]
+		}
+		self.assertEqual(rows[held.name]["legal_hold"], 1)
+		self.assertNotIn(deleted.name, rows)
+		listed = [row.name for row in documents.counterparty_documents("Contact", self.party.name)]
+		self.assertNotIn(deleted.name, listed)
+
 	def test_panel_without_archiving_has_no_eligible_documents(self):
 		make_business_document(document_type=self.type, **party_fields(self.party))
 		panel = documents.counterparty_panel("Contact", self.party.name)

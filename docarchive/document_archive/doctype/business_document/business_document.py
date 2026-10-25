@@ -24,6 +24,7 @@ LOCKED_FIELDS = (
 	"counterparty_type",
 	"counterparty",
 	"file",
+	"hold_on_archive",
 	*SOURCE_FIELDS,
 )
 PROTECTED_FIELDS = (
@@ -49,12 +50,17 @@ PROTECTED_FIELDS = (
 	"einvoice_data",
 	"einvoice_needs_review",
 	"einvoice_checked",
+	"legal_hold",
+	"legal_hold_reason",
+	"legal_hold_log",
+	"deleted_at",
 	"source_key",
 	"replaces",
 	*SOURCE_FIELDS,
 )
 ATTACHMENT_PROTECTED = ("content_sha256", "object_key", "archive_size")
 CONTRACT_END = "Contract End Date"
+DELETED = "Deleted"
 PRIVATE_PREFIX = "/private/files/"
 
 
@@ -119,6 +125,10 @@ def default_title(doc):
 	return doc.document_number or doc.document_type
 
 
+def is_deleting(doc) -> bool:
+	return doc.archive_status == DELETED or any(copy.status == DELETED for copy in doc.archive_copies)
+
+
 def missing_fields(doc) -> list[str]:
 	rules = frappe.get_cached_doc("Business Document Type", doc.document_type)
 	checks = [
@@ -143,6 +153,8 @@ class BusinessDocument(Document):
 
 	def validate(self):
 		before = self.get_doc_before_save()
+		if before and is_deleting(before) and not self.flags.archive_write:
+			frappe.throw(_("Deleted documents cannot be changed."))
 		self.restore_protected(before)
 		if before and before.archive_started_at:
 			self.enforce_lock(before)

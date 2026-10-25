@@ -27,6 +27,7 @@
   "counterparty_type",
   "counterparty",
   "own_company",
+  "hold_on_archive",
   "attachments_section",
   "attachments",
   "einvoice_section",
@@ -60,6 +61,8 @@
   "meta_key",
   "retention_mode",
   "retain_until",
+  "legal_hold",
+  "deleted_at",
   "archive_copies_section",
   "archive_copies",
   "attachment_copies",
@@ -67,7 +70,10 @@
   "retention_extensions",
   "extension_until",
   "retention_history",
-  "extension_meta"
+  "extension_meta",
+  "legal_hold_section",
+  "legal_hold_reason",
+  "legal_hold_log"
  ],
  "fields": [
   {
@@ -299,7 +305,7 @@
    "fieldname": "archive_status",
    "fieldtype": "Select",
    "label": "Archive Status",
-   "options": "Pending\nArchived\nFailed",
+   "options": "Pending\nArchived\nFailed\nDeleted",
    "default": "Pending",
    "in_list_view": 1,
    "in_standard_filter": 1,
@@ -425,6 +431,47 @@
    "options": "JSON",
    "read_only": 1,
    "hidden": 1
+  },
+  {
+   "fieldname": "legal_hold",
+   "fieldtype": "Check",
+   "label": "Legal Hold",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "deleted_at",
+   "fieldtype": "Datetime",
+   "label": "Deleted At",
+   "read_only": 1,
+   "depends_on": "eval:doc.deleted_at"
+  },
+  {
+   "fieldname": "legal_hold_section",
+   "fieldtype": "Section Break",
+   "label": "Legal Hold",
+   "depends_on": "eval:doc.legal_hold || (doc.legal_hold_log || []).length"
+  },
+  {
+   "fieldname": "legal_hold_reason",
+   "fieldtype": "Small Text",
+   "label": "Legal Hold Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "legal_hold_log",
+   "fieldtype": "Table",
+   "label": "Legal Hold Log",
+   "options": "Legal Hold Log Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "hold_on_archive",
+   "fieldtype": "Check",
+   "label": "Set Legal Hold When Archiving",
+   "read_only_depends_on": "eval:doc.archive_started_at",
+   "description": "Every archived object gets a legal hold at upload. It can only be released with the admin key."
   }
  ],
  "permissions": [
@@ -446,6 +493,12 @@
    "report": 1,
    "print": 1,
    "email": 1
+  },
+  {
+   "role": "Archive Admin",
+   "read": 1,
+   "report": 1,
+   "print": 1
   }
  ]
 }

@@ -47,6 +47,8 @@ class TestStorageTargets(IntegrationTestCase):
 				"bucket": "archive-b",
 				"access_key": "key",
 				"secret_key": "secret",
+				"admin_access_key": None,
+				"admin_secret_key": None,
 			},
 		)
 
@@ -145,3 +147,35 @@ class TestStorageTargets(IntegrationTestCase):
 			with self.assertRaises(frappe.ValidationError):
 				make_settings(targets=[site_config_target("primary")])
 		make_settings(targets=[fields_target(endpoint="https://s3.eu-central-1.example.test")])
+
+
+ADMIN_KEYS = {
+	"admin_access_key_config_key": "s3_archive_admin_access_key",
+	"admin_secret_key_config_key": "s3_archive_admin_secret_key",
+}
+
+
+class TestAdminCredentials(IntegrationTestCase):
+	def test_admin_key_resolves_from_site_config(self):
+		values = {**SITE_CONFIG, "s3_archive_admin_access_key": "admin", "s3_archive_admin_secret_key": "s"}
+		with patch.dict(frappe.local.conf, values):
+			make_settings(enabled=1, targets=[site_config_target("primary", **ADMIN_KEYS)])
+			[target] = storage_targets.configured()
+		self.assertEqual((target.admin_access_key, target.admin_secret_key), ("admin", "s"))
+
+	def test_missing_admin_key_leaves_archiving_enabled(self):
+		for fields in ({}, ADMIN_KEYS):
+			with self.subTest(fields=fields), patch.dict(frappe.local.conf, SITE_CONFIG):
+				make_settings(enabled=1, targets=[site_config_target("primary", **fields)])
+				[target] = storage_targets.configured()
+				self.assertFalse(target.admin_access_key)
+
+	def test_admin_keys_come_in_pairs(self):
+		for target in (
+			site_config_target("primary", admin_access_key_config_key="s3_archive_admin_access_key"),
+			site_config_target("primary", **{**ADMIN_KEYS, "admin_secret_key_config_key": "Not A Key"}),
+			fields_target("direct", admin_access_key="admin"),
+		):
+			with self.subTest(target=target), patch.dict(frappe.local.conf, SITE_CONFIG):
+				with self.assertRaises(frappe.ValidationError):
+					make_settings(targets=[target])

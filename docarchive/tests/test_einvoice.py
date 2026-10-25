@@ -20,6 +20,7 @@ from docarchive.tests.factories import (
 	party_fields,
 	unique,
 )
+from docarchive.tests.hold_case import HoldTestCase
 from docarchive.tests.test_run import DOCUMENT, ArchiveRunTestCase
 
 
@@ -402,6 +403,11 @@ class TestEInvoiceUpload(EInvoiceTestCase):
 		self.assertEqual(doc.einvoice_needs_review, 1)
 		self.assertIn("Confirmation", result["missing"])
 
+	def test_hold_flag_survives_the_suggestion(self):
+		result = self.upload(zugferd(cii(number=unique("ZF"))), name="invoice.pdf", legal_hold="1")
+		self.assertTrue(result["legal_hold"])
+		self.assertIn("Confirmation", result["missing"])
+
 	def test_api_type_and_company_are_trusted(self):
 		result = self.upload(
 			cii(number=unique("RE")),
@@ -502,3 +508,28 @@ class TestTriageConfirmation(EInvoiceTestCase):
 		self.assertIn("Confirmation", triage.triage_item(doc.name)["missing"])
 		result = triage.save_item(doc.name, frappe.as_json({}))
 		self.assertNotIn("Confirmation", result["item"]["missing"])
+
+
+class TestHoldWithEInvoice(HoldTestCase):
+	def test_hold_on_archive_waits_for_the_confirmation(self):
+		clear_vat_ids()
+		make_own_company(vat_ids=SELLER["vat"])
+		doc = self.document(
+			file=xml_upload(cii()).file_url,
+			hold_on_archive=1,
+			attachments=[{"file": make_file().file_url}],
+		)
+		targets = {"primary", "secondary"}
+		self.assertEqual((doc.einvoice_needs_review, doc.hold_on_archive), (1, 1))
+		self.assertNotIn(doc.name, run.eligible(targets))
+		frappe.get_doc(DOCUMENT, doc.name).save()
+		old = frappe.utils.add_to_date(frappe.utils.now_datetime(), hours=-48)
+		frappe.db.set_value(DOCUMENT, doc.name, "modified", old, update_modified=False)
+		self.assertEqual(frappe.db.get_value(DOCUMENT, doc.name, "hold_on_archive"), 1)
+		self.assertIn(doc.name, run.eligible(targets))
+		self.assertEqual(run.archive_document(doc.name, store.targets()), "Archived")
+		doc.reload()
+		puts = [put for fake in self.fakes.values() for put in fake.puts()]
+		self.assertEqual(len(puts), 3 * 2)
+		self.assertEqual({put["ObjectLockLegalHoldStatus"] for put in puts}, {"ON"})
+		self.assertEqual(doc.legal_hold, 1)

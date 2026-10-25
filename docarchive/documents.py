@@ -6,7 +6,15 @@ from docarchive.document_archive.doctype.business_document.business_document imp
 DOCUMENT = "Business Document"
 DOCUMENT_LIMIT = 50
 PANEL_LIMIT = 500
-DOCUMENT_FIELDS = ["name", "title", "document_type", "document_number", "document_date", "archive_status"]
+DOCUMENT_FIELDS = [
+	"name",
+	"title",
+	"document_type",
+	"document_number",
+	"document_date",
+	"archive_status",
+	"legal_hold",
+]
 PANEL_FIELDS = [
 	*DOCUMENT_FIELDS,
 	"file",
@@ -26,7 +34,11 @@ def counterparty_documents(counterparty_type: str, counterparty: str) -> list:
 		return []
 	return frappe.get_list(
 		"Business Document",
-		filters={"counterparty_type": counterparty_type, "counterparty": counterparty},
+		filters={
+			"counterparty_type": counterparty_type,
+			"counterparty": counterparty,
+			"archive_status": ("!=", "Deleted"),
+		},
 		fields=DOCUMENT_FIELDS,
 		order_by="document_date desc, creation desc",
 		limit=DOCUMENT_LIMIT,
@@ -52,7 +64,11 @@ def counterparty_panel(counterparty_type: str, counterparty: str) -> dict:
 		return panel
 	rows = frappe.get_list(
 		DOCUMENT,
-		filters={"counterparty_type": counterparty_type, "counterparty": counterparty},
+		filters={
+			"counterparty_type": counterparty_type,
+			"counterparty": counterparty,
+			"archive_status": ("!=", "Deleted"),
+		},
 		fields=PANEL_FIELDS,
 		order_by="document_date desc, creation desc",
 		limit=PANEL_LIMIT + 1,

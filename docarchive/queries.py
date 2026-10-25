@@ -49,7 +49,7 @@ def documents_to_assign() -> list[frappe._dict]:
 	for filters in incomplete_filters():
 		for doc in frappe.get_list(
 			"Business Document",
-			filters=[["archive_status", "!=", "Archived"], *filters],
+			filters=[["archive_status", "not in", ["Archived", "Deleted"]], *filters],
 			fields=FIELDS,
 			limit_page_length=0,
 		):
