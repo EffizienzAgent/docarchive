@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.8.1](https://github.com/EffizienzAgent/docarchive/compare/v0.8.0...v0.8.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* document stateless capture instead of the shared sites folder ([a2b4b4b](https://github.com/EffizienzAgent/docarchive/commit/a2b4b4b84ef91aaad935474a042f63c7084b3f41))
+* document the database fallback for mail originals ([ced16cb](https://github.com/EffizienzAgent/docarchive/commit/ced16cbd3c90566ee70112c9beb8c852f0fe8bee))
+* document the database packet size for the mail fallback ([e818467](https://github.com/EffizienzAgent/docarchive/commit/e8184673f30b366fe416758a110fdf3d0f37bd6a))
+* keep mail originals in the database while file storage is down ([bcd3f4d](https://github.com/EffizienzAgent/docarchive/commit/bcd3f4de6561e7dd2161367c4d60592ba828ca4a))
+* read files from s3storage when it is active ([e464f57](https://github.com/EffizienzAgent/docarchive/commit/e464f5752c719c94090e6afbe5e4552c5396b1bb))
+* read stored files through s3storage and keep empty files ([a3e0c7f](https://github.com/EffizienzAgent/docarchive/commit/a3e0c7f537963dd8bad3082a1498b1a36bdd7da1))
+* read the mail write pause from Redis on every check ([9287f55](https://github.com/EffizienzAgent/docarchive/commit/9287f5596c24f1aa1e41205089d90dc39ac2d484))
+* stateless mail capture for multi-pod deployments ([f745497](https://github.com/EffizienzAgent/docarchive/commit/f74549795410855cef64ceeb47214298be422282))
+* write mail originals as Files at once instead of a local spool ([4653788](https://github.com/EffizienzAgent/docarchive/commit/46537888efcc1d704ee29f2923f4e22944a57161))
+
+
+### Documentation
+
+* German screenshots, documents panel on its own tab ([ca0d59d](https://github.com/EffizienzAgent/docarchive/commit/ca0d59dc58684e20dcd8166bebf09afc2f99e55b))
+* short README, details in docs/, German screenshots ([94c72de](https://github.com/EffizienzAgent/docarchive/commit/94c72dea744beea1c6ceb0b9f3a234dabfdc7442))
+* short README, details moved to docs/ ([9cb7b15](https://github.com/EffizienzAgent/docarchive/commit/9cb7b1511929bbffdc273534f0f91cb0eb8976a6))
+
 ## [0.8.0](https://github.com/EffizienzAgent/docarchive/compare/v0.7.0...v0.8.0) (2026-10-25)
 
 
