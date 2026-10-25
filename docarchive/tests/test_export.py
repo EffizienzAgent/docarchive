@@ -11,11 +11,12 @@ from frappe.utils import now_datetime
 
 from docarchive import export, export_package, run
 from docarchive.permissions import ADMIN_ROLE
-from docarchive.tests.factories import make_manager, make_party, make_user, party_fields
-from docarchive.tests.hold_case import HoldTestCase
+from docarchive.tests.factories import eml, make_manager, make_party, make_user, party_fields
+from docarchive.tests.hold_case import DOCUMENT, HoldTestCase
 from docarchive.tests.test_attachments import attachment, xml_file
 
 EXPORT = export.EXPORT
+MAIL_FIELDS = ("thread_key", "mail_message_id", "mail_in_reply_to", "mail_references")
 ADMIN = "export-admin@example.com"
 
 
@@ -164,6 +165,47 @@ class TestExportPackage(ExportTestCase):
 		self.assertEqual(row["history"][0]["contract_end_date"], "2030-06-30")
 		self.assertEqual(len(row["metadata"]), 2)
 		self.assertTrue(row["verified"])
+
+
+class TestMailThread(ExportTestCase):
+	def test_thread_fields_come_from_the_archived_meta(self):
+		first = self.archived_mail(eml(**{"Message-ID": "<one@example.test>"}))
+		reply = self.archived_mail(
+			eml(
+				**{
+					"Message-ID": "<two@example.test>",
+					"In-Reply-To": "<one@example.test>",
+					"References": "<one@example.test>",
+				}
+			)
+		)
+		self.assertTrue(first.object_key.endswith(".eml"))
+		thread_key = json.loads(first.archive_meta)["correspondence"]["thread_key"]
+		self.assertTrue(thread_key)
+		for doc in (first, reply):
+			frappe.db.set_value(DOCUMENT, doc.name, dict.fromkeys(MAIL_FIELDS))
+		[archive] = self.zips(self.export())
+		rows = {row["id"]: row for row in self.manifest(archive)["documents"]}
+		self.assertEqual({rows[first.name]["thread_key"], rows[reply.name]["thread_key"]}, {thread_key})
+		self.assertEqual(
+			(rows[reply.name]["message_id"], rows[reply.name]["in_reply_to"], rows[reply.name]["references"]),
+			("two@example.test", "one@example.test", ["one@example.test"]),
+		)
+		reply_at = json.loads(reply.archive_meta)["correspondence"]["at"]
+		self.assertTrue(reply_at)
+		self.assertEqual(rows[reply.name]["correspondence_at"], reply_at)
+		self.assertTrue(rows[first.name]["files"][0]["preview"])
+
+	def test_thread_fields_fall_back_to_the_document(self):
+		doc = self.archived(
+			thread_key="t-1", mail_message_id="a@x", mail_references="r1@x r2@x", archive_write=True
+		)
+		[archive] = self.zips(self.export())
+		[row] = self.manifest(archive)["documents"]
+		self.assertEqual(
+			(row["thread_key"], row["message_id"], row["references"]), ("t-1", "a@x", ["r1@x", "r2@x"])
+		)
+		self.assertEqual(doc.name, row["id"])
 
 
 class TestExpiry(ExportTestCase):

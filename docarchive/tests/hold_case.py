@@ -1,9 +1,18 @@
 from datetime import UTC, datetime
 
 import frappe
+from frappe.utils import add_to_date, now_datetime
 
-from docarchive import run, store
-from docarchive.tests.factories import fields_target, make_settings
+from docarchive import mail, run, store
+from docarchive.mail import archiving
+from docarchive.tests.factories import (
+	fields_target,
+	make_communication,
+	make_email_account,
+	make_mail_settings,
+	make_settings,
+	party_fields,
+)
 from docarchive.tests.fake_s3 import AdminClient, LockedFakeS3
 from docarchive.tests.test_run import DOCUMENT, ArchiveRunTestCase
 
@@ -34,6 +43,20 @@ class HoldTestCase(ArchiveRunTestCase):
 		doc = self.document(**fields)
 		self.assertEqual(run.archive_document(doc.name, store.targets()), "Archived")
 		return frappe.get_doc(DOCUMENT, doc.name)
+
+	def archived_mail(self, raw):
+		if not getattr(self, "mail_account", None):
+			self.mail_account = make_email_account().name
+		make_mail_settings(self.mail_account, mode="Manual")
+		name = archiving.archive(mail.capture(make_communication(self.mail_account), raw, "t"))
+		frappe.db.set_value(
+			DOCUMENT,
+			name,
+			{**party_fields(self.party), "modified": add_to_date(now_datetime(), hours=-48)},
+			update_modified=False,
+		)
+		self.assertEqual(run.archive_document(name, store.targets()), "Archived")
+		return frappe.get_doc(DOCUMENT, name)
 
 	def expire(self, doc):
 		frappe.db.set_value(DOCUMENT, doc.name, "retain_until", PAST.replace(tzinfo=None))

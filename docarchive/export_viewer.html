@@ -221,9 +221,13 @@ function fileCard(file) {
 		preview(file));
 }
 
+function sentAt(doc) {
+	return doc.correspondence_at || doc.date || "";
+}
+
 function threadOf(doc) {
 	if (!doc.thread_key) return [];
-	return docs.filter((other) => other.thread_key === doc.thread_key).sort((a, b) => (a.date || "").localeCompare(b.date || "") || a.id.localeCompare(b.id));
+	return docs.filter((other) => other.thread_key === doc.thread_key).sort((a, b) => sentAt(a).localeCompare(sentAt(b)) || a.id.localeCompare(b.id));
 }
 
 function show(id) {
