@@ -46,6 +46,15 @@ class TestCounterpartyName(IntegrationTestCase):
 	def test_not_part_of_the_locked_fields(self):
 		self.assertNotIn("counterparty_name", business_document.LOCKED_FIELDS)
 
+	def test_backfill_takes_the_archived_name(self):
+		doc = make_document(**party_fields(make_party("Acme")))
+		meta = {"counterparty": {"doctype": "Contact", "id": doc.counterparty, "name": "Name at archiving"}}
+		frappe.db.set_value(
+			DOCUMENT, doc.name, {"counterparty_name": None, "archive_meta": frappe.as_json(meta)}
+		)
+		fill_counterparty_names.execute()
+		self.assertEqual(frappe.db.get_value(DOCUMENT, doc.name, "counterparty_name"), "Name at archiving")
+
 	def test_backfill_only_fills_empty_names(self):
 		party = make_party("Acme")
 		empty = make_document(**party_fields(party))
