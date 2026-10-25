@@ -254,3 +254,8 @@ Frappe,Frappe
 Sent Folder,Gesendet-Ordner
 "Sent Folder: originals of sent mails come from the IMAP Sent folder through mailsync instead of being rebuilt after sending. Only for IMAP accounts.","Gesendet-Ordner: Die Originale gesendeter Mails stammen über mailsync aus dem IMAP-Gesendet-Ordner, statt nach dem Versand neu aufgebaut zu werden. Nur für IMAP-Konten."
 "{0} does not use IMAP, so its sent mails cannot be read from the Sent folder.","{0} nutzt kein IMAP, daher können die gesendeten Mails nicht aus dem Gesendet-Ordner gelesen werden."
+(no subject),(kein Betreff)
+Archived documents cannot be discarded.,Archivierte Dokumente können nicht verworfen werden.
+No original was captured for this e-mail.,Für diese E-Mail wurde kein Original erfasst.
+Only e-mail documents can be discarded.,Nur E-Mail-Dokumente können verworfen werden.
+The captured original of this e-mail is missing.,Das erfasste Original dieser E-Mail fehlt.

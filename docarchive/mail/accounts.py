@@ -1,13 +1,18 @@
 import frappe
 
 
-def account_settings(email_account):
+def account_row(email_account):
 	if not email_account:
 		return None
 	for row in frappe.get_single("Archive Settings").mail_accounts:
 		if row.email_account == email_account:
-			return frappe._dict(row.as_dict()) if row.mode != "Off" else None
+			return frappe._dict(row.as_dict())
 	return None
+
+
+def account_settings(email_account):
+	row = account_row(email_account)
+	return row if row and row.mode != "Off" else None
 
 
 def internal_domains(row):

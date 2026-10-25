@@ -280,9 +280,8 @@
   },
   {
    "fieldname": "source_name",
-   "fieldtype": "Dynamic Link",
+   "fieldtype": "Data",
    "label": "Source Record",
-   "options": "source_doctype",
    "read_only": 1
   },
   {

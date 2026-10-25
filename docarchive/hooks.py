@@ -23,6 +23,7 @@ extend_doctype_class = {
 }
 scheduler_events = {"cron": {"30 2 * * *": ["docarchive.run.schedule"]}}
 has_permission = {"File": "docarchive.guards.file_permission"}
+docarchive_assign = ["docarchive.mail.archiving.assign"]
 mailsync_mail_read = ["docarchive.mail.originals.from_mailsync"]
 s3storage_before_file_delete = ["docarchive.guards.protect_file"]
 s3storage_before_object_delete = ["docarchive.guards.protect_object"]
