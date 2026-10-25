@@ -174,7 +174,7 @@ class Triage {
 		const attachments = (item.attachments || [])
 			.map(
 				(row) =>
-					`<li><a href="${esc(row.file)}" target="_blank" rel="noopener">${esc(row.title || row.file_name)}</a> <span class="text-muted">${esc(__(row.role))}</span></li>`,
+					`<li><a href="${esc(docarchive.file_url(row.file))}" target="_blank" rel="noopener">${esc(row.title || row.file_name)}</a> <span class="text-muted">${esc(__(row.role))}</span></li>`,
 			)
 			.join("");
 		const $info = this.dialog.fields_dict.file_info.$wrapper;

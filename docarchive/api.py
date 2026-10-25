@@ -102,7 +102,7 @@ def find_existing(source_key, scope, sha, document_type) -> list[str]:
 		return []
 	return frappe.get_all(
 		DOCUMENT,
-		filters={"content_sha256": sha, "document_type": document_type},
+		filters={"content_sha256": sha, "document_type": document_type, **scope_filters(scope)},
 		pluck="name",
 		order_by="creation",
 	)
@@ -264,9 +264,13 @@ def read_attachments(attachments):
 	return result
 
 
+def scope_filters(scope) -> dict:
+	return {field: value or ("is", "not set") for field, value in scope.items()}
+
+
 def source_versions(source_key, scope):
 	fields = ["name", "content_sha256"]
-	filters = {"source_key": source_key, **{k: v or ("is", "not set") for k, v in scope.items()}}
+	filters = {"source_key": source_key, **scope_filters(scope)}
 	doc = source_key and frappe.db.get_value(DOCUMENT, filters, fields, as_dict=True)
 	versions = []
 	while doc:
