@@ -583,7 +583,7 @@ Main,Hauptdatei
 Documents marked for legal hold cannot be discarded.,"Dokumente, die für einen Legal Hold vorgemerkt sind, können nicht verworfen werden."
 Archive e-mails,E-Mails archivieren
 Archive it anyway?,Trotzdem archivieren?
-Archived as {0},Archiviert als {0}
+Archived as {0},Abgelegt als {0}
 Checksum does not match,Prüfsumme stimmt nicht überein
 Checksum matches,Prüfsumme stimmt überein
 Discard,Verwerfen
@@ -598,7 +598,7 @@ Not in Frappe,Nicht in Frappe
 Only a Business Document can be the source of an upload.,Nur ein Geschäftsdokument kann die Quelle eines Uploads sein.
 Origin: {0},Herkunft: {0}
 Original available,Original vorhanden
-Archived in another thread,In einem anderen Thread archiviert
+Archived in another thread,In einem anderen Verlauf abgelegt
 Read from the mailbox by mailsync,Von mailsync aus dem Postfach gelesen
 Rebuilt by Frappe after sending,Von Frappe nach dem Versand neu aufgebaut
 Received by Frappe,Von Frappe empfangen
@@ -617,7 +617,7 @@ Upload e-mails,E-Mails hochladen
 Uploaded as .eml by a person,Von einer Person als .eml hochgeladen
 Received through Frappe Mail,Über Frappe Mail empfangen
 "Of {0} selected e-mails, {1} look automated and {2} only have internal addresses. Archive them anyway?",Von {0} ausgewählten E-Mails sehen {1} automatisch erzeugt aus und {2} haben nur interne Adressen. Trotzdem archivieren?
-This e-mail is archived.,Diese E-Mail ist archiviert.
+This e-mail is archived.,Diese E-Mail ist abgelegt.
 Another export is still running. Please wait until it is done.,"Ein anderer Export läuft noch. Bitte warten, bis er fertig ist."
 The export was interrupted.,Der Export wurde unterbrochen.
 "This file type is only offered as a download, so it cannot run in the viewer.","Dieser Dateityp wird nur zum Herunterladen angeboten, damit er im Viewer nicht ausgeführt werden kann."
@@ -699,3 +699,6 @@ Ignore,Ignorieren
 Unignore,Nicht mehr ignorieren
 Counterparty Name,Name der Gegenpartei
 Thread Root,Gesprächsursprung
+"Filed as {0}, not yet archived","Abgelegt als {0}, noch nicht festgeschrieben"
+Archived as {0} until {1},Archiviert als {0} bis {1}
+Archiving {0} failed,Festschreiben von {0} fehlgeschlagen

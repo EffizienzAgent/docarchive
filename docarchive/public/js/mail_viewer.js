@@ -111,6 +111,15 @@ function file_attachment(name, source, file) {
 		.catch(() => frappe.msgprint(__("The attachment could not be loaded.")));
 }
 
+docarchive.set_archive_headline = function (frm, state) {
+	const { html, color } = core.archive_headline(state, {
+		link: doc_link,
+		date: (value) => frappe.datetime.str_to_user(value),
+		t: __,
+	});
+	frm.dashboard.set_headline(html, color);
+};
+
 docarchive.show_mail = function (name, { doctype = DOCUMENT } = {}) {
 	const is_document = doctype === DOCUMENT;
 	Promise.all([

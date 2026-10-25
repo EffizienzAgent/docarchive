@@ -8,19 +8,12 @@ frappe.ui.form.on("Mail Original", {
 });
 
 function mail_original_actions(frm, status) {
-	const esc = (value) => frappe.utils.escape_html(value ?? "");
 	const actions = docarchive.mail_core.original_actions(
 		status,
 		frappe.model.can_create("Business Document"),
 	);
 	const reload = () => frm.reload_doc();
-	if (actions.headline === "link") {
-		const href = frappe.utils.get_form_link("Business Document", status.business_document);
-		const link = `<a href="${esc(href)}">${esc(status.business_document)}</a>`;
-		frm.dashboard.set_headline(__("Archived as {0}", [link]));
-	} else if (actions.headline === "plain") {
-		frm.dashboard.set_headline(__("This e-mail is archived."));
-	}
+	if (actions.headline) docarchive.set_archive_headline(frm, status);
 	if (actions.show) {
 		frm.add_custom_button(__("Show e-mail"), () =>
 			docarchive.show_mail(frm.doc.name, { doctype: "Mail Original" }),

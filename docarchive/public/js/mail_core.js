@@ -41,9 +41,7 @@ export function archive_lines(result, { link, archived_as }) {
 }
 
 export function original_actions(status, can_create) {
-	if (status.archived) {
-		return { headline: status.business_document ? "link" : "plain", show: status.viewable };
-	}
+	if (status.archived) return { headline: true, show: status.viewable };
 	return {
 		headline: null,
 		show: status.viewable,
@@ -52,4 +50,17 @@ export function original_actions(status, can_create) {
 		ignore: can_create && status.viewable && !status.ignored,
 		unignore: can_create && status.viewable && status.ignored,
 	};
+}
+
+export function archive_headline(state, { link, date, t }) {
+	if (!state.business_document) return { html: escape_html(t("This e-mail is archived.")), color: "blue" };
+	const doc = link(state.business_document);
+	if (state.archive_status === "Archived") {
+		return {
+			html: t("Archived as {0} until {1}", [doc, escape_html(state.retain_until ? date(state.retain_until) : "")]),
+			color: "green",
+		};
+	}
+	if (state.archive_status === "Failed") return { html: t("Archiving {0} failed", [doc]), color: "red" };
+	return { html: t("Filed as {0}, not yet archived", [doc]), color: "orange" };
 }

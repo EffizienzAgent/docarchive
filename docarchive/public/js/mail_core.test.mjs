@@ -63,8 +63,27 @@ test("mail original actions follow its status", async () => {
 	const pending = original_actions({ ...base, viewable: false, reason: "still being stored" }, true);
 	assert.deepEqual([pending.show, pending.archive_reason, pending.ignore], [false, "still being stored", false]);
 	assert.deepEqual(original_actions({ archived: true, business_document: "DOC-1", viewable: true }, true), {
-		headline: "link",
+		headline: true,
 		show: true,
 	});
-	assert.equal(original_actions({ archived: true, business_document: null, viewable: true }, true).headline, "plain");
+});
+
+test("the archive headline follows the document's status", async () => {
+	const { archive_headline } = await import("./mail_core.js");
+	const t = (text, args = []) => args.reduce((out, arg, index) => out.replace(`{${index}}`, arg), text);
+	const helpers = { link: (name) => `<a>${name}</a>`, date: (value) => `on ${value}`, t };
+	assert.deepEqual(archive_headline({ business_document: "DOC-1", archive_status: "Pending" }, helpers), {
+		html: "Filed as <a>DOC-1</a>, not yet archived",
+		color: "orange",
+	});
+	assert.deepEqual(
+		archive_headline({ business_document: "DOC-1", archive_status: "Archived", retain_until: "<2036>" }, helpers),
+		{ html: "Archived as <a>DOC-1</a> until on &lt;2036&gt;", color: "green" },
+	);
+	assert.equal(archive_headline({ business_document: "DOC-1", archive_status: "Failed" }, helpers).color, "red");
+	assert.equal(archive_headline({ business_document: "DOC-1" }, helpers).color, "orange");
+	assert.deepEqual(archive_headline({ business_document: null }, helpers), {
+		html: "This e-mail is archived.",
+		color: "blue",
+	});
 });
