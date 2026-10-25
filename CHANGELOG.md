@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.0](https://github.com/EffizienzAgent/docarchive/compare/v0.9.0...v0.10.0) (2026-10-25)
+
+
+### Features
+
+* "Archiving" status (blue) on documents queued by "Archive now" until the job has run; the list indicator filters on it ([#49](https://github.com/EffizienzAgent/docarchive/pull/49))
+* on mobile and in the home screen app, PDFs and images from a document's file link open in a dialog instead of a new tab without a way back ([#49](https://github.com/EffizienzAgent/docarchive/pull/49))
+* thread dialog stacks e-mails as cards on narrow screens ([#49](https://github.com/EffizienzAgent/docarchive/pull/49))
+
+
+### Documentation
+
+* retake counterparty panel and thread screenshots ([#47](https://github.com/EffizienzAgent/docarchive/pull/47))
+
 ## [0.9.0](https://github.com/EffizienzAgent/docarchive/compare/v0.8.1...v0.9.0) (2026-10-25)
 
 
