@@ -7,6 +7,7 @@ bench --site <site> docarchive-demo. Settings come from the environment:
 - DOCARCHIVE_USER: default Administrator
 - DOCARCHIVE_PASSWORD: required
 - DOCARCHIVE_SHOTS: output folder, default docs/images
+- DOCARCHIVE_CONTACT: Contact name for the counterparty panel, default Nordlicht Bürobedarf GmbH
 
 Pass screen names (e.g. thread audit-log) to take only those.
 """
@@ -23,7 +24,7 @@ from playwright.sync_api import sync_playwright
 BASE = os.environ.get("DOCARCHIVE_BASE", "http://localhost:8000")
 OUT = Path(os.environ.get("DOCARCHIVE_SHOTS", "docs/images"))
 VIEWPORT = {"width": 1440, "height": 900}
-CONTACT = "Nordlicht Bürobedarf GmbH"
+CONTACT = os.environ.get("DOCARCHIVE_CONTACT", "Nordlicht Bürobedarf GmbH")
 HOLD_REASON = "Betriebsprüfung 2026, Anforderung vom 12.10."
 DOCUMENTS = {
 	"held": {"legal_hold": 1},
