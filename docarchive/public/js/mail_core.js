@@ -53,14 +53,15 @@ export function original_actions(status, can_create) {
 }
 
 export function archive_headline(state, { link, date, t }) {
-	if (!state.business_document) return { html: escape_html(t("This e-mail is archived.")), color: "blue" };
+	if (!state.business_document) return { html: escape_html(t("This e-mail is filed.")), color: "blue" };
 	const doc = link(state.business_document);
 	if (state.archive_status === "Archived") {
-		return {
-			html: t("Archived as {0} until {1}", [doc, escape_html(state.retain_until ? date(state.retain_until) : "")]),
-			color: "green",
-		};
+		const html = state.retain_until
+			? t("Archived as {0} until {1}", [doc, escape_html(date(state.retain_until))])
+			: t("Archived as {0}", [doc]);
+		return { html, color: "green" };
 	}
+	if (state.archive_status === "Deleted") return { html: `${doc} · ${escape_html(t("Deleted"))}`, color: "gray" };
 	if (state.archive_status === "Failed") return { html: t("Archiving {0} failed", [doc]), color: "red" };
 	return { html: t("Filed as {0}, not yet archived", [doc]), color: "orange" };
 }

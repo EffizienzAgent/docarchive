@@ -583,7 +583,8 @@ Main,Hauptdatei
 Documents marked for legal hold cannot be discarded.,"Dokumente, die für einen Legal Hold vorgemerkt sind, können nicht verworfen werden."
 Archive e-mails,E-Mails archivieren
 Archive it anyway?,Trotzdem archivieren?
-Archived as {0},Abgelegt als {0}
+Archived as {0},Archiviert als {0}
+Filed as {0},Abgelegt als {0}
 Checksum does not match,Prüfsumme stimmt nicht überein
 Checksum matches,Prüfsumme stimmt überein
 Discard,Verwerfen
@@ -617,7 +618,7 @@ Upload e-mails,E-Mails hochladen
 Uploaded as .eml by a person,Von einer Person als .eml hochgeladen
 Received through Frappe Mail,Über Frappe Mail empfangen
 "Of {0} selected e-mails, {1} look automated and {2} only have internal addresses. Archive them anyway?",Von {0} ausgewählten E-Mails sehen {1} automatisch erzeugt aus und {2} haben nur interne Adressen. Trotzdem archivieren?
-This e-mail is archived.,Diese E-Mail ist abgelegt.
+This e-mail is filed.,Diese E-Mail ist abgelegt.
 Another export is still running. Please wait until it is done.,"Ein anderer Export läuft noch. Bitte warten, bis er fertig ist."
 The export was interrupted.,Der Export wurde unterbrochen.
 "This file type is only offered as a download, so it cannot run in the viewer.","Dieser Dateityp wird nur zum Herunterladen angeboten, damit er im Viewer nicht ausgeführt werden kann."
@@ -702,7 +703,7 @@ Thread Root,Gesprächsursprung
 "Filed as {0}, not yet archived","Abgelegt als {0}, noch nicht festgeschrieben"
 Archived as {0} until {1},Archiviert als {0} bis {1}
 Archiving {0} failed,Festschreiben von {0} fehlgeschlagen
-Archive later mails of an archived thread automatically,Folgemails eines archivierten Verlaufs automatisch archivieren
+File later e-mails of a filed thread automatically,Folge-E-Mails eines abgelegten Verlaufs automatisch ablegen
 Archive Reason,Ablagegrund
-Archived automatically because the thread is archived,"Automatisch archiviert, weil der Verlauf archiviert ist"
-Archive {0} earlier e-mails of this thread,{0} frühere E-Mails dieses Verlaufs archivieren
+Filed automatically because the thread is filed,"Automatisch abgelegt, weil der Verlauf abgelegt ist"
+Archive {0} more e-mails of this thread,{0} weitere E-Mails dieses Verlaufs ablegen

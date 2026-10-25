@@ -95,7 +95,7 @@ frappe.ui.form.on("Business Document", {
 		add_correspondence_buttons(frm);
 		render_audit(frm);
 		if (frm.doc.filing_reason === "Thread") {
-			frm.set_intro(__("Archived automatically because the thread is archived"), "blue");
+			frm.set_intro(__("Filed automatically because the thread is filed"), "blue");
 		}
 		const status = frm.doc.archive_status || "Pending";
 		frm.page.set_indicator(__(status), ARCHIVE_COLORS[status]);

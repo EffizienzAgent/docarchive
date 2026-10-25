@@ -180,7 +180,7 @@
   {
    "fieldname": "follow_threads",
    "fieldtype": "Check",
-   "label": "Archive later mails of an archived thread automatically",
+   "label": "File later e-mails of a filed thread automatically",
    "default": "1"
   },
   {

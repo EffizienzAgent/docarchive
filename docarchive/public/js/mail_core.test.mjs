@@ -82,8 +82,16 @@ test("the archive headline follows the document's status", async () => {
 	);
 	assert.equal(archive_headline({ business_document: "DOC-1", archive_status: "Failed" }, helpers).color, "red");
 	assert.equal(archive_headline({ business_document: "DOC-1" }, helpers).color, "orange");
+	assert.deepEqual(archive_headline({ business_document: "DOC-1", archive_status: "Archived" }, helpers), {
+		html: "Archived as <a>DOC-1</a>",
+		color: "green",
+	});
+	assert.deepEqual(archive_headline({ business_document: "DOC-1", archive_status: "Deleted" }, helpers), {
+		html: "<a>DOC-1</a> · Deleted",
+		color: "gray",
+	});
 	assert.deepEqual(archive_headline({ business_document: null }, helpers), {
-		html: "This e-mail is archived.",
+		html: "This e-mail is filed.",
 		color: "blue",
 	});
 });

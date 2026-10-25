@@ -25,7 +25,7 @@ function docarchive_thread_pending(frm) {
 		.xcall("docarchive.mail.thread_pending", { communication: frm.doc.name })
 		.then(({ count, items }) => {
 			if (!count) return;
-			frm.add_custom_button(__("Archive {0} earlier e-mails of this thread", [count]), () =>
+			frm.add_custom_button(__("Archive {0} more e-mails of this thread", [count]), () =>
 				docarchive.archive_communications(
 					items.map((item) => item.communication),
 					() => frm.reload_doc(),

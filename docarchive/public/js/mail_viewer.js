@@ -114,7 +114,7 @@ function file_attachment(name, source, file) {
 docarchive.set_archive_headline = function (frm, state) {
 	const { html, color } = core.archive_headline(state, {
 		link: doc_link,
-		date: (value) => frappe.datetime.str_to_user(value),
+		date: docarchive.format_retain_until,
 		t: __,
 	});
 	frm.dashboard.set_headline(html, color);
@@ -284,14 +284,14 @@ function archive_mails(names, on_done, methods) {
 			const refused = Object.entries(result.refused);
 			if (archived.length === 1 && !refused.length) {
 				frappe.show_alert({
-					message: __("Archived as {0}", [doc_link(archived[0][1])]),
+					message: __("Filed as {0}", [doc_link(archived[0][1])]),
 					indicator: "green",
 				});
 			} else {
 				report(
 					core.archive_lines(result, {
 						link: doc_link,
-						archived_as: (link) => __("Archived as {0}", [link]),
+						archived_as: (link) => __("Filed as {0}", [link]),
 					}),
 					__("Archive e-mails"),
 				);
@@ -393,7 +393,7 @@ docarchive.archive_emls = function (
 			await discard();
 			if (names.length) {
 				frappe.show_alert({
-					message: __("Archived as {0}", [names.map(doc_link).join(", ")]),
+					message: __("Filed as {0}", [names.map(doc_link).join(", ")]),
 					indicator: "green",
 				});
 			}
