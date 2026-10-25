@@ -417,3 +417,69 @@ E-Invoice Needs Confirmation,E-Rechnung muss bestätigt werden
 Own company or type were taken from the e-invoice. Check both and save to confirm.,Eigene Firma oder Dokumentart stammen aus der E-Rechnung. Beides prüfen und speichern zum Bestätigen.
 "One per line. E-invoices whose seller has one of these VAT IDs are outgoing, those whose buyer has one are incoming. The result is a suggestion that a person confirms.","Eine pro Zeile. E-Rechnungen, deren Verkäufer eine dieser USt-IdNrn. hat, sind ausgehend, solche, deren Käufer eine hat, eingehend. Das Ergebnis ist ein Vorschlag, den eine Person bestätigt."
 Confirm own company and type,Eigene Firma und Dokumentart bestätigen
+All counterparties,Alle Gegenparteien
+All own companies,Alle eigenen Firmen
+Archive Export,Archiv-Export
+Archive Export Part,Teil eines Archiv-Exports
+Cc,Cc
+Checksum Mismatches,Prüfsummen-Abweichungen
+Checksum mismatch,Prüfsumme weicht ab
+Checksum mismatch or missing object,Prüfsumme weicht ab oder Objekt fehlt
+Checksum verified,Prüfsumme geprüft
+Completed,Abgeschlossen
+Conversation,Konversation
+Date,Datum
+Details,Details
+Download Expires At,Download verfügbar bis
+Download original,Original herunterladen
+Download part {0},Teil {0} herunterladen
+Expired,Abgelaufen
+Export,Exportieren
+Export Part Size (MB),Größe eines Export-Teils (MB)
+Export archive,Archiv exportieren
+Export files are deleted after this many days.,Export-Dateien werden nach so vielen Tagen gelöscht.
+Export started in the background,Export im Hintergrund gestartet
+Exported Documents,Exportierte Dokumente
+Exported at,Exportiert am
+Exports above this size are split into several ZIP files.,Exporte über dieser Größe werden auf mehrere ZIP-Dateien aufgeteilt.
+Files,Dateien
+From,Von
+From Date,Von Datum
+Keep Exports For (Days),Exporte aufbewahren (Tage)
+Metadata files,Metadaten-Dateien
+Mismatch Details,Details zu Abweichungen
+Next,Weiter
+No preview for this file type. Open or download the original.,Keine Vorschau für diesen Dateityp. Original öffnen oder herunterladen.
+"Not enough disk space for the export: {0} MB needed, {1} MB free.","Nicht genug Speicherplatz für den Export: {0} MB benötigt, {1} MB frei."
+Not on Storage Target,Nicht auf dem Speicherziel
+Only legal hold,Nur Legal Hold
+Only problems,Nur Probleme
+Open original,Original öffnen
+Part,Teil
+Part {0} of {1},Teil {0} von {1}
+Parts,Teile
+Please choose the counterparty type.,Bitte die Art der Gegenpartei wählen.
+Previous,Zurück
+Progress,Fortschritt
+Queued,In Warteschlange
+Rendered preview for reading only. The archived original is the file above.,Gerenderte Vorschau nur zum Lesen. Maßgeblich ist das archivierte Original oben.
+Requested At,Angefordert am
+Requested By,Angefordert von
+Retention extensions,Verlängerungen der Aufbewahrung
+Running,Läuft
+Scope,Umfang
+"Search title, number or counterparty","Titel, Nummer oder Gegenpartei suchen"
+Show more,Mehr anzeigen
+Size (Bytes),Größe (Bytes)
+Start export,Export starten
+Storage Target,Speicherziel
+Subject,Betreff
+The start date must not be after the end date.,Das Startdatum darf nicht nach dem Enddatum liegen.
+To,An
+To Date,Bis Datum
+Unknown counterparty type {0}.,Unbekannte Art der Gegenpartei {0}.
+Unknown storage target {0}.,Unbekanntes Speicherziel {0}.
+of,von
+{0} objects could not be verified. See manifest.json.,{0} Objekte konnten nicht geprüft werden. Siehe manifest.json.
+{0} objects could not be verified. See Mismatch Details.,{0} Objekte konnten nicht geprüft werden. Siehe Details zu Abweichungen.
+Main,Hauptdatei

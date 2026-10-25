@@ -154,12 +154,20 @@ def head(target, key, version_id=None) -> dict | None:
 		raise
 
 
-def read_sha256(target, key, version_id) -> str:
+def download(target, key, version_id, out=None) -> dict:
 	response = target._client.get_object(Bucket=target.bucket, Key=key, **versioned(version_id))
-	digest = hashlib.sha256()
+	digest, size = hashlib.sha256(), 0
 	for chunk in iter(lambda: response["Body"].read(1024 * 1024), b""):
 		digest.update(chunk)
-	return digest.hexdigest()
+		size += len(chunk)
+		if out is not None:
+			out.write(chunk)
+	stored = (response.get("Metadata") or {}).get("sha256")
+	return {"sha256": digest.hexdigest(), "stored_sha256": stored, "size": size}
+
+
+def read_sha256(target, key, version_id) -> str:
+	return download(target, key, version_id)["sha256"]
 
 
 def retention(target, key, version_id) -> dict:

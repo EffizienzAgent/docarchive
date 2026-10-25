@@ -1,0 +1,49 @@
+{
+ "docstatus": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Document Archive",
+ "custom": 0,
+ "name": "Archive Export Part",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "field_order": [
+  "part",
+  "file",
+  "documents",
+  "archive_size"
+ ],
+ "fields": [
+  {
+   "fieldname": "part",
+   "fieldtype": "Int",
+   "label": "Part",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "file",
+   "fieldtype": "Attach",
+   "label": "File",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "documents",
+   "fieldtype": "Int",
+   "label": "Documents",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_size",
+   "fieldtype": "Int",
+   "label": "Size (Bytes)",
+   "in_list_view": 1,
+   "read_only": 1
+  }
+ ],
+ "permissions": []
+}

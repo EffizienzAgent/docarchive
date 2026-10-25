@@ -2,6 +2,7 @@ import frappe
 
 from docarchive import extension, settings, storage_targets
 from docarchive.document_archive.doctype.business_document.business_document import missing_fields
+from docarchive.permissions import ADMIN_ROLE
 
 DOCUMENT = "Business Document"
 DOCUMENT_LIMIT = 50
@@ -59,6 +60,7 @@ def counterparty_panel(counterparty_type: str, counterparty: str) -> dict:
 		"can_write": bool(frappe.has_permission(DOCUMENT, "write")),
 		"archiving": archiving_on(),
 		"can_extend": extension.is_manager() and bool(frappe.has_permission(DOCUMENT, "write")),
+		"can_export": ADMIN_ROLE in frappe.get_roles(),
 	}
 	if not frappe.has_permission(DOCUMENT, "read"):
 		return panel

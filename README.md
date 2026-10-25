@@ -292,6 +292,26 @@ An Archive Admin selects rows and clicks **Delete Selected**, or uses **Delete E
 - it deletes the same recorded versions as above, with `BypassGovernanceRetention`. The archive admin key needs `s3:BypassGovernanceRetention` for this. Without it the storage answers AccessDenied, and the copy shows that the permission is missing,
 - the deletion log records `early`, the reason and the overridden retain-until date.
 
+### Export
+
+**Export archive** ("Archiv exportieren", list view button and **Export** in the counterparty panel, role **Archive Admin** only) builds a self-contained package of archived documents, e.g. for a tax audit, a provider change or a leaving customer. The dialog filters by storage target, own company, document type, date range and counterparty; the counterparty panel prefills its counterparty. Each export is an **Archive Export** record ("EXP-…") with the scope, the user, the progress and the result, and stays as a log after its files expire.
+
+The export runs on the long queue:
+
+- It includes documents with an archived copy on the chosen target whose versions are all recorded; others are counted as "Not on Storage Target".
+- It reads every recorded version (file, attachments, `.meta.json`, extension sidecars) from storage with the archive key, never from the Frappe file, through `store.download`, the only function that calls `GetObject`. Four objects are fetched in parallel, each streamed to a temp file, retried up to three times.
+- Each object's SHA-256 is checked against the recorded checksum (sidecars: against the stored `sha256` metadata). A mismatch or an unreadable object is listed in the record and in `manifest.json` and does not stop the export.
+- Above **Export Part Size (MB)** (Archive Settings, default 2048) the export is split into parts, each a complete package. Before writing, it checks the free disk space for the largest part.
+- Each ZIP (ZIP64; PDFs and images stored without compression) is uploaded with `s3storage.backend.insert_file` as a private File attached to the record, in parts and without loading it into memory. Downloads support `Range`, so they can resume.
+- After **Keep Exports For (Days)** (default 7) a daily job deletes the files and sets the record to Expired.
+
+Each ZIP contains:
+
+- `documents/<object key>`: the archived objects with their exact bytes,
+- `manifest.json` and `manifest.csv`: scope, every document with its metadata (taken from the archived `.meta.json` or the newest sidecar), retention, lock mode, legal hold, and per object the key, version ID, SHA-256, size and check result,
+- `previews/<object key>.html`: for `.eml` files a rendered, sanitized preview (HTML body or plain text) with a Content-Security-Policy that blocks scripts and remote content,
+- `index.html`: an offline viewer in one file, without network requests. It lists all documents with search and filters (type, counterparty, own company, year, legal hold, problems), shows the metadata and retention trail, previews PDFs, images, XML and mail, and always links the original to open or download. Documents with a `thread_key` show their conversation in date order.
+
 ### Archive now
 
 Users who may write a document see **Archive now** on its form when archiving is enabled and the document is complete. The list view has the same action for selected documents. Both show the retain-until date and the mode and ask for confirmation, then queue the same archive code as the nightly run, without the minimum age wait. A failed target is retried by the next nightly run.
