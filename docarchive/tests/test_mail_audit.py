@@ -67,6 +67,8 @@ class TestMailAudit(MailArchivingTestCase):
 		self.assertEqual(self.entries(audit.MAIL_ARCHIVED), [])
 
 	def test_automatic_archive_is_logged_once_a_day(self):
+		archiving.log_automatic()
+		self.since = frappe.get_all(audit.LOG, pluck="name")
 		self.configure(mode="Automatic")
 		raw = eml()
 		first, second = self.capture(), self.capture()
