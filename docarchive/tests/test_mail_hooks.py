@@ -17,6 +17,7 @@ from docarchive.tests.factories import (
 	make_mail_settings,
 	make_own_company,
 	make_settings,
+	resume_mail_writes,
 	store_mail_inline,
 	unique,
 )
@@ -85,7 +86,7 @@ class TestMailHooks(IntegrationTestCase):
 		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
 			comm = self.receive().process()
 		self.assertEqual(comm.name, self.received())
-		self.assertEqual(self.pending(comm), ("Failed", None))
+		self.assertEqual(self.pending(comm), ("Pending", None))
 
 	def test_receive_logs_and_continues_when_capture_raises(self):
 		with (
@@ -323,6 +324,7 @@ class TestMailEndToEnd(IntegrationTestCase):
 		self.message_id = f"{unique('mid')}@example.test"
 		self.raw = eml(To=self.email_id, **{"Message-ID": f"<{self.message_id}>"})
 		frappe.db.after_commit.reset()
+		resume_mail_writes(self)
 
 	def receive(self):
 		account = frappe.get_doc("Email Account", self.account.name)
@@ -358,9 +360,9 @@ class TestMailEndToEnd(IntegrationTestCase):
 		):
 			comm = self.receive()
 		self.assertTrue(frappe.db.exists("Communication", comm.name))
-		status, error = frappe.db.get_value(
-			"Mail Original", {"communication": comm.name}, ["status", "error"]
+		status, fallback = frappe.db.get_value(
+			"Mail Original", {"communication": comm.name}, ["status", "raw_fallback"]
 		)
-		self.assertEqual(status, "Failed")
-		self.assertIn("S3 down", error)
+		self.assertEqual(status, "Pending")
+		self.assertTrue(fallback)
 		log_error.assert_called_with(title="docarchive mail capture")

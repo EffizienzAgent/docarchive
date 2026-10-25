@@ -1,9 +1,12 @@
+import base64
 import hashlib
 import os
 from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
+from s3storage import storage
+from s3storage.tests.fake_s3 import FakeClientError, FakeS3
 
 from docarchive import content, mail
 from docarchive.mail import archiving, cleanup, headers, originals
@@ -15,10 +18,19 @@ from docarchive.tests.factories import (
 	make_mail_settings,
 	make_own_company,
 	make_settings,
+	resume_mail_writes,
 	store_mail_inline,
 )
 
 SCHEDULE = originals.schedule
+S3_CONFIG = {
+	"s3_files_endpoint": "https://s3.example.com",
+	"s3_files_region": "eu-central-1",
+	"s3_files_bucket": "files",
+	"s3_files_access_key": "key",
+	"s3_files_secret_key": "secret",
+}
+SPOOL = ("private", "docarchive", "mail-spool")
 
 
 class TestMailCapture(IntegrationTestCase):
@@ -111,24 +123,24 @@ class TestMailCapture(IntegrationTestCase):
 			self.assertIsNone(mail.capture(self.comm, EML, "t"))
 		self.assertFalse(frappe.db.exists("Mail Original", {"communication": self.comm.name}))
 
-	def test_failing_write_keeps_a_failed_capture(self):
+	def test_failing_write_keeps_the_bytes_in_the_database(self):
 		with (
 			patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")),
 			patch("frappe.log_error") as log_error,
 		):
 			name = mail.capture(self.comm, EML, "t")
-		status, attempts, file, error = frappe.db.get_value(
-			"Mail Original", name, ["status", "attempts", "file", "error"]
+		status, attempts, file, fallback = frappe.db.get_value(
+			"Mail Original", name, ["status", "attempts", "file", "raw_fallback"]
 		)
-		self.assertEqual((status, attempts, file), ("Failed", 1, None))
-		self.assertIn("boom", error)
+		self.assertEqual((status, attempts, file), ("Pending", 1, None))
+		self.assertEqual(base64.b64decode(fallback), EML)
 		self.assertFalse(frappe.db.exists("File", {"attached_to_name": name}))
 		log_error.assert_called_with(title="docarchive mail capture")
 
 	def test_auto_archive_called_after_capture(self):
 		with patch("docarchive.mail.originals.archiving.auto_archive") as auto:
 			name = mail.capture(self.comm, EML, "t")
-		auto.assert_called_once_with(name)
+		auto.assert_called_once_with(name, EML)
 
 	def test_long_identifiers_are_captured(self):
 		message_id = "m" * 190 + "@example.test"
@@ -175,9 +187,13 @@ class TestMailStoreJob(IntegrationTestCase):
 		self.comm = make_communication(self.account)
 		self.scheduled = []
 		self.enterContext(patch("docarchive.mail.originals.schedule", side_effect=self.scheduled.append))
+		resume_mail_writes(self)
 
 	def pending(self, raw=EML):
 		return mail.capture(self.comm, raw, "t")
+
+	def failing_write(self, error=None):
+		return patch("docarchive.mail.originals.store_file", side_effect=error or OSError("S3 down"))
 
 	def row(self, name, *fields):
 		return frappe.db.get_value("Mail Original", name, list(fields))
@@ -312,10 +328,20 @@ class TestMailStoreJob(IntegrationTestCase):
 		self.assertEqual(mail.capture(self.comm, fresh, "t"), name)
 		self.assertEqual(self.row(name, "status", "attempts", "error"), ("Pending", 0, None))
 		self.assertEqual(self.scheduled, [name])
-		self.assertEqual(frappe.db.count("File", {"attached_to_name": name}), 1)
+		self.assertEqual(frappe.db.count("File", {"attached_to_name": name}), 2)
 		self.assertEqual(content.read_bytes(self.row(name, "file")), fresh)
 		originals.store(name)
 		self.assertEqual(self.row(name, "status", "sha256"), ("Stored", hashlib.sha256(fresh).hexdigest()))
+		self.assertEqual(frappe.db.count("File", {"attached_to_name": name}), 1)
+		self.assertEqual(content.read_bytes(self.row(name, "file")), fresh)
+
+	def test_revive_with_the_same_bytes_keeps_one_file(self):
+		name = self.pending()
+		frappe.db.set_value("Mail Original", name, "status", "Failed")
+		mail.capture(self.comm, EML, "t")
+		originals.store(name)
+		self.assertEqual(frappe.db.count("File", {"attached_to_name": name}), 1)
+		self.assertEqual(content.read_bytes(self.row(name, "file")), EML)
 
 	def test_revive_without_a_previous_file(self):
 		name = self.pending()
@@ -324,17 +350,89 @@ class TestMailStoreJob(IntegrationTestCase):
 		mail.capture(self.comm, EML, "t")
 		self.assertEqual(content.read_bytes(self.row(name, "file")), EML)
 
-	def test_failing_revive_stays_failed_with_the_old_file(self):
+	def test_revive_while_storage_is_down_keeps_the_old_file_until_stored(self):
 		name = self.pending()
-		file = self.row(name, "file")
+		old = self.row(name, "file")
 		frappe.db.set_value("Mail Original", name, {"status": "Failed", "error": "x"})
+		fresh = eml()
+		with self.failing_write(), patch("frappe.log_error"):
+			self.assertEqual(mail.capture(self.comm, fresh, "t"), name)
+		status, file, fallback = self.row(name, "status", "file", "raw_fallback")
+		self.assertEqual((status, file), ("Pending", None))
+		self.assertEqual(base64.b64decode(fallback), fresh)
+		self.assertTrue(frappe.db.exists("File", {"file_url": old, "attached_to_name": name}))
+		resume_mail_writes(self)
+		originals.store(name)
+		self.assertEqual(self.row(name, "status", "raw_fallback"), ("Stored", None))
+		self.assertEqual(frappe.db.count("File", {"attached_to_name": name}), 1)
+		self.assertEqual(content.read_bytes(self.row(name, "file")), fresh)
+
+	def test_failed_revive_keeps_the_old_file(self):
+		name = self.pending()
+		old = self.row(name, "file")
+		frappe.db.set_value("Mail Original", name, {"status": "Failed", "error": "x"})
+		with self.failing_write(), patch.object(originals, "FALLBACK_LIMIT", 10), patch("frappe.log_error"):
+			mail.capture(self.comm, eml(), "t")
+		self.assertEqual(self.row(name, "status", "file"), ("Failed", old))
+		self.assertIn("10 MB", self.row(name, "error"))
+
+	def test_write_failure_keeps_the_bytes_for_the_job(self):
+		with self.failing_write(), patch("frappe.log_error") as log_error:
+			name = self.pending()
+		status, file, fallback = self.row(name, "status", "file", "raw_fallback")
+		self.assertEqual((status, file), ("Pending", None))
+		self.assertEqual(base64.b64decode(fallback), EML)
+		self.assertEqual(self.scheduled, [name])
+		log_error.assert_called_with(title="docarchive mail capture")
+		self.assertTrue(frappe.cache.get_value(originals.PAUSE_KEY))
+		resume_mail_writes(self)
+		originals.store(name)
+		self.assertEqual(self.row(name, "status", "raw_fallback"), ("Stored", None))
+		self.assertEqual(content.read_bytes(self.row(name, "file")), EML)
+		self.assertTrue(self.row(name, "business_document"))
+
+	def test_paused_writes_skip_the_file_storage(self):
+		frappe.cache.set_value(originals.PAUSE_KEY, 1, expires_in_sec=300)
+		with patch("docarchive.mail.originals.store_file") as store_file:
+			name = self.pending()
+		store_file.assert_not_called()
+		self.assertEqual(base64.b64decode(self.row(name, "raw_fallback")), EML)
+
+	def test_job_keeps_the_bytes_while_storage_is_down(self):
+		with self.failing_write(), patch("frappe.log_error"):
+			name = self.pending()
+			originals.store(name)
+		status, attempts, fallback = self.row(name, "status", "attempts", "raw_fallback")
+		self.assertEqual((status, attempts), ("Pending", 1))
+		self.assertEqual(base64.b64decode(fallback), EML)
+
+	def test_large_mail_fails_when_storage_is_down(self):
+		with self.failing_write(), patch.object(originals, "FALLBACK_LIMIT", 10), patch("frappe.log_error"):
+			name = self.pending()
+		status, file, fallback, error = self.row(name, "status", "file", "raw_fallback", "error")
+		self.assertEqual((status, file, fallback), ("Failed", None, None))
+		self.assertIn("10 MB", error)
+		self.assertEqual(self.scheduled, [])
+
+	def test_too_large_file_fails_without_fallback_or_pause(self):
+		messages = len(frappe.local.message_log)
+		with patch("frappe.core.api.file.get_max_file_size", return_value=10), patch("frappe.log_error"):
+			name = self.pending()
+		status, fallback, error = self.row(name, "status", "raw_fallback", "error")
+		self.assertEqual((status, fallback), ("Failed", None))
+		self.assertIn("maximum allowed size", error)
+		self.assertNotIn("<", error)
+		self.assertEqual(len(frappe.local.message_log), messages)
+		self.assertFalse(frappe.cache.get_value(originals.PAUSE_KEY))
+
+	def test_failing_failure_record_does_not_raise(self):
 		with (
-			patch("docarchive.mail.originals.store_file", side_effect=Exception("S3 down")),
+			patch.object(originals, "FALLBACK_LIMIT", 10),
+			self.failing_write(),
+			patch("frappe.db.set_value", side_effect=Exception("db")),
 			patch("frappe.log_error"),
 		):
-			self.assertEqual(mail.capture(self.comm, eml(), "t"), name)
-		self.assertEqual(self.row(name, "status", "file"), ("Failed", file))
-		self.assertIn("S3 down", self.row(name, "error"))
+			self.assertTrue(self.pending())
 
 	def test_unlinked_original_is_retried(self):
 		name = self.pending()
@@ -373,28 +471,161 @@ class TestSpoolMigration(IntegrationTestCase):
 		self.account = make_email_account().name
 		make_mail_settings(self.account, mode="Manual")
 		self.schedule = self.enterContext(patch("docarchive.mail.originals.schedule"))
+		resume_mail_writes(self)
 
-	def legacy(self, raw=None):
+	def path(self, name):
+		return frappe.get_site_path(*SPOOL, f"{name}.eml")
+
+	def legacy(self, raw=None, status="Pending"):
 		name = originals._pend(make_communication(self.account), "t")
+		frappe.db.set_value(
+			"Mail Original", name, {"status": status, "attempts": 5 if status == "Failed" else 0}
+		)
 		if raw is not None:
-			path = frappe.get_site_path("private", "docarchive", "mail-spool", f"{name}.eml")
+			path = self.path(name)
 			os.makedirs(os.path.dirname(path), exist_ok=True)
 			with open(path, "wb") as f:
 				f.write(raw)
 			self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
 		return name
 
-	def test_readable_spool_becomes_the_file_and_is_removed(self):
+	def row(self, name, *fields):
+		return frappe.db.get_value("Mail Original", name, list(fields))
+
+	def migrate(self):
 		from docarchive.patches import move_mail_spool
 
-		spooled, lost = self.legacy(EML), self.legacy()
 		move_mail_spool.execute()
-		self.assertEqual(content.read_bytes(frappe.db.get_value("Mail Original", spooled, "file")), EML)
-		self.assertEqual(frappe.db.get_value("Mail Original", spooled, "status"), "Pending")
-		self.schedule.assert_any_call(spooled)
 		frappe.db.after_commit.run()
-		path = frappe.get_site_path("private", "docarchive", "mail-spool", f"{spooled}.eml")
-		self.assertFalse(os.path.exists(path))
-		status, error = frappe.db.get_value("Mail Original", lost, ["status", "error"])
+
+	def test_readable_spool_becomes_the_file_and_is_removed(self):
+		spooled, lost = self.legacy(EML), self.legacy()
+		self.migrate()
+		self.assertEqual(content.read_bytes(self.row(spooled, "file")), EML)
+		self.assertEqual(self.row(spooled, "status"), "Pending")
+		self.schedule.assert_any_call(spooled)
+		self.assertFalse(os.path.exists(self.path(spooled)))
+		status, error = self.row(lost, "status", "error")
 		self.assertEqual(status, "Failed")
 		self.assertIn("spool", error)
+
+	def test_failed_original_with_spool_is_revived(self):
+		name = self.legacy(EML, status="Failed")
+		self.migrate()
+		self.assertEqual(self.row(name, "status", "attempts"), ("Pending", 0))
+		self.assertEqual(content.read_bytes(self.row(name, "file")), EML)
+		self.schedule.assert_any_call(name)
+
+	def test_failed_original_without_spool_keeps_its_error(self):
+		name = self.legacy(status="Failed")
+		frappe.db.set_value("Mail Original", name, "error", "rebuild window passed")
+		self.migrate()
+		self.assertEqual(self.row(name, "status", "error"), ("Failed", "rebuild window passed"))
+
+	def test_without_spool_folder(self):
+		folder = frappe.get_site_path(*SPOOL)
+		if os.path.isdir(folder) and not os.listdir(folder):
+			os.rmdir(folder)
+		lost = self.legacy()
+		self.migrate()
+		self.assertEqual(self.row(lost, "status"), "Failed")
+
+	def test_oversized_spool_stays_on_disk(self):
+		name, kept = self.legacy(b"x" * 5000), self.legacy(EML)
+		with patch("frappe.core.api.file.get_max_file_size", return_value=2000), patch("frappe.log_error"):
+			self.migrate()
+		self.assertEqual(self.row(name, "status"), "Failed")
+		self.assertIn("maximum allowed size", self.row(name, "error"))
+		self.assertTrue(os.path.exists(self.path(name)))
+		self.assertFalse(os.path.exists(self.path(kept)))
+
+	def test_one_broken_row_does_not_stop_the_migration(self):
+		broken, fine = self.legacy(EML), self.legacy(eml())
+		real = originals._write
+
+		def write(original, raw):
+			if original.name == broken:
+				raise Exception("boom")
+			return real(original, raw)
+
+		with patch("docarchive.mail.originals._write", side_effect=write), patch("frappe.log_error") as log:
+			self.migrate()
+		self.assertEqual(self.row(broken, "status"), "Failed")
+		self.assertIn("boom", self.row(broken, "error"))
+		self.assertTrue(os.path.exists(self.path(broken)))
+		self.assertEqual(self.row(fine, "status"), "Pending")
+		log.assert_called()
+
+
+class TestMailCaptureOnS3(IntegrationTestCase):
+	def setUp(self):
+		make_settings(default_own_company=make_own_company().name)
+		self.account = make_email_account().name
+		make_mail_settings(self.account, mode="Automatic", internal_domains="acme.test")
+		self.comm = make_communication(self.account)
+		self.s3 = FakeS3()
+		self.enterContext(patch.dict(frappe.local.conf, S3_CONFIG))
+		self.enterContext(patch.object(storage, "client", return_value=self.s3))
+		self.enterContext(patch("docarchive.mail.originals.schedule"))
+		resume_mail_writes(self)
+
+	def key(self, name):
+		return storage.key_for(frappe.db.get_value("Mail Original", name, "file"))
+
+	def row(self, name, *fields):
+		return frappe.db.get_value("Mail Original", name, list(fields))
+
+	def test_capture_writes_only_to_object_storage(self):
+		name = mail.capture(self.comm, EML, "t")
+		file = self.row(name, "file")
+		self.assertEqual(self.s3.content(self.key(name)), EML)
+		self.assertFalse(os.path.exists(storage.local_path(file)))
+		self.s3.calls.clear()
+		originals.store(name)
+		self.assertIn("get_object", self.s3.calls)
+		self.assertEqual(self.row(name, "status"), "Stored")
+
+	def test_archiving_uploads_nothing(self):
+		name = mail.capture(self.comm, EML, "t")
+		self.s3.calls.clear()
+		originals.store(name)
+		self.assertNotIn("put_object", self.s3.calls)
+		document = self.row(name, "business_document")
+		self.assertEqual(frappe.db.get_value("Business Document", document, "file"), self.row(name, "file"))
+
+	def test_revive_deletes_the_old_object_only_once_stored(self):
+		name = mail.capture(self.comm, eml(), "t")
+		old = self.key(name)
+		frappe.db.set_value("Mail Original", name, "status", "Failed")
+		fresh = eml()
+		mail.capture(self.comm, fresh, "t")
+		self.assertIn(old, self.s3.keys())
+		originals.store(name)
+		self.assertNotIn(old, self.s3.keys())
+		self.assertEqual(self.s3.content(self.key(name)), fresh)
+
+	def test_put_failure_falls_back_to_the_database(self):
+		with (
+			patch.object(self.s3, "put_object", side_effect=FakeClientError("InternalError")) as put,
+			patch("frappe.log_error"),
+		):
+			name = mail.capture(self.comm, EML, "t")
+			other = mail.capture(make_communication(self.account), eml(), "t")
+		put.assert_called_once()
+		self.assertEqual(self.s3.keys(), [])
+		for each in (name, other):
+			self.assertEqual(self.row(each, "status", "file"), ("Pending", None))
+			self.assertTrue(self.row(each, "raw_fallback"))
+		resume_mail_writes(self)
+		originals.store(name)
+		self.assertEqual(self.row(name, "status", "raw_fallback"), ("Stored", None))
+		self.assertEqual(self.s3.content(self.key(name)), EML)
+
+	def test_failure_after_upload_removes_the_object(self):
+		with (
+			patch("frappe.core.doctype.file.file.File.after_insert", side_effect=Exception("late")),
+			patch("frappe.log_error"),
+		):
+			name = mail.capture(self.comm, eml(), "t")
+		self.assertEqual(self.s3.keys(), [])
+		self.assertTrue(self.row(name, "raw_fallback"))

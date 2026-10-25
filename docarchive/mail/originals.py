@@ -1,9 +1,11 @@
+import base64
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 
 import frappe
+from frappe.core.doctype.file.exceptions import MaxFileSizeReachedError
 from frappe.email.doctype.email_queue.email_queue import SendMailContext
-from frappe.utils import convert_utc_to_system_timezone, get_datetime, now_datetime
+from frappe.utils import convert_utc_to_system_timezone, get_datetime, now_datetime, strip_html
 
 from docarchive import content
 from docarchive.keys import slug
@@ -24,6 +26,9 @@ MAX_ATTEMPTS = 5
 JOB = "docarchive.mail.originals.store"
 ERROR_LENGTH = 500
 REBUILD_WINDOW = timedelta(hours=1)
+FALLBACK_LIMIT = 10 * 1024 * 1024
+PAUSE_KEY = "docarchive:mail-file-writes-paused"
+PAUSE_SECONDS = 300
 
 
 class Unavailable(Exception):
@@ -48,13 +53,9 @@ def capture(communication, raw: bytes | str, origin: str) -> str | None:
 def _revive(name, raw, origin):
 	if frappe.db.get_value(ORIGINAL, name, "status") != FAILED:
 		return name
-	old_files = frappe.get_all(
-		"File", filters={"attached_to_doctype": ORIGINAL, "attached_to_name": name}, pluck="name"
-	)
-	if not _write(frappe.get_doc(ORIGINAL, name), raw):
+	written = _write(frappe.get_doc(ORIGINAL, name), raw)
+	if not written:
 		return name
-	for file in old_files:
-		frappe.delete_doc("File", file, ignore_permissions=True)
 	frappe.db.set_value(
 		ORIGINAL,
 		name,
@@ -65,6 +66,7 @@ def _revive(name, raw, origin):
 			"origin": origin,
 			"email_queue": None,
 			"rebuilt_at": None,
+			**({"raw_fallback": None} if written == "file" else {"file": None}),
 		},
 		update_modified=False,
 	)
@@ -134,12 +136,13 @@ def store(original: str) -> None:
 	try:
 		frappe.db.savepoint(STORE_SAVEPOINT)
 		original = frappe.get_doc(ORIGINAL, name)
-		_complete(original, _rebuilt(original) if original.email_queue else _kept(original))
+		raw = _rebuilt(original) if original.email_queue else _kept(original)
+		_complete(original, raw)
 	except Exception as error:
 		fail(STORE_SAVEPOINT)
 		_attempted(name, error)
 		return
-	_auto_archive(name)
+	_auto_archive(name, raw)
 
 
 def retry_pending() -> int:
@@ -191,6 +194,8 @@ def _rebuilt(original):
 
 
 def _kept(original):
+	if original.raw_fallback:
+		return base64.b64decode(original.raw_fallback)
 	if not original.file:
 		raise Unavailable("The raw bytes of this mail were not kept. Hand the mail in again to retry.")
 	raw = content.read_bytes(original.file)
@@ -280,8 +285,21 @@ def store_file(original, raw: bytes, name_hint: str | None = None) -> str:
 			"attached_to_name": original.name,
 			"attached_to_field": "file",
 		}
-	).insert(ignore_permissions=True)
+	)
+	try:
+		file_doc.insert(ignore_permissions=True)
+	except Exception:
+		_discard(file_doc)
+		raise
 	return file_doc.file_url
+
+
+def _discard(file_doc):
+	try:
+		if file_doc.flags.new_file:
+			file_doc.on_rollback()
+	except Exception:
+		fail()
 
 
 def _pend(communication, origin, raw=None, email_queue=None):
@@ -304,24 +322,59 @@ def _pend(communication, origin, raw=None, email_queue=None):
 	return original.name
 
 
-def _write(original, raw) -> bool:
+def _write(original, raw) -> str | None:
+	if not _paused():
+		messages = len(frappe.local.message_log)
+		try:
+			frappe.db.savepoint(WRITE_SAVEPOINT)
+			original.db_set("file", store_file(original, raw, _message_id(original)), update_modified=False)
+			return "file"
+		except MaxFileSizeReachedError as error:
+			fail(WRITE_SAVEPOINT)
+			return _failed(original, f"The original could not be written: {error}")
+		except Exception:
+			fail(WRITE_SAVEPOINT)
+			_pause()
+		finally:
+			del frappe.local.message_log[messages:]
+	if len(raw) > FALLBACK_LIMIT:
+		return _failed(
+			original,
+			"The file storage could not be written and the mail is larger than 10 MB, so it was not kept.",
+		)
+	original.db_set("raw_fallback", base64.b64encode(raw).decode(), update_modified=False)
+	return "fallback"
+
+
+def _failed(original, message):
 	try:
-		frappe.db.savepoint(WRITE_SAVEPOINT)
-		original.db_set("file", store_file(original, raw, _message_id(original)), update_modified=False)
-		return True
-	except Exception as error:
-		fail(WRITE_SAVEPOINT)
 		frappe.db.set_value(
 			ORIGINAL,
 			original.name,
 			{
 				"status": FAILED,
 				"attempts": (original.attempts or 0) + 1,
-				"error": f"The original could not be written: {error or type(error).__name__}"[:ERROR_LENGTH],
+				"error": strip_html(message)[:ERROR_LENGTH],
 			},
 			update_modified=False,
 		)
+	except Exception:
+		fail()
+	return None
+
+
+def _paused():
+	try:
+		return bool(frappe.cache.get_value(PAUSE_KEY))
+	except Exception:
 		return False
+
+
+def _pause():
+	try:
+		frappe.cache.set_value(PAUSE_KEY, 1, expires_in_sec=PAUSE_SECONDS)
+	except Exception:
+		fail()
 
 
 def _message_id(original):
@@ -335,11 +388,31 @@ def _complete(original, raw):
 	row = accounts.account_row(original.email_account)
 	internal = bool(row) and headers.is_internal(parsed, accounts.internal_domains(row))
 	original.update(
-		{**_header_fields(raw, parsed), "internal": int(internal), "status": STORED, "error": None}
+		{
+			**_header_fields(raw, parsed),
+			"internal": int(internal),
+			"status": STORED,
+			"error": None,
+			"raw_fallback": None,
+		}
 	)
-	original.save(ignore_permissions=True)
 	if not original.file:
-		original.db_set("file", store_file(original, raw))
+		original.file = store_file(original, raw)
+	original.save(ignore_permissions=True)
+	_drop_replaced(original)
+
+
+def _drop_replaced(original):
+	files = frappe.get_all(
+		"File",
+		filters={"attached_to_doctype": ORIGINAL, "attached_to_name": original.name},
+		fields=["name", "file_url"],
+		order_by="creation desc",
+	)
+	keep = next((row.name for row in files if row.file_url == original.file), None)
+	for row in files:
+		if row.name != keep:
+			frappe.delete_doc("File", row.name, ignore_permissions=True)
 
 
 def create_upload(raw: bytes, parsed, direction: str) -> str:
@@ -387,9 +460,9 @@ def _header_fields(raw, parsed):
 	}
 
 
-def _auto_archive(name):
+def _auto_archive(name, raw=None):
 	try:
 		frappe.db.savepoint(AUTO_SAVEPOINT)
-		archiving.auto_archive(name)
+		archiving.auto_archive(name, raw)
 	except Exception:
 		fail(AUTO_SAVEPOINT)

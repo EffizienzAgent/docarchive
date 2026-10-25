@@ -681,6 +681,7 @@ Extending the retention failed for {0} documents,Die Verlängerung der Aufbewahr
 "Archiving is enabled, but no storage target is configured","Die Archivierung ist aktiviert, aber kein Speicherziel ist eingerichtet"
 Archive Admins are notified about documents that are ready but not archived after this many hours. Empty or 0: 48 hours.,"Archiv-Admins werden benachrichtigt, wenn bereite Dokumente nach so vielen Stunden noch nicht archiviert sind. Leer oder 0: 48 Stunden."
 Rebuilt At (UTC),Neu erstellt am (UTC)
+Raw Fallback,Rohdaten (Ersatzspeicher)
 Storing the original of this e-mail failed. It will be retried automatically.,Das Original dieser E-Mail konnte nicht gespeichert werden. Es wird automatisch erneut versucht.
 {0} e-mail originals could not be stored,{0} E-Mail-Originale konnten nicht gespeichert werden
 Document Archive,Dokumentenarchiv

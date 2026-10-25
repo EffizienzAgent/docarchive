@@ -242,7 +242,15 @@ def restrict_to_own_company(user, own_company):
 	).insert(ignore_permissions=True)
 
 
+def resume_mail_writes(case):
+	from docarchive.mail import originals
+
+	frappe.cache.delete_value(originals.PAUSE_KEY)
+	case.addCleanup(frappe.cache.delete_value, originals.PAUSE_KEY)
+
+
 def store_mail_inline(case):
 	from docarchive.mail import originals
 
+	resume_mail_writes(case)
 	case.enterContext(patch("docarchive.mail.originals.schedule", side_effect=originals.store))
