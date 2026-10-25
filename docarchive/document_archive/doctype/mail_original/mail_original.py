@@ -2,4 +2,5 @@ from frappe.model.document import Document
 
 
 class MailOriginal(Document):
-	pass
+	def onload(self):
+		self.raw_fallback = None

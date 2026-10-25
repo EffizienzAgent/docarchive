@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import os
+import pickle
 from unittest.mock import patch
 
 import frappe
@@ -125,7 +126,7 @@ class TestMailCapture(IntegrationTestCase):
 
 	def test_failing_write_keeps_the_bytes_in_the_database(self):
 		with (
-			patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")),
+			patch("docarchive.mail.originals.new_file", side_effect=Exception("boom")),
 			patch("frappe.log_error") as log_error,
 		):
 			name = mail.capture(self.comm, EML, "t")
@@ -193,7 +194,7 @@ class TestMailStoreJob(IntegrationTestCase):
 		return mail.capture(self.comm, raw, "t")
 
 	def failing_write(self, error=None):
-		return patch("docarchive.mail.originals.store_file", side_effect=error or OSError("S3 down"))
+		return patch("docarchive.mail.originals.new_file", side_effect=error or OSError("S3 down"))
 
 	def row(self, name, *fields):
 		return frappe.db.get_value("Mail Original", name, list(fields))
@@ -243,11 +244,11 @@ class TestMailStoreJob(IntegrationTestCase):
 	def test_store_job_writes_no_second_copy(self):
 		name = self.pending()
 		with (
-			patch("docarchive.mail.originals.store_file") as store_file,
+			patch("docarchive.mail.originals.new_file") as new_file,
 			patch("s3storage.backend.write_file") as write_file,
 		):
 			originals.store(name)
-		store_file.assert_not_called()
+		new_file.assert_not_called()
 		write_file.assert_not_called()
 		document = self.row(name, "business_document")
 		self.assertEqual(frappe.db.get_value("Business Document", document, "file"), self.row(name, "file"))
@@ -255,9 +256,9 @@ class TestMailStoreJob(IntegrationTestCase):
 	def test_store_job_is_idempotent(self):
 		name = self.pending()
 		originals.store(name)
-		with patch("docarchive.mail.originals.store_file") as store_file:
+		with patch("docarchive.mail.originals.new_file") as new_file:
 			originals.store(name)
-		store_file.assert_not_called()
+		new_file.assert_not_called()
 		self.assertEqual(mail.capture(self.comm, eml(), "t"), name)
 		self.assertEqual(frappe.db.count("File", {"attached_to_name": name}), 1)
 
@@ -393,9 +394,9 @@ class TestMailStoreJob(IntegrationTestCase):
 
 	def test_paused_writes_skip_the_file_storage(self):
 		frappe.cache.set_value(originals.PAUSE_KEY, 1, expires_in_sec=300)
-		with patch("docarchive.mail.originals.store_file") as store_file:
+		with patch("docarchive.mail.originals.new_file") as new_file:
 			name = self.pending()
-		store_file.assert_not_called()
+		new_file.assert_not_called()
 		self.assertEqual(base64.b64decode(self.row(name, "raw_fallback")), EML)
 
 	def test_job_keeps_the_bytes_while_storage_is_down(self):
@@ -425,7 +426,48 @@ class TestMailStoreJob(IntegrationTestCase):
 		self.assertEqual(len(frappe.local.message_log), messages)
 		self.assertFalse(frappe.cache.get_value(originals.PAUSE_KEY))
 
-	def test_failing_failure_record_does_not_raise(self):
+	def test_pause_set_by_another_process_is_seen(self):
+		self.assertFalse(originals._paused())
+		frappe.cache.set(frappe.cache.make_key(originals.PAUSE_KEY), pickle.dumps(1))
+		self.assertTrue(originals._paused())
+
+	def test_expired_pause_ends_in_the_same_process(self):
+		originals._pause()
+		self.assertTrue(originals._paused())
+		frappe.cache.delete(frappe.cache.make_key(originals.PAUSE_KEY))
+		self.assertFalse(originals._paused())
+
+	def test_large_mail_is_written_while_paused(self):
+		originals._pause()
+		with patch.object(originals, "FALLBACK_LIMIT", 10):
+			name = self.pending()
+		self.assertEqual(self.row(name, "status", "raw_fallback"), ("Pending", None))
+		self.assertEqual(content.read_bytes(self.row(name, "file")), EML)
+
+	def test_failing_fallback_write_keeps_a_failed_original(self):
+		def partial(original, raw):
+			frappe.db.set_value("Mail Original", original.name, "origin", "partial")
+			raise Exception("packet too large")
+
+		with (
+			self.failing_write(),
+			patch.object(originals, "_keep", side_effect=partial),
+			patch("frappe.log_error"),
+		):
+			name = self.pending()
+		status, origin, error = self.row(name, "status", "origin", "error")
+		self.assertEqual((status, origin), ("Failed", "t"))
+		self.assertIn("packet too large", error)
+
+	def test_form_load_leaves_out_the_raw_fallback(self):
+		from frappe.desk.form.load import getdoc
+
+		with self.failing_write(), patch("frappe.log_error"):
+			name = self.pending()
+		getdoc("Mail Original", name)
+		self.assertIsNone(frappe.response.docs[0].get("raw_fallback"))
+		self.assertTrue(self.row(name, "raw_fallback"))
+
 		with (
 			patch.object(originals, "FALLBACK_LIMIT", 10),
 			self.failing_write(),
@@ -620,6 +662,25 @@ class TestMailCaptureOnS3(IntegrationTestCase):
 		originals.store(name)
 		self.assertEqual(self.row(name, "status", "raw_fallback"), ("Stored", None))
 		self.assertEqual(self.s3.content(self.key(name)), EML)
+
+	def test_failing_link_after_upload_removes_the_object(self):
+		with patch.object(originals, "_link", side_effect=Exception("late")), patch("frappe.log_error"):
+			name = mail.capture(self.comm, eml(), "t")
+		self.assertEqual(self.s3.keys(), [])
+		self.assertTrue(self.row(name, "raw_fallback"))
+
+	def test_failing_store_after_upload_removes_the_object(self):
+		frappe.cache.set_value(originals.PAUSE_KEY, 1, expires_in_sec=300)
+		name = mail.capture(self.comm, eml(), "t")
+		resume_mail_writes(self)
+		with (
+			patch.object(originals, "_drop_replaced", side_effect=Exception("late")),
+			patch("frappe.log_error"),
+		):
+			originals.store(name)
+		self.assertEqual(self.s3.keys(), [])
+		self.assertEqual(self.row(name, "status", "attempts"), ("Pending", 1))
+		self.assertTrue(self.row(name, "raw_fallback"))
 
 	def test_failure_after_upload_removes_the_object(self):
 		with (

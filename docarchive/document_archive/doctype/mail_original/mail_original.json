@@ -104,7 +104,8 @@
    "fieldtype": "Long Text",
    "label": "Raw Fallback",
    "read_only": 1,
-   "hidden": 1
+   "hidden": 1,
+   "permlevel": 1
   },
   {
    "fieldname": "sha256",

@@ -83,7 +83,7 @@ class TestMailHooks(IntegrationTestCase):
 		self.assertFalse(frappe.db.exists("Mail Original", {"communication": comm.name}))
 
 	def test_receive_succeeds_when_storing_fails(self):
-		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
+		with patch("docarchive.mail.originals.new_file", side_effect=Exception("boom")):
 			comm = self.receive().process()
 		self.assertEqual(comm.name, self.received())
 		self.assertEqual(self.pending(comm), ("Pending", None))
@@ -156,7 +156,7 @@ class TestMailHooks(IntegrationTestCase):
 
 	def test_send_succeeds_when_capture_fails(self):
 		comm = make_communication(self.account.name, "Sent")
-		with patch("docarchive.mail.originals.store_file", side_effect=Exception("boom")):
+		with patch("docarchive.mail.originals.new_file", side_effect=Exception("boom")):
 			self.send(comm)
 		self.assertTrue(frappe.flags.sent_mail)
 		self.assertEqual(self.pending(comm), ("Pending", None))
@@ -355,7 +355,7 @@ class TestMailEndToEnd(IntegrationTestCase):
 
 	def test_failing_file_write_does_not_stop_receiving(self):
 		with (
-			patch("docarchive.mail.originals.store_file", side_effect=OSError("S3 down")),
+			patch("docarchive.mail.originals.new_file", side_effect=OSError("S3 down")),
 			patch("frappe.log_error") as log_error,
 		):
 			comm = self.receive()

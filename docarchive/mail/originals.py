@@ -17,6 +17,7 @@ AUTO_SAVEPOINT = "docarchive_mail_auto_archive"
 SEND_SAVEPOINT = "docarchive_mail_capture_sent"
 STORE_SAVEPOINT = "docarchive_mail_store"
 WRITE_SAVEPOINT = "docarchive_mail_write"
+FALLBACK_SAVEPOINT = "docarchive_mail_fallback"
 TRASH_SAVEPOINT = "docarchive_mail_release"
 MAX_LENGTH = 500
 SENT_FOLDER = "Sent Folder"
@@ -274,6 +275,10 @@ def fail(savepoint=None):
 
 
 def store_file(original, raw: bytes, name_hint: str | None = None) -> str:
+	return new_file(original, raw, name_hint).file_url
+
+
+def new_file(original, raw: bytes, name_hint: str | None = None):
 	file_doc = frappe.get_doc(
 		{
 			"doctype": "File",
@@ -291,7 +296,7 @@ def store_file(original, raw: bytes, name_hint: str | None = None) -> str:
 	except Exception:
 		_discard(file_doc)
 		raise
-	return file_doc.file_url
+	return file_doc
 
 
 def _discard(file_doc):
@@ -323,11 +328,16 @@ def _pend(communication, origin, raw=None, email_queue=None):
 
 
 def _write(original, raw) -> str | None:
-	if not _paused():
+	if not _paused() or len(raw) > FALLBACK_LIMIT:
 		messages = len(frappe.local.message_log)
 		try:
 			frappe.db.savepoint(WRITE_SAVEPOINT)
-			original.db_set("file", store_file(original, raw, _message_id(original)), update_modified=False)
+			file_doc = new_file(original, raw, _message_id(original))
+			try:
+				_link(original, file_doc.file_url)
+			except Exception:
+				_discard(file_doc)
+				raise
 			return "file"
 		except MaxFileSizeReachedError as error:
 			fail(WRITE_SAVEPOINT)
@@ -342,8 +352,21 @@ def _write(original, raw) -> str | None:
 			original,
 			"The file storage could not be written and the mail is larger than 10 MB, so it was not kept.",
 		)
+	try:
+		frappe.db.savepoint(FALLBACK_SAVEPOINT)
+		_keep(original, raw)
+		return "fallback"
+	except Exception as error:
+		fail(FALLBACK_SAVEPOINT)
+		return _failed(original, f"The original could not be kept in the database either: {error}")
+
+
+def _link(original, file_url):
+	original.db_set("file", file_url, update_modified=False)
+
+
+def _keep(original, raw):
 	original.db_set("raw_fallback", base64.b64encode(raw).decode(), update_modified=False)
-	return "fallback"
 
 
 def _failed(original, message):
@@ -365,7 +388,7 @@ def _failed(original, message):
 
 def _paused():
 	try:
-		return bool(frappe.cache.get_value(PAUSE_KEY))
+		return bool(frappe.cache.get_value(PAUSE_KEY, use_local_cache=False))
 	except Exception:
 		return False
 
@@ -396,10 +419,17 @@ def _complete(original, raw):
 			"raw_fallback": None,
 		}
 	)
+	file_doc = None
 	if not original.file:
-		original.file = store_file(original, raw)
-	original.save(ignore_permissions=True)
-	_drop_replaced(original)
+		file_doc = new_file(original, raw)
+		original.file = file_doc.file_url
+	try:
+		original.save(ignore_permissions=True)
+		_drop_replaced(original)
+	except Exception:
+		if file_doc:
+			_discard(file_doc)
+		raise
 
 
 def _drop_replaced(original):
