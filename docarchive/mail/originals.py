@@ -1,4 +1,5 @@
 import base64
+import time
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 
@@ -30,6 +31,7 @@ REBUILD_WINDOW = timedelta(hours=1)
 FALLBACK_LIMIT = 10 * 1024 * 1024
 PAUSE_KEY = "docarchive:mail-file-writes-paused"
 PAUSE_SECONDS = 300
+WRITE_BUDGET_SECONDS = 10
 
 
 class Unavailable(Exception):
@@ -332,12 +334,15 @@ def _write(original, raw) -> str | None:
 		messages = len(frappe.local.message_log)
 		try:
 			frappe.db.savepoint(WRITE_SAVEPOINT)
+			started = time.monotonic()
 			file_doc = new_file(original, raw, _message_id(original))
 			try:
 				_link(original, file_doc.file_url)
 			except Exception:
 				_discard(file_doc)
 				raise
+			if time.monotonic() - started > WRITE_BUDGET_SECONDS:
+				_pause()
 			return "file"
 		except MaxFileSizeReachedError as error:
 			fail(WRITE_SAVEPOINT)

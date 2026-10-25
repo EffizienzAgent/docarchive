@@ -2,6 +2,7 @@ import base64
 import hashlib
 import os
 import pickle
+import time
 from unittest.mock import patch
 
 import frappe
@@ -391,6 +392,31 @@ class TestMailStoreJob(IntegrationTestCase):
 		self.assertEqual(self.row(name, "status", "raw_fallback"), ("Stored", None))
 		self.assertEqual(content.read_bytes(self.row(name, "file")), EML)
 		self.assertTrue(self.row(name, "business_document"))
+
+	def slow_write(self, seconds):
+		real = originals.new_file
+
+		def slow(*args, **kwargs):
+			time.sleep(seconds)
+			return real(*args, **kwargs)
+
+		return patch("docarchive.mail.originals.new_file", side_effect=slow)
+
+	def test_slow_write_succeeds_and_pauses_the_file_storage(self):
+		with patch.object(originals, "WRITE_BUDGET_SECONDS", 0.01), self.slow_write(0.05):
+			name = self.pending()
+		self.assertTrue(self.row(name, "file"))
+		self.assertTrue(frappe.cache.get_value(originals.PAUSE_KEY))
+		with patch("docarchive.mail.originals.new_file") as new_file:
+			following = mail.capture(make_communication(self.account), EML, "t")
+		new_file.assert_not_called()
+		self.assertEqual(base64.b64decode(self.row(following, "raw_fallback")), EML)
+
+	def test_fast_write_does_not_pause(self):
+		self.assertEqual(originals.WRITE_BUDGET_SECONDS, 10)
+		with patch.object(originals, "WRITE_BUDGET_SECONDS", 1), self.slow_write(0):
+			self.pending()
+		self.assertFalse(frappe.cache.get_value(originals.PAUSE_KEY))
 
 	def test_paused_writes_skip_the_file_storage(self):
 		frappe.cache.set_value(originals.PAUSE_KEY, 1, expires_in_sec=300)
