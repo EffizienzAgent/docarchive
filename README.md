@@ -171,7 +171,7 @@ A daily job deletes, per account, captured originals older than **Keep Unarchive
 
 ### Threads and gaps
 
-**Show thread** (on the document and as a row action in the counterparty panel) lists the archived mails with the same `thread_key` and own company in time order, with direction, date and sender or recipient. Every Message-ID in a mail's `References` or `In-Reply-To` that is not archived shows up as a gap, in the order of the References chain. A gap is either **Original available** (it can be archived from there), **In Frappe, no original** (e.g. received before capture was on) or **Not in Frappe** (only the Message-ID is known). A gap is information, not an error: the archive makes completeness checkable, it does not claim it.
+**Show thread** (on the document and as a row action in the counterparty panel) lists the archived mails with the same `thread_key` and own company in time order, with direction, date and sender or recipient. Every Message-ID in a mail's `References` or `In-Reply-To` that is not archived shows up as a gap, in the order of the References chain. A gap is either **Archived in another thread** (a readable document of the same own company has this Message-ID, e.g. because its `thread_key` differs; the gap links to it), **Original available** (it can be archived from there), **In Frappe, no original** (e.g. received before capture was on) or **Not in Frappe** (only the Message-ID is known). A gap is information, not an error: the archive makes completeness checkable, it does not claim it.
 
 ### Closing gaps with an `.eml` upload
 

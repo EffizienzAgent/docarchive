@@ -557,6 +557,7 @@ Not in Frappe,Nicht in Frappe
 Only a Business Document can be the source of an upload.,Nur ein Geschäftsdokument kann die Quelle eines Uploads sein.
 Origin: {0},Herkunft: {0}
 Original available,Original vorhanden
+Archived in another thread,In einem anderen Thread archiviert
 Read from the mailbox by mailsync,Von mailsync aus dem Postfach gelesen
 Rebuilt by Frappe after sending,Von Frappe nach dem Versand neu aufgebaut
 Received by Frappe,Von Frappe empfangen

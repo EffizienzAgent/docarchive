@@ -28,6 +28,7 @@ const ORIGINS = () => ({
 });
 
 const GAP_STATES = () => ({
+	archived: __("Archived in another thread"),
 	captured: __("Original available"),
 	no_original: __("In Frappe, no original"),
 	unknown: __("Not in Frappe"),
@@ -146,6 +147,12 @@ docarchive.show_mail = function (name) {
 	});
 };
 
+function gap_state(item) {
+	const label = esc(GAP_STATES()[item.state] || item.state);
+	if (!item.business_document) return label;
+	return `<a href="${esc(frappe.utils.get_form_link(DOCUMENT, item.business_document))}">${label}</a>`;
+}
+
 function thread_row(item) {
 	if (item.kind === "mail") {
 		const direction = item.direction ? __(item.direction) : "";
@@ -168,12 +175,12 @@ function thread_row(item) {
 			: "";
 	return `<tr class="docarchive-gap">
 		<td colspan="2"><span class="indicator-pill orange">${esc(__("Gap"))}</span></td>
-		<td>${esc(GAP_STATES()[item.state] || item.state)}</td>
+		<td>${gap_state(item)}</td>
 		<td class="text-muted">${esc(item.message_id)}</td>
 		<td class="docarchive-actions">
 			${archive}
 			${
-				can_create
+				can_create && item.state !== "archived"
 					? `<button class="btn btn-xs btn-default" data-upload-gap="${esc(item.message_id)}">${esc(__("Upload .eml"))}</button>`
 					: ""
 			}

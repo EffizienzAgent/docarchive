@@ -34,7 +34,7 @@ def thread(name: str) -> list[dict]:
 		for message_id in _referenced(mail):
 			if message_id not in seen:
 				seen.add(message_id)
-				items.append(_gap(message_id))
+				items.append(_gap(message_id, own_company))
 		items.append(_mail(mail))
 	return items
 
@@ -56,9 +56,24 @@ def _mail(mail):
 	}
 
 
-def _gap(message_id):
+def _gap(message_id, own_company):
+	gap = {"kind": "gap", "message_id": message_id, "communication": None, "business_document": None}
+	document = _archived(message_id, own_company)
+	if document:
+		return {**gap, "state": "archived", "business_document": document}
 	state, communication = _gap_state(message_id)
-	return {"kind": "gap", "message_id": message_id, "state": state, "communication": communication}
+	return {**gap, "state": state, "communication": communication}
+
+
+def _archived(message_id, own_company):
+	names = frappe.get_list(
+		DOCUMENT,
+		filters={"mail_message_id": message_id, "own_company": own_company},
+		pluck="name",
+		order_by="creation asc",
+		limit_page_length=1,
+	)
+	return names[0] if names else None
 
 
 def _gap_state(message_id):
