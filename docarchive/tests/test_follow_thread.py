@@ -5,6 +5,7 @@ import frappe
 
 from docarchive import audit, mail
 from docarchive.mail import archiving, cleanup
+from docarchive.mail.archiving import schedule_follow_up as real_schedule_follow_up
 from docarchive.tests.factories import eml, make_own_company, make_settings
 from docarchive.tests.test_mail_archiving import MailArchivingTestCase
 from docarchive.tests.test_mail_viewer import message_id, references
@@ -177,3 +178,32 @@ class TestFollowThreadRules(FollowThreadCase):
 		frappe.db.set_value(DOCUMENT, self.document(a), "correspondence_at", None)
 		_, b = self.mail("2026-03-11 09:00:00", **{"In-Reply-To": f"<{a_id}>"})
 		self.assertIsNone(self.document(b))
+
+
+class TestFollowUpJob(FollowThreadCase):
+	def test_follow_up_runs_in_its_own_job_after_commit(self):
+		with patch("frappe.enqueue") as enqueue:
+			real_schedule_follow_up(["DOC-1", "DOC-1"])
+		enqueue.assert_called_once_with(
+			archiving.FOLLOW_JOB,
+			queue="default",
+			job_id="docarchive-follow-thread-DOC-1",
+			deduplicate=True,
+			enqueue_after_commit=True,
+			document="DOC-1",
+		)
+
+	def test_follow_up_errors_never_reach_the_user(self):
+		messages = len(frappe.local.message_log)
+
+		def broken(document):
+			frappe.msgprint("noise")
+			raise frappe.ValidationError("boom")
+
+		with (
+			patch("docarchive.mail.thread.later_originals", side_effect=broken),
+			patch("frappe.log_error") as log_error,
+		):
+			self.assertEqual(archiving.follow_up(["DOC-1"]), 0)
+		log_error.assert_called_once()
+		self.assertEqual(len(frappe.local.message_log), messages)

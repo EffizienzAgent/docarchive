@@ -12,6 +12,7 @@ ORIGINAL = "Mail Original"
 COMMUNICATION = "Communication"
 MANUAL, AUTOMATIC, THREAD = "Manual", "Automatic", "Thread"
 FOLLOW_SAVEPOINT = "docarchive_mail_follow"
+FOLLOW_JOB = "docarchive.mail.archiving.follow_up_job"
 DIRECTIONS = ("Incoming", "Outgoing")
 SAVEPOINT = "docarchive_mail_archive"
 SEND_NOTE = "Copies to other recipients differ only in tracking and unsubscribe links."
@@ -79,20 +80,39 @@ def _archive_unattended(original_name, reason, communication, raw=None):
 	return name
 
 
+def schedule_follow_up(documents) -> None:
+	for document in dict.fromkeys(documents):
+		frappe.enqueue(
+			FOLLOW_JOB,
+			queue="default",
+			job_id=f"docarchive-follow-thread-{document}",
+			deduplicate=True,
+			enqueue_after_commit=True,
+			document=document,
+		)
+
+
+def follow_up_job(document: str) -> None:
+	follow_up([document])
+	frappe.db.commit()
+
+
 def follow_up(documents) -> int:
 	done = 0
 	for document in dict.fromkeys(documents):
-		for original, _row in threads.later_originals(document):
-			if done >= threads.MAX_MAILS:
-				return done
-			try:
-				frappe.db.savepoint(FOLLOW_SAVEPOINT)
+		messages = len(frappe.local.message_log)
+		try:
+			frappe.db.savepoint(FOLLOW_SAVEPOINT)
+			for original, _row in threads.later_originals(document):
+				if done >= threads.MAX_MAILS:
+					return done
 				communication = frappe.db.get_value(ORIGINAL, original, "communication")
 				_archive_unattended(original, THREAD, communication)
 				done += 1
-			except Exception:
-				frappe.db.rollback(save_point=FOLLOW_SAVEPOINT)
-				frappe.log_error(title="docarchive follow thread")
+		except Exception:
+			frappe.db.rollback(save_point=FOLLOW_SAVEPOINT)
+			del frappe.local.message_log[messages:]
+			frappe.log_error(title="docarchive follow thread")
 	return done
 
 
@@ -279,7 +299,7 @@ def archive_each(items, refused=None) -> dict:
 			result["refused"][key] = str(error)
 	audit_log(audit.MAIL_ARCHIVED, documents, _counted({"how": "manual"}, documents, result["refused"]))
 	events.changed("archived", [o for o, _c in archived], [c for _o, c in archived])
-	follow_up(name for _doctype, name, outcome in documents if outcome != "skipped")
+	schedule_follow_up([name for _doctype, name, outcome in documents if outcome != "skipped"])
 	return result
 
 

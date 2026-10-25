@@ -253,8 +253,9 @@ def resume_mail_writes(case):
 
 
 def store_mail_inline(case):
-	from docarchive.mail import originals, thread
+	from docarchive.mail import archiving, originals, thread
 
 	resume_mail_writes(case)
 	case.enterContext(patch("docarchive.mail.originals.schedule", side_effect=originals.store))
 	case.enterContext(patch("docarchive.mail.thread.schedule_join", side_effect=thread.join))
+	case.enterContext(patch("docarchive.mail.archiving.schedule_follow_up", side_effect=archiving.follow_up))
