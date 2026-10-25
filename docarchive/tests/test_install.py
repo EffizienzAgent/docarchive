@@ -6,7 +6,7 @@ from frappe.tests import IntegrationTestCase
 from docarchive.patches import add_mail_types
 from docarchive.permissions import MANAGER_ROLE
 from docarchive.setup import apply_defaults
-from docarchive.tests.factories import make_document_type
+from docarchive.tests.factories import make_business_document, make_document_type
 
 TYPE = "Business Document Type"
 
@@ -51,6 +51,22 @@ class TestInstall(IntegrationTestCase):
 			frappe.db.get_value(TYPE, "Correspondence", ["is_correspondence", "default_retention_years"]),
 			(1, 7),
 		)
+
+	def test_foreign_type_with_documents_is_left_alone(self):
+		frappe.delete_doc(TYPE, "Correspondence", force=True)
+		make_document_type(type_name="Correspondence", slug="letters", is_correspondence=0)
+		make_business_document(document_type="Correspondence")
+		errors = frappe.db.count("Error Log")
+		add_mail_types.execute()
+		self.assertEqual(frappe.db.get_value(TYPE, "Correspondence", "is_correspondence"), 0)
+		self.assertEqual(frappe.db.count("Error Log"), errors + 1)
+
+	def test_foreign_type_without_documents_gets_flag(self):
+		frappe.delete_doc(TYPE, "Correspondence", force=True)
+		frappe.db.delete("Business Document", {"document_type": "Correspondence"})
+		make_document_type(type_name="Correspondence", slug="letters", is_correspondence=0)
+		add_mail_types.execute()
+		self.assertEqual(frappe.db.get_value(TYPE, "Correspondence", "is_correspondence"), 1)
 
 	def test_slug_taken_by_other_type_is_logged(self):
 		frappe.delete_doc(TYPE, "Correspondence", force=True)

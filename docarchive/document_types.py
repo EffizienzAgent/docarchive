@@ -74,7 +74,7 @@ def ensure_mail_types():
 def _ensure(fields):
 	name, slug = fields["type_name"], fields["slug"]
 	if frappe.db.exists(TYPE, name):
-		frappe.db.set_value(TYPE, name, "is_correspondence", 1)
+		_flag(name, slug)
 		return
 	other = frappe.db.get_value(TYPE, {"slug": slug})
 	if other:
@@ -84,6 +84,18 @@ def _ensure(fields):
 		)
 		return
 	_create(fields)
+
+
+def _flag(name, slug):
+	if frappe.db.get_value(TYPE, name, "slug") == slug or not frappe.db.exists(
+		"Business Document", {"document_type": name}
+	):
+		frappe.db.set_value(TYPE, name, "is_correspondence", 1)
+		return
+	frappe.log_error(
+		title=LOG_TITLE,
+		message=f"Business Document Type {name} has documents and the slug of another type, so it was not marked as correspondence.",
+	)
 
 
 def _create(fields):
