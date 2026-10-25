@@ -26,11 +26,20 @@ const years_field = (show_for, value) => ({
 	mandatory_depends_on: `eval:doc.how=="${show_for}"`,
 });
 
-const date_fields = [
+const MAX_YEARS = 100;
+
+function latest_date() {
+	const { add_days, add_months, get_today, str_to_obj } = frappe.datetime;
+	return str_to_obj(add_days(add_months(get_today(), MAX_YEARS * 12), -1));
+}
+
+const date_fields = () => [
 	{
 		fieldname: "until",
 		fieldtype: "Date",
-		label: __("New date"),
+		label: __("Until and including"),
+		min_date: new Date(),
+		max_date: latest_date(),
 		depends_on: 'eval:doc.how=="to_date"',
 		mandatory_depends_on: 'eval:doc.how=="to_date"',
 	},
@@ -66,7 +75,7 @@ docarchive.extend_retention = function (name, on_done) {
 					"add_years",
 				),
 				years_field("add_years", 2),
-				...date_fields,
+				...date_fields(),
 			],
 			primary_action_label: __("Extend"),
 			primary_action(values) {
@@ -141,7 +150,7 @@ docarchive.extend_many = function (scope, on_done) {
 				"at_least",
 			),
 			years_field("at_least", 10),
-			...date_fields,
+			...date_fields(),
 		],
 		primary_action_label: __("Preview"),
 		primary_action(values) {

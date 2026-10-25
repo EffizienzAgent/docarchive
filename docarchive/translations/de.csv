@@ -252,7 +252,6 @@ Failed Copies,Fehlgeschlagene Kopien
 Kept until: any year,Aufbewahrt bis: alle Jahre
 Kept until {0},Aufbewahrt bis {0}
 New,Neu
-New date,Neues Datum
 Only archived documents can be extended.,Nur archivierte Dokumente können verlängert werden.
 Only document managers can extend the retention.,Nur die Dokumentenverwaltung kann die Aufbewahrung verlängern.
 Only failed copies,Nur fehlgeschlagene Kopien
@@ -278,3 +277,7 @@ Retention ends in 90 days,Fristen enden in 90 Tagen
 Deleted,Gelöscht
 Show deleted,Gelöschte anzeigen
 Someone else changed this document in the meantime. It was reloaded, please check it again.,"Jemand anderes hat dieses Dokument inzwischen geändert. Es wurde neu geladen, bitte noch einmal prüfen."
+Until and including,Bis einschließlich
+The new date can be at most {0} years from today.,Das neue Datum darf höchstens {0} Jahre in der Zukunft liegen.
+Deleted documents cannot be extended.,Gelöschte Dokumente können nicht verlängert werden.
+These storage targets hold a copy but are not enabled: {0},"Diese Speicherziele haben eine Kopie, sind aber nicht aktiv: {0}"

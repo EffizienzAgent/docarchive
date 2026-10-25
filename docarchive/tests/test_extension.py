@@ -16,7 +16,7 @@ INITIAL = "2035-01-02 00:00:00"
 class TestManualExtension(ArchiveRunTestCase):
 	def setUp(self):
 		super().setUp()
-		self.enterContext(patch("frappe.enqueue", side_effect=run_now))
+		self.enqueue = self.enterContext(patch("frappe.enqueue", side_effect=run_now))
 		self.enterContext(patch("frappe.publish_realtime"))
 		self.addCleanup(frappe.set_user, "Administrator")
 
@@ -63,13 +63,13 @@ class TestManualExtension(ArchiveRunTestCase):
 	def test_to_date(self):
 		doc = self.archived()
 		extension.extend(doc.name, extension.TO_DATE, until="2040-06-30")
-		self.assertEqual(self.copies(doc), ["2040-06-30 00:00:00"] * 2)
+		self.assertEqual(self.copies(doc), ["2040-07-01 00:00:00"] * 2)
 
 	def test_never_shortens_through_any_entry_point(self):
 		doc = self.archived()
 		attempts = {
 			"earlier date": dict(how=extension.TO_DATE, until="2034-12-31"),
-			"same date": dict(how=extension.TO_DATE, until="2035-01-02"),
+			"same date": dict(how=extension.TO_DATE, until="2035-01-01"),
 			"fewer years": dict(how=extension.AT_LEAST, years=5),
 			"zero years": dict(how=extension.ADD_YEARS, years=0),
 			"negative years": dict(how=extension.ADD_YEARS, years=-3),
@@ -91,7 +91,7 @@ class TestManualExtension(ArchiveRunTestCase):
 
 	def test_bulk_preview_and_job(self):
 		short, long = self.archived(), self.archived()
-		extension.extend(long.name, extension.TO_DATE, until="2045-01-02")
+		extension.extend(long.name, extension.TO_DATE, until="2045-01-01")
 		preview = extension.preview(
 			how=extension.AT_LEAST, years=10, counterparty_type="Contact", counterparty=self.party.name
 		)
@@ -167,3 +167,67 @@ class TestManualExtension(ArchiveRunTestCase):
 		frappe.db.set_value(DOCUMENT, doc.name, "retain_until", soon, update_modified=False)
 		self.assertEqual(extension.count_ending(90), 1)
 		self.assertEqual(extension.ending_card(), {"value": 1, "fieldtype": "Int"})
+
+	def test_dates_too_far_ahead_are_refused(self):
+		doc = self.archived()
+		for args in (
+			dict(how=extension.TO_DATE, until="2200-01-01"),
+			dict(how=extension.ADD_YEARS, years=99),
+		):
+			with self.subTest(args), self.assertRaisesRegex(frappe.ValidationError, "100"):
+				extension.extend(doc.name, **args)
+		self.assertEqual(self.retention_calls(), [])
+
+	def test_missing_target_refuses_the_manual_extension(self):
+		doc = self.archived()
+		self.configure(["primary"])
+		with self.assertRaisesRegex(frappe.ValidationError, "secondary"):
+			extension.extend(doc.name, extension.ADD_YEARS, years=1)
+		self.assertEqual(self.retention_calls(), [])
+		self.assertEqual(self.copies(doc), [INITIAL] * 2)
+
+	def test_document_date_is_never_lowered(self):
+		doc = self.archived()
+		frappe.db.set_value(DOCUMENT, doc.name, "retain_until", "2040-01-02 00:00:00", update_modified=False)
+		doc.reload()
+		until = datetime(2037, 1, 2, tzinfo=UTC)
+		run.prepare_extension(doc, until)
+		self.assertTrue(run.extend_document(doc, until, {t.name: t for t in store.targets()}))
+		doc.reload()
+		self.assertEqual(str(doc.retain_until), "2040-01-02 00:00:00")
+
+	def test_bulk_job_id_depends_on_the_options(self):
+		doc = self.archived()
+		self.enqueue.side_effect = None
+		extension.extend_many(names=[doc.name], how=extension.AT_LEAST, years=10)
+		extension.extend_many(names=[doc.name], how=extension.AT_LEAST, years=12)
+		first, second = (call.kwargs["job_id"] for call in self.enqueue.call_args_list)
+		self.assertNotEqual(first, second)
+
+	def test_state_is_checked_again_under_the_lock(self):
+		doc = self.archived()
+		frappe.db.set_value(
+			DOCUMENT, doc.name, "extension_until", "2036-01-02 00:00:00", update_modified=False
+		)
+		with self.assertRaisesRegex(frappe.ValidationError, "still running"):
+			extension.apply(doc, datetime(2037, 1, 2, tzinfo=UTC))
+		self.assertEqual(self.retention_calls(), [])
+
+	def test_deleted_documents_are_never_extended(self):
+		for case in ("copy", "document"):
+			with self.subTest(case):
+				doc = self.archived()
+				if case == "copy":
+					frappe.db.set_value("Archive Copy", doc.archive_copies[0].name, "status", "Deleted")
+				else:
+					frappe.db.set_value(
+						DOCUMENT, doc.name, "archive_status", "Deleted", update_modified=False
+					)
+				with self.assertRaises(frappe.ValidationError):
+					extension.extend(doc.name, extension.ADD_YEARS, years=1)
+				self.assertFalse(extension.options(doc.name)["allowed"])
+				frappe.db.set_value(
+					DOCUMENT, doc.name, "extension_until", "2036-01-02 00:00:00", update_modified=False
+				)
+		run.nightly()
+		self.assertEqual(self.retention_calls(), [])

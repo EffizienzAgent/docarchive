@@ -1,5 +1,5 @@
 import hashlib
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime, time, timedelta
 
 import frappe
 from frappe import _
@@ -56,17 +56,35 @@ def add_years(value, years):
 		return value.replace(year=value.year + years, day=28)
 
 
+def latest_allowed() -> datetime:
+	return add_years(datetime.now(UTC), MAX_YEARS)
+
+
 def new_until(doc, how, years=None, until=None) -> datetime:
 	if how == ADD_YEARS:
-		return add_years(current_until(doc), years_value(years))
-	if how == AT_LEAST:
-		return max(current_until(doc), retention.retain_until(doc, years_value(years)))
-	if how == TO_DATE and until:
-		return datetime.combine(getdate(until), time(), UTC)
-	frappe.throw(_("Choose how to extend the retention."), ExtensionError)
+		result = add_years(current_until(doc), years_value(years))
+	elif how == AT_LEAST:
+		result = max(current_until(doc), retention.retain_until(doc, years_value(years)))
+	elif how == TO_DATE and until:
+		result = datetime.combine(getdate(until) + timedelta(days=1), time(), UTC)
+	else:
+		frappe.throw(_("Choose how to extend the retention."), ExtensionError)
+	if result > latest_allowed():
+		frappe.throw(_("The new date can be at most {0} years from today.").format(MAX_YEARS), ExtensionError)
+	return result
+
+
+def is_deleted(doc) -> bool:
+	return doc.archive_status == run.DELETED or any(copy.status == run.DELETED for copy in doc.archive_copies)
+
+
+def missing_targets(doc, by_name) -> list[str]:
+	return sorted({copy.target_name for copy in archived_copies(doc) if copy.target_name not in by_name})
 
 
 def refusal(doc, until) -> str | None:
+	if is_deleted(doc):
+		return _("Deleted documents cannot be extended.")
 	if doc.archive_status != run.ARCHIVED or not archived_copies(doc):
 		return _("Only archived documents can be extended.")
 	if doc.extension_until:
@@ -121,15 +139,27 @@ def targets_by_name():
 	return {target.name: target for target in targets}
 
 
-def apply(doc, until, reason=None) -> bool:
+def check_extendable(doc, until, by_name):
 	refused = refusal(doc, until)
 	if refused:
 		frappe.throw(refused, ExtensionError)
+	missing = missing_targets(doc, by_name)
+	if missing:
+		frappe.throw(
+			_("These storage targets hold a copy but are not enabled: {0}").format(", ".join(missing)),
+			ExtensionError,
+		)
+
+
+def apply(doc, until, reason=None) -> bool:
 	by_name = targets_by_name()
+	check_extendable(doc, until, by_name)
 	lock = run.document_lock(doc.name)
 	if not lock.acquire(blocking=False):
 		frappe.throw(_("This document is being archived right now. Please try again later."), ExtensionError)
 	try:
+		doc.reload()
+		check_extendable(doc, until, by_name)
 		note = {
 			"kind": "manual",
 			"extended_by": frappe.session.user,
@@ -145,7 +175,12 @@ def apply(doc, until, reason=None) -> bool:
 def options(name: str) -> dict:
 	doc = frappe.get_doc(DOCUMENT, name)
 	doc.check_permission("read")
-	allowed = is_manager() and doc.has_permission("write") and doc.archive_status == run.ARCHIVED
+	allowed = (
+		is_manager()
+		and doc.has_permission("write")
+		and doc.archive_status == run.ARCHIVED
+		and not is_deleted(doc)
+	)
 	current = current_until(doc)
 	return {
 		"allowed": bool(allowed and archived_copies(doc) and not doc.extension_until),
@@ -191,7 +226,8 @@ def extend_many(
 		check(name)
 	if how != TO_DATE:
 		years_value(years)
-	job_id = "docarchive-extend-" + hashlib.sha256(",".join(sorted(names)).encode()).hexdigest()[:16]
+	key = frappe.as_json({"names": sorted(names), "how": how, "years": years, "until": until})
+	job_id = "docarchive-extend-" + hashlib.sha256(key.encode()).hexdigest()[:16]
 	frappe.enqueue(
 		"docarchive.extension.run_many",
 		queue="long",
