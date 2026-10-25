@@ -357,6 +357,13 @@ function ask_details(party, files, on_saved) {
 						in_list_view: df.hidden ? 0 : 1,
 					})),
 				},
+				{
+					fieldname: "combine",
+					fieldtype: "Check",
+					label: __("One document with attachments"),
+					description: __("The first file is the main file, the others become its attachments."),
+					hidden: file_urls.length < 2,
+				},
 			],
 			primary_action_label: __("Save"),
 			primary_action(values) {
@@ -369,7 +376,7 @@ function ask_details(party, files, on_saved) {
 				frappe
 					.call({
 						method: `${METHOD}.create_documents`,
-						args: { ...party, documents },
+						args: { ...party, documents, combine: values.combine },
 						freeze: true,
 					})
 					.then(() => {

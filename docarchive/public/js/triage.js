@@ -153,12 +153,7 @@ class Triage {
 		$frame.on("load", () =>
 			setTimeout(() => document.activeElement === $frame[0] && this.focus_form(), 300),
 		);
-		const kept = item.retain_until
-			? `<p class="text-muted">${esc(__("Retain Until (UTC)"))}: ${esc(docarchive.format_retain_until(String(item.retain_until)))}</p>`
-			: "";
-		dialog.fields_dict.file_info.$wrapper.html(
-			`<p class="docarchive-triage-file">${esc(item.file_name || __("No file"))}</p>${kept}`,
-		);
+		this.render_files(item);
 		this.show_error();
 		this.party_type = item.counterparty_type;
 		this.type = item.document_type;
@@ -170,6 +165,50 @@ class Triage {
 		this.$back.prop("disabled", queue.is_first);
 		this.render_missing(item);
 		this.focus_form();
+	}
+
+	render_files(item) {
+		const kept = item.retain_until
+			? `<p class="text-muted">${esc(__("Retain Until (UTC)"))}: ${esc(docarchive.format_retain_until(String(item.retain_until)))}</p>`
+			: "";
+		const attachments = (item.attachments || [])
+			.map(
+				(row) =>
+					`<li><a href="${esc(docarchive.file_url(row.file))}" target="_blank" rel="noopener">${esc(row.title || row.file_name)}</a> <span class="text-muted">${esc(__(row.role))}</span></li>`,
+			)
+			.join("");
+		const $info = this.dialog.fields_dict.file_info.$wrapper;
+		$info.html(
+			`<p class="docarchive-triage-file">${esc(item.file_name || __("No file"))}</p>${kept}` +
+				(attachments ? `<p class="text-muted">${esc(__("Attachments"))}</p><ul>${attachments}</ul>` : ""),
+		);
+		if (item.can_write && !item.locked && item.file) {
+			$(`<button class="btn btn-default btn-xs">${esc(__("Add attachment"))}</button>`)
+				.appendTo($info)
+				.on("click", () => this.add_attachments(item.name));
+		}
+	}
+
+	add_attachments(name) {
+		const file_urls = [];
+		const uploader = new frappe.ui.FileUploader({
+			doctype: "Business Document",
+			docname: name,
+			allow_multiple: true,
+			disable_file_browser: true,
+			make_attachments_public: false,
+			allow_toggle_private: false,
+			on_success: (file) => file_urls.push(file.file_url),
+		});
+		uploader.dialog.onhide = async () => {
+			if (!file_urls.length) return;
+			const result = await frappe.xcall(`${METHOD}.add_attachments`, { name, file_urls });
+			this.items.set(name, Promise.resolve(result.item));
+			if (name !== this.queue.current) return;
+			this.item = { ...this.item, attachments: result.item.attachments, modified: result.item.modified };
+			this.render_files(this.item);
+			this.show_error(result.error);
+		};
 	}
 
 	focus_form() {

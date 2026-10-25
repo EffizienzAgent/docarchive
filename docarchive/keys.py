@@ -43,6 +43,11 @@ def object_key(doc, type_slug, ext) -> str:
 	)
 
 
+def attachment_key(key, number, label, ext) -> str:
+	base = key.rpartition(".")[0] or key
+	return f"{base}__att-{number}-{slug(label, 'anlage')}.{slug(ext, 'bin')}"
+
+
 def meta_key(key) -> str:
 	return f"{key}.meta.json"
 
