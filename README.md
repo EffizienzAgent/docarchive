@@ -6,11 +6,45 @@ docarchive files business documents such as invoices, contracts and bank stateme
 
 ## Status
 
-This version has the document model, the locks, the storage configuration, the upload API, the nightly archive run to Object Lock storage, legal holds, the deletion of expired documents, and the archiving of e-mails and other correspondence. Archiving is off until a System Manager enables it in Archive Settings. Until then, nothing leaves the site.
+This version has the document model, the locks, the storage configuration, the upload API, the nightly archive run to Object Lock storage, legal holds, the deletion of expired documents, the archiving of e-mails and other correspondence, exports, the audit log and monitoring. Archiving is off until a System Manager enables it in Archive Settings. Until then, nothing leaves the site.
 
 ## No compliance promise
 
 docarchive is a technical tool. It does not make you compliant with GoBD, the GDPR or any other law or standard, and it gives no legal or tax advice. Retention periods, procedures and documentation are your responsibility. Check them with your tax advisor or auditor.
+
+## Features
+
+**Archiving and WORM**
+- [Object Lock per document](#object-lock-writes): every file is written once, with its own mode (GOVERNANCE or COMPLIANCE) and retain-until date, to one or more [storage targets](#storage-targets).
+- [Checksums](#how-it-works): SHA-256 at upload, checked again when archiving, after each write and on export.
+- [Retention](#retention) per document type and own company, optionally [from the contract end](#contract-end-and-retention-extension).
+- [Retention extension](#manual-extension), automatic for contracts and by hand, never shorter.
+- [Nightly archive run](#archive-run) and [Archive now](#archive-now) with retain-until date and lock mode shown before confirming.
+
+**Legal hold and deletion**
+- [Legal hold](#legal-hold) at archiving or later, released only by Archive Admins.
+- [Deletion of expired documents](#deleting-expired-documents) with a deletion log, and [early deletion](#early-deletion-governance-only) for GOVERNANCE copies.
+
+**Documents**
+- [Attachments](#how-it-works): annexes, e-invoice XML and proofs of service, archived and locked with the main file.
+- [E-invoices](#e-invoices): XRechnung and ZUGFeRD data read into the document.
+- [Counterparty panel](#counterparty-panel), [triage](#triage) of documents with missing fields, and an [upload API](#upload-api).
+
+**Correspondence**
+- [E-mail capture](#account-settings-and-modes) of the original `.eml` per account, off, manual or automatic, incoming and outgoing (rebuilt by Frappe or from the Sent folder via mailsync).
+- [Archiving and discarding](#archiving-and-discarding) mails from the Communication, with counterparty from its links; letters and faxes as uploads.
+- [Viewer](#viewer) for archived mails, [threads and gaps](#threads-and-gaps), and [closing gaps with an `.eml` upload](#closing-gaps-with-an-eml-upload).
+
+**Export**
+- [Export](#export) as ZIP packages with manifest, checksums and an offline viewer.
+
+**Audit and monitoring**
+- [Audit log](#audit-log) of archive events, each entry stored under Object Lock and compared with the database every night.
+- [Monitoring and completeness](#monitoring-and-completeness): bell notifications for failed, overdue and incomplete archiving, and a completeness report.
+
+**Integration**
+- [Roles and permissions](#roles): Document Manager, Archive Admin, Document Integration, and host roles.
+- [Host app hooks](#host-app-hooks) for assignment, counterparties, file access and e-invoice extractors, and [commands](#commands) for runs and checks.
 
 ## How it works
 
