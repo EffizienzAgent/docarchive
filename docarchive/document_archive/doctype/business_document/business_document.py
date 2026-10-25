@@ -231,7 +231,7 @@ class BusinessDocument(Document):
 
 	def restore_thread_root(self, before):
 		if before:
-			self.thread_root = frappe.db.get_value(self.doctype, self.name, "thread_root", for_update=True)
+			self.thread_root = before.thread_root
 		elif not self.flags.archive_write:
 			self.thread_root = None
 

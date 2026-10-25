@@ -3,6 +3,7 @@ from unittest.mock import patch
 import frappe
 
 from docarchive.mail import archiving, thread
+from docarchive.mail.thread import schedule_join as real_schedule_join
 from docarchive.patches import join_mail_threads
 from docarchive.tests.test_mail_archiving import MailArchivingTestCase
 from docarchive.tests.test_mail_viewer import message_id, mime, references
@@ -113,16 +114,36 @@ class TestThreadRoots(MailArchivingTestCase):
 		self.assertEqual(len(self.roots(*docs)), 6)
 		self.assertIn(frappe.db.get_value(DOCUMENT, last, "thread_root"), self.roots(*docs))
 
-	def test_join_retries_a_deadlock_and_never_fails_archiving(self):
-		with patch.object(thread, "join", side_effect=[frappe.QueryDeadlockError, "root"]) as join:
-			archiving.archive(self.capture())
-		self.assertEqual(join.call_count, 2)
+	def test_join_runs_in_its_own_job_after_commit(self):
+		with patch("frappe.enqueue") as enqueue:
+			real_schedule_join("DOC-1")
+		enqueue.assert_called_once_with(
+			thread.JOIN_JOB,
+			queue="default",
+			job_id="docarchive-thread-join-DOC-1",
+			deduplicate=True,
+			enqueue_after_commit=True,
+			name="DOC-1",
+		)
+
+	def test_join_job_retries_deadlocks_and_logs_errors(self):
+		with (
+			patch.object(thread, "join", side_effect=[frappe.QueryDeadlockError, "root"]) as join,
+			patch("frappe.db.commit") as commit,
+			patch("frappe.db.rollback") as rollback,
+			patch("time.sleep"),
+		):
+			thread.join_job("DOC-1")
+		self.assertEqual((join.call_count, commit.call_count, rollback.call_count), (2, 1, 1))
 		with (
 			patch.object(thread, "join", side_effect=RuntimeError("boom")),
+			patch("frappe.db.commit") as commit,
+			patch("frappe.db.rollback"),
 			patch("frappe.log_error") as log_error,
 		):
-			self.assertTrue(archiving.archive(self.capture()))
+			thread.join_job("DOC-1")
 		log_error.assert_called_once()
+		commit.assert_not_called()
 
 	def test_other_company_is_not_joined(self):
 		from docarchive.tests.factories import make_own_company

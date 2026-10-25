@@ -1,8 +1,10 @@
+import time
+
 import frappe
 from frappe.utils import cint, get_datetime
 
 from docarchive import settings
-from docarchive.mail import access
+from docarchive.mail import access, accounts
 
 DOCUMENT = "Business Document"
 ORIGINAL = "Mail Original"
@@ -23,7 +25,8 @@ FIELDS = [
 MAX_MAILS = 200
 MAX_ROUNDS = 10
 MAX_ROOTS = 5
-SAVEPOINT = "docarchive_thread_join"
+JOIN_JOB = "docarchive.mail.thread.join_job"
+JOIN_ATTEMPTS = 3
 
 
 @frappe.whitelist()
@@ -80,20 +83,33 @@ def _collect(start):
 	return list(found.values())[:MAX_MAILS]
 
 
-def join_safely(name: str) -> str | None:
-	for attempt in range(2):
+def schedule_join(name: str) -> None:
+	frappe.enqueue(
+		JOIN_JOB,
+		queue="default",
+		job_id=f"docarchive-thread-join-{name}",
+		deduplicate=True,
+		enqueue_after_commit=True,
+		name=name,
+	)
+
+
+def join_job(name: str) -> None:
+	for attempt in range(JOIN_ATTEMPTS):
 		try:
-			frappe.db.savepoint(SAVEPOINT)
-			return join(name)
+			join(name)
+			frappe.db.commit()
+			return
 		except frappe.QueryDeadlockError:
-			frappe.db.rollback(save_point=SAVEPOINT)
-			if attempt:
+			frappe.db.rollback()
+			if attempt == JOIN_ATTEMPTS - 1:
 				frappe.log_error(title="docarchive thread join")
+			else:
+				time.sleep(attempt + 1)
 		except Exception:
-			frappe.db.rollback(save_point=SAVEPOINT)
+			frappe.db.rollback()
 			frappe.log_error(title="docarchive thread join")
-			return None
-	return None
+			return
 
 
 def join(name: str) -> str | None:
@@ -210,22 +226,31 @@ def follows(original_name: str, row) -> bool:
 	original = frappe.db.get_value(
 		ORIGINAL,
 		original_name,
-		["thread_key", "message_id", "in_reply_to", "mail_references", "mail_at"],
+		["thread_key", "message_id", "in_reply_to", "mail_references", "mail_at", "automated", "internal"],
 		as_dict=True,
 	)
 	if not (original and original.thread_key and original.mail_at):
 		return False
-	try:
-		own_company = settings.own_company_for(original.mail_at, row.own_company)
-	except frappe.ValidationError:
+	if original.automated or (original.internal and not row.archive_internal):
 		return False
-	ids = _original_ids(original)
+	own_company = _own_company(original, row)
+	if not own_company:
+		return False
+	if original.message_id and frappe.db.exists(
+		DOCUMENT, {"own_company": own_company, "mail_message_id": original.message_id}
+	):
+		return True
+	documents = thread_documents(own_company, original.thread_key, _original_ids(original))
+	return any(get_datetime(doc.correspondence_at) <= get_datetime(original.mail_at) for doc in documents[:1])
+
+
+def thread_documents(own_company, thread_key, ids) -> list:
 	related = frappe.get_all(
 		DOCUMENT,
 		filters={"own_company": own_company},
 		or_filters=[
-			["thread_key", "=", original.thread_key],
-			["thread_root", "=", original.thread_key],
+			["thread_key", "=", thread_key],
+			["thread_root", "=", thread_key],
 			["mail_message_id", "in", ids or [""]],
 		],
 		fields=["thread_root", "thread_key"],
@@ -233,16 +258,68 @@ def follows(original_name: str, row) -> bool:
 	)
 	roots = list({row.thread_root or row.thread_key for row in related})
 	if not roots:
-		return False
-	earliest = frappe.get_all(
+		return []
+	return frappe.get_all(
 		DOCUMENT,
-		filters={"own_company": own_company, "thread_root": ("in", roots)},
-		fields=["correspondence_at"],
-		order_by="correspondence_at asc",
-		limit=1,
+		filters={
+			"own_company": own_company,
+			"thread_root": ("in", roots),
+			"correspondence_at": ("is", "set"),
+		},
+		fields=["name", "correspondence_at", "counterparty_type", "counterparty", "source_party_email"],
+		order_by="correspondence_at asc, creation asc",
+		limit=MAX_MAILS,
 	)
-	at = earliest[0].correspondence_at if earliest else None
-	return bool(at) and get_datetime(at) <= get_datetime(original.mail_at)
+
+
+def later_originals(document: str) -> list[tuple[str, object]]:
+	doc = frappe.db.get_value(
+		DOCUMENT,
+		document,
+		[
+			"thread_key",
+			"thread_root",
+			"mail_message_id",
+			"mail_in_reply_to",
+			"mail_references",
+			"correspondence_at",
+		],
+		as_dict=True,
+	)
+	if not (doc and doc.thread_key and doc.correspondence_at):
+		return []
+	keys = list(filter(None, {doc.thread_key, doc.thread_root}))
+	ids = list(filter(None, {doc.mail_message_id, *_referenced(doc)}))
+	rows = frappe.get_all(
+		ORIGINAL,
+		filters={
+			"status": "Stored",
+			"business_document": None,
+			"ignored": 0,
+			"mail_at": (">=", doc.correspondence_at),
+		},
+		or_filters=[
+			["thread_key", "in", keys],
+			["message_id", "in", ids or [""]],
+			["in_reply_to", "in", ids or [""]],
+		],
+		fields=["name", "email_account"],
+		order_by="mail_at asc",
+		limit=MAX_MAILS,
+	)
+	found = []
+	for row in rows:
+		account = accounts.account_settings(row.email_account)
+		if account and follows(row.name, account):
+			found.append((row.name, account))
+	return found
+
+
+def _own_company(original, row):
+	try:
+		return settings.own_company_for(original.mail_at, row.own_company)
+	except frappe.ValidationError:
+		return None
 
 
 @frappe.whitelist()
@@ -282,8 +359,8 @@ def thread_pending(communication: str) -> dict:
 		filters={
 			"status": "Stored",
 			"business_document": None,
+			"ignored": 0,
 			"name": ("!=", original.name),
-			"mail_at": ("<=", original.mail_at),
 		},
 		or_filters=[
 			["thread_key", "in", list(keys)],

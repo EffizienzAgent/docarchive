@@ -11,6 +11,7 @@ DOCUMENT = "Business Document"
 ORIGINAL = "Mail Original"
 COMMUNICATION = "Communication"
 MANUAL, AUTOMATIC, THREAD = "Manual", "Automatic", "Thread"
+FOLLOW_SAVEPOINT = "docarchive_mail_follow"
 DIRECTIONS = ("Incoming", "Outgoing")
 SAVEPOINT = "docarchive_mail_archive"
 SEND_NOTE = "Copies to other recipients differ only in tracking and unsubscribe links."
@@ -66,12 +67,33 @@ def auto_archive(original_name: str, raw=None) -> str | None:
 		reason = THREAD
 	else:
 		return None
+	return _archive_unattended(original_name, reason, original.communication, raw)
+
+
+def _archive_unattended(original_name, reason, communication, raw=None):
 	name, outcome = archive_with_outcome(original_name, raw=raw, reason=reason)
 	if outcome != "skipped":
 		pending = f"{reason.lower()}:{outcome}"
 		frappe.db.set_value(ORIGINAL, original_name, "audit_pending", pending, update_modified=False)
-		events.changed("archived", [original_name], [original.communication])
+		events.changed("archived", [original_name], [communication])
 	return name
+
+
+def follow_up(documents) -> int:
+	done = 0
+	for document in dict.fromkeys(documents):
+		for original, _row in threads.later_originals(document):
+			if done >= threads.MAX_MAILS:
+				return done
+			try:
+				frappe.db.savepoint(FOLLOW_SAVEPOINT)
+				communication = frappe.db.get_value(ORIGINAL, original, "communication")
+				_archive_unattended(original, THREAD, communication)
+				done += 1
+			except Exception:
+				frappe.db.rollback(save_point=FOLLOW_SAVEPOINT)
+				frappe.log_error(title="docarchive follow thread")
+	return done
 
 
 def log_automatic() -> int:
@@ -257,6 +279,7 @@ def archive_each(items, refused=None) -> dict:
 			result["refused"][key] = str(error)
 	audit_log(audit.MAIL_ARCHIVED, documents, _counted({"how": "manual"}, documents, result["refused"]))
 	events.changed("archived", [o for o, _c in archived], [c for _o, c in archived])
+	follow_up(name for _doctype, name, outcome in documents if outcome != "skipped")
 	return result
 
 
@@ -447,6 +470,7 @@ def _create(original, own_company, check_permission=False, raw=None, reason=MANU
 			"mail_message_id": original.message_id,
 			"mail_in_reply_to": original.in_reply_to,
 			"mail_references": original.mail_references,
+			**(_thread_party(original, own_company) if reason == THREAD else {}),
 		}
 	)
 	if check_permission:
@@ -455,8 +479,20 @@ def _create(original, own_company, check_permission=False, raw=None, reason=MANU
 	doc.insert(ignore_permissions=True)
 	doc.file = _attach(original, doc.name, raw)
 	doc.save(ignore_permissions=True)
-	threads.join_safely(doc.name)
+	threads.schedule_join(doc.name)
 	return doc.name
+
+
+def _thread_party(original, own_company) -> dict:
+	party = _party_email(original).lower()
+	ids = [*(original.mail_references or "").split(), original.in_reply_to]
+	documents = threads.thread_documents(own_company, original.thread_key, [i for i in ids if i])
+	if not party or party not in {(doc.source_party_email or "").lower() for doc in documents}:
+		return {}
+	earliest = next((doc for doc in documents if doc.counterparty), None)
+	if not earliest:
+		return {}
+	return {"counterparty_type": earliest.counterparty_type, "counterparty": earliest.counterparty}
 
 
 def _party_email(original):

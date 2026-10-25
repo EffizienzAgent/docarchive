@@ -13,7 +13,7 @@ DOCUMENT = "Business Document"
 ORIGINAL = "Mail Original"
 
 
-class TestFollowThread(MailArchivingTestCase):
+class FollowThreadCase(MailArchivingTestCase):
 	def mail(self, at, sent=False, **headers):
 		comm = self.communication("Sent" if sent else "Received", communication_date=at)
 		if sent:
@@ -36,6 +36,8 @@ class TestFollowThread(MailArchivingTestCase):
 		archiving.archive_communications([a_comm.name])
 		return a_id, z_id, a_comm, a, z
 
+
+class TestFollowThread(FollowThreadCase):
 	def test_later_mails_of_an_archived_thread_are_archived(self):
 		a_id, z_id, _a_comm, a, z = self.conversation()
 		self.assertEqual(self.reason(a), "Manual")
@@ -105,3 +107,58 @@ class TestFollowThread(MailArchivingTestCase):
 		self.configure(mode="Automatic")
 		_, original = self.mail("2026-03-11 09:00:00")
 		self.assertEqual(self.reason(original), "Automatic")
+
+
+class TestFollowThreadRules(FollowThreadCase):
+	def test_automated_and_internal_replies_follow_the_account_rules(self):
+		a_id, *_ = self.conversation()
+		_, bulk = self.mail(
+			"2026-03-11 09:00:00",
+			**{"In-Reply-To": f"<{a_id}>", "List-Unsubscribe": "<mailto:x@example.test>"},
+		)
+		_, internal = self.mail(
+			"2026-03-11 10:00:00", From="a@acme.test", To="b@acme.test", **{"In-Reply-To": f"<{a_id}>"}
+		)
+		self.assertEqual((self.document(bulk), self.document(internal)), (None, None))
+		self.configure(archive_internal=1)
+		_, internal = self.mail(
+			"2026-03-11 11:00:00", From="a@acme.test", To="b@acme.test", **{"In-Reply-To": f"<{a_id}>"}
+		)
+		self.assertEqual(self.reason(internal), "Thread")
+
+	def test_manual_archive_follows_later_stored_mails(self):
+		a_id, b_id = message_id(), message_id()
+		a_comm, _a = self.mail("2026-03-10 09:00:00", **{"Message-ID": f"<{a_id}>"})
+		_, b = self.mail("2026-03-11 09:00:00", **{"Message-ID": f"<{b_id}>", "In-Reply-To": f"<{a_id}>"})
+		_, ignored = self.mail("2026-03-12 09:00:00", **{"In-Reply-To": f"<{a_id}>"})
+		mail.ignore([ignored])
+		self.assertEqual({item["name"] for item in mail.thread_pending(a_comm.name)["items"]}, {b})
+		archiving.archive_communications([a_comm.name])
+		self.assertEqual(self.reason(b), "Thread")
+		self.assertIsNone(self.document(ignored))
+
+	def test_counterparty_only_for_the_same_party(self):
+		from docarchive.tests.factories import make_party, party_fields
+
+		a_id, _z_id, _a_comm, a, _z = self.conversation()
+		frappe.db.set_value(DOCUMENT, self.document(a), party_fields(make_party()))
+		_, same = self.mail("2026-03-11 09:00:00", **{"In-Reply-To": f"<{a_id}>"})
+		_, other = self.mail(
+			"2026-03-11 10:00:00", From="Other <other@example.test>", **{"In-Reply-To": f"<{a_id}>"}
+		)
+		party = frappe.db.get_value(DOCUMENT, self.document(a), "counterparty")
+		self.assertEqual(frappe.db.get_value(DOCUMENT, self.document(same), "counterparty"), party)
+		self.assertIsNone(frappe.db.get_value(DOCUMENT, self.document(other), "counterparty"))
+
+	def test_same_message_id_always_links(self):
+		a_id, *_ = self.conversation()
+		_, copy = self.mail("2026-03-01 09:00:00", **{"Message-ID": f"<{a_id}>"})
+		self.assertEqual(
+			self.document(copy), frappe.db.get_value(DOCUMENT, {"mail_message_id": a_id}, "name")
+		)
+
+	def test_documents_without_a_date_do_not_count(self):
+		a_id, _z_id, _a_comm, a, _z = self.conversation()
+		frappe.db.set_value(DOCUMENT, self.document(a), "correspondence_at", None)
+		_, b = self.mail("2026-03-11 09:00:00", **{"In-Reply-To": f"<{a_id}>"})
+		self.assertIsNone(self.document(b))
