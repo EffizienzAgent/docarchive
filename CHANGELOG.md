@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/EffizienzAgent/docarchive/compare/v0.10.0...v0.11.0) (2026-10-26)
+
+
+### Features
+
+* tools for AI agents via the mcpserver app: list documents that are not complete yet, read their fields, sender, e-invoice data and file text, and assign them; agents never archive, completed documents go through the nightly run ([#51](https://github.com/EffizienzAgent/docarchive/pull/51))
+
 ## [0.10.0](https://github.com/EffizienzAgent/docarchive/compare/v0.9.0...v0.10.0) (2026-10-25)
 
 
