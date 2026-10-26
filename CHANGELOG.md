@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/EffizienzAgent/docarchive/compare/v0.10.0...v0.11.0) (2026-10-26)
+
+
+### Features
+
+* MCP tools to list, read and assign open documents ([9e27bba](https://github.com/EffizienzAgent/docarchive/commit/9e27bbacb3f2f9c419b910b02e4c33d9c6b9b447))
+
 ## [0.10.0](https://github.com/EffizienzAgent/docarchive/compare/v0.9.0...v0.10.0) (2026-10-25)
 
 
