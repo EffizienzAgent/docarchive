@@ -45,6 +45,7 @@ docarchive is a technical tool. It does not make you compliant with GoBD, the GD
 **Integration**
 - [Roles and permissions](docs/concepts.md#roles): Document Manager, Archive Admin, Document Integration, and host roles.
 - [Host app hooks](docs/host-apps.md#host-app-hooks) for assignment, counterparties, file access and e-invoice extractors, and [commands](docs/commands.md#commands) for runs and checks.
+- [Tools for AI agents](docs/ai-agents.md#ai-agents-mcp): list, read and assign open documents through the mcpserver app, without archiving.
 
 ## Screenshots
 
@@ -72,6 +73,7 @@ From the demo data of `bench --site <site> docarchive-demo` (see [Commands](docs
 - [E-invoices](docs/e-invoices.md)
 - [Host apps](docs/host-apps.md): hooks, documents panel, triage, dashboard helpers
 - [Upload API](docs/upload-api.md)
+- [AI agents (MCP)](docs/ai-agents.md)
 - [Commands](docs/commands.md), including demo data
 - [Development](docs/development.md): tests
 

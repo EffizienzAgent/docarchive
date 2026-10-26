@@ -1,3 +1,5 @@
+from docarchive import mcp_tools as _mcp_tools
+
 app_name = "docarchive"
 app_title = "Document Archive"
 app_publisher = "EffizienzAgent (Tobias Mende)"
@@ -24,6 +26,9 @@ extend_doctype_class = {
 	"Email Account": ["docarchive.mail.extensions.EmailAccountArchive"],
 	"Email Queue": ["docarchive.mail.extensions.EmailQueueArchive"],
 }
+# Tools for the mcpserver app; plain definitions, so docarchive does not depend on it.
+mcp_tools = _mcp_tools.TOOLS
+
 scheduler_events = {
 	"cron": {"30 2 * * *": ["docarchive.run.schedule"], "30 7 * * *": ["docarchive.monitoring.daily"]},
 	"daily": ["docarchive.mail.cleanup.run", "docarchive.export.expire", "docarchive.audit.prune"],
