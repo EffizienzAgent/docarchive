@@ -7,7 +7,7 @@ from frappe import _
 from frappe.utils import cint, flt, now_datetime
 
 from docarchive import audit
-from docarchive.mail import archiving, events
+from docarchive.mail import archiving, events, states, suggestion
 from docarchive.mail.access import readable
 from docarchive.mail.cleanup import DEFAULT_KEEP_DAYS
 
@@ -40,7 +40,12 @@ def candidates(limit: int = DEFAULT_LIMIT, expiring_within_days: float | None = 
 	rows = list(islice(heapq.merge(*streams, key=lambda row: row.expires_at), limit))
 	found = archiving.parties({row.communication: row.email_account for row in rows})
 	titles = _titles(found.values())
-	return [_item(row, found[row.communication], titles) for row in rows]
+	words = suggestion.keywords()
+	files = suggestion.attachment_names([row.communication for row in rows])
+	return [
+		_item(row, found[row.communication], titles, states.reasons_for(row, files[row.communication], words))
+		for row in rows
+	]
 
 
 @frappe.whitelist()
@@ -190,7 +195,7 @@ def _titles(found):
 	return titles
 
 
-def _item(row, items, titles):
+def _item(row, items, titles, reasons):
 	party = None
 	if len(items) == 1:
 		doctype, name = items[0]
@@ -208,6 +213,8 @@ def _item(row, items, titles):
 		"automated": bool(row.automated),
 		"internal": bool(row.internal),
 		"suggested_counterparty": party,
+		"suggested": bool(reasons),
+		"suggestion_reasons": reasons,
 	}
 
 

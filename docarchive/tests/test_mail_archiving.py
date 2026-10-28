@@ -47,6 +47,23 @@ def address(prefix="client", domain="example.test"):
 	return f"{unique(prefix)}@{domain}"
 
 
+LEGACY_STATUS_KEYS = (
+	"original",
+	"archived",
+	"business_document",
+	"archive_status",
+	"retain_until",
+	"automated",
+	"internal",
+	"reason",
+)
+
+
+def legacy_status(communication):
+	status = archiving.status(communication)
+	return {key: status[key] for key in LEGACY_STATUS_KEYS}
+
+
 class MailArchivingTestCase(IntegrationTestCase):
 	def setUp(self):
 		store_mail_inline(self)
@@ -267,7 +284,7 @@ class TestDeskApi(MailArchivingTestCase):
 	def test_status(self):
 		comm = self.communication()
 		self.assertEqual(
-			archiving.status(comm.name),
+			legacy_status(comm.name),
 			{
 				"original": False,
 				"archived": False,
@@ -281,7 +298,7 @@ class TestDeskApi(MailArchivingTestCase):
 		)
 		name = archiving.archive(self.capture(eml(Precedence="bulk"), comm))
 		self.assertEqual(
-			archiving.status(comm.name),
+			legacy_status(comm.name),
 			{
 				"original": True,
 				"archived": True,
@@ -300,7 +317,7 @@ class TestDeskApi(MailArchivingTestCase):
 		frappe.set_user(make_outsider(address("outsider")))
 		self.addCleanup(frappe.set_user, "Administrator")
 		self.assertEqual(
-			archiving.status(comm.name),
+			legacy_status(comm.name),
 			{
 				"original": False,
 				"archived": False,

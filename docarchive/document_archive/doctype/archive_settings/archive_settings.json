@@ -32,6 +32,8 @@
   "mail_accounts",
   "mail_write_timeout",
   "follow_threads",
+  "archive_rule",
+  "suggestion_keywords",
   "export_section",
   "export_part_size_mb",
   "export_expiry_days",
@@ -182,6 +184,18 @@
    "fieldtype": "Check",
    "label": "File later e-mails of a filed thread automatically",
    "default": "1"
+  },
+  {
+   "fieldname": "archive_rule",
+   "fieldtype": "Small Text",
+   "label": "Archiving Rule",
+   "description": "Shown next to the archive action. Empty: default rule."
+  },
+  {
+   "fieldname": "suggestion_keywords",
+   "fieldtype": "Small Text",
+   "label": "Suggestion Keywords",
+   "description": "One per line. A mail whose subject contains one of them at the start of a word is suggested for archiving. Empty: default list."
   },
   {
    "fieldname": "export_section",
