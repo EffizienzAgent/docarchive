@@ -514,12 +514,43 @@
 .list-row .docarchive-state {
 	display: inline-flex;
 	flex-shrink: 0;
+	justify-content: flex-end;
 	align-items: center;
-	gap: var(--padding-xs);
+	gap: 2px;
+	width: 44px;
 	margin-right: var(--padding-xs);
-	white-space: nowrap;
 }
 
-.list-row .docarchive-state .btn-link {
+.list-row .docarchive-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
 	padding: 0;
+	border: 0;
+	border-radius: var(--border-radius-sm);
+	background: none;
+	color: var(--text-muted);
+}
+
+.list-row .docarchive-action:hover {
+	background-color: var(--subtle-fg);
+	color: var(--text-color);
+}
+
+.list-row .docarchive-icon.green {
+	color: var(--green-600);
+}
+
+.list-row .docarchive-icon.blue {
+	color: var(--blue-600);
+}
+
+.list-row .docarchive-icon.yellow {
+	color: var(--yellow-600);
+}
+
+.list-row .docarchive-icon.red {
+	color: var(--red-600);
 }
