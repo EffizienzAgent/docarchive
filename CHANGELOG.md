@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.12.2](https://github.com/EffizienzAgent/docarchive/compare/v0.12.1...v0.12.2) (2026-10-28)
+
+
+### Bug Fixes
+
+* address deep audit findings ([08b2907](https://github.com/EffizienzAgent/docarchive/commit/08b29077fd4a048d1ec200947e52f02454789528))
+* address deep audit findings ([897d6db](https://github.com/EffizienzAgent/docarchive/commit/897d6dbe9ac53669d24bf7cb57241f3033eb1a55))
+* show distinct archive state icons in the Communication list ([0b0121e](https://github.com/EffizienzAgent/docarchive/commit/0b0121ea48a47e91bcb22b1d21596cbd3d1c95ba))
+* show distinct archive state icons in the Communication list ([74874f3](https://github.com/EffizienzAgent/docarchive/commit/74874f3e9d790c842d882e118234615508442549))
+
 ## [0.12.1](https://github.com/EffizienzAgent/docarchive/compare/v0.12.0...v0.12.1) (2026-10-28)
 
 
