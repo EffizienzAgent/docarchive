@@ -8,7 +8,7 @@ from frappe.core.api.file import get_max_file_size
 from frappe.rate_limiter import rate_limit
 from pypdf.errors import PyPdfError
 
-from docarchive import content, einvoice, keys, settings
+from docarchive import content, einvoice, keys, locks, settings
 from docarchive.document_archive.doctype.business_document.business_document import (
 	extension,
 	missing_fields,
@@ -20,7 +20,6 @@ ATTACHMENT = "Business Document Attachment"
 DEFAULT_ROLE = "Attachment"
 ALLOWED_ROLES = (INTEGRATION_ROLE, "System Manager")
 PARTY_HINTS = ("source_party_id", "source_party_name", "source_party_email")
-SAVEPOINT = "docarchive_upload"
 MAX_ATTACHMENTS = 20
 TRUSTED_FROM_EINVOICE = ("document_date", "document_number")
 
@@ -40,19 +39,19 @@ def upload_document(
 	document_date: str | None = None,
 	file_name: str | None = None,
 	content_base64: str | None = None,
-	document_number: str | None = None,
-	title: str | None = None,
+	document_number: str | int | None = None,
+	title: str | int | None = None,
 	own_company: str | None = None,
 	contract_end_date: str | None = None,
 	source_system: str | None = None,
-	source_account: str | None = None,
+	source_account: str | int | None = None,
 	source_party_type: str | None = None,
-	source_party_id: str | None = None,
+	source_party_id: str | int | None = None,
 	source_party_name: str | None = None,
 	source_party_email: str | None = None,
-	source_key: str | None = None,
+	source_key: str | int | None = None,
 	attachments: list | str | None = None,
-	legal_hold: str | None = None,
+	legal_hold: str | bool | None = None,
 ) -> dict:
 	frappe.only_for(ALLOWED_ROLES)
 	doc_type = document_type_for(document_type) if clean(document_type) else None
@@ -89,20 +88,13 @@ def upload_document(
 	source_key = clean(source_key)
 
 	scope = {"source_system": fields["source_system"], "source_account": fields["source_account"]}
-	for _attempt in range(2):
-		frappe.db.savepoint(SAVEPOINT)
-		matches = find_existing(source_key, scope, sha, doc_type.name)
-		if matches:
-			return merge(matches, extra, fields, name, data, source_key, scope)
-		current = (source_versions(source_key, scope) or [None])[-1]
-		try:
-			doc = create(fields, name, data, None if current else source_key, current and current.name, extra)
-		except frappe.UniqueValidationError:
-			frappe.db.rollback(save_point=SAVEPOINT)
-			frappe.message_log.clear()
-			continue
-		return response(doc.name, "replaced" if current else "created")
-	fail(_("This source_key is already used by another source."))
+	locks.hold(f"upload:sha:{sha}", *([f"upload:key:{source_key}"] if source_key else []))
+	matches = find_existing(source_key, scope, sha, doc_type.name)
+	if matches:
+		return merge(matches, extra, fields, name, data, source_key, scope)
+	current = (source_versions(source_key, scope) or [None])[-1]
+	doc = create(fields, name, data, None if current else source_key, current and current.name, extra)
+	return response(doc.name, "replaced" if current else "created")
 
 
 def find_existing(source_key, scope, sha, document_type) -> list[str]:
@@ -110,15 +102,21 @@ def find_existing(source_key, scope, sha, document_type) -> list[str]:
 	matches = [version.name for version in versions if version.content_sha256 == sha]
 	if matches:
 		return matches
-	if source_key and not versions and frappe.db.exists(DOCUMENT, {"source_key": source_key}):
+	if (
+		source_key
+		and not versions
+		and frappe.db.get_value(DOCUMENT, {"source_key": source_key}, for_update=True)
+	):
 		fail(_("This source_key is already used by another source."))
 	if versions:
 		return []
-	return frappe.get_all(
+	return frappe.db.get_values(
 		DOCUMENT,
-		filters={"content_sha256": sha, "document_type": document_type, **scope_filters(scope)},
-		pluck="name",
+		{"content_sha256": sha, "document_type": document_type, **scope_filters(scope)},
+		"name",
+		pluck=True,
 		order_by="creation",
+		for_update=True,
 	)
 
 
@@ -160,7 +158,7 @@ def add_attachments(name, attachments):
 
 
 def clean(value):
-	value = (value or "").strip()
+	value = "" if value is None else str(value).strip()
 	return value or None
 
 
@@ -175,7 +173,7 @@ def document_type_for(slug, name=None):
 
 
 def parse_flag(value, label) -> int:
-	value = (clean(str(value)) if value is not None else "") or ""
+	value = clean(value) or ""
 	if value.lower() in ("", "0", "false", "no"):
 		return 0
 	if value.lower() in ("1", "true", "yes"):
@@ -302,12 +300,12 @@ def scope_filters(scope) -> dict:
 def source_versions(source_key, scope):
 	fields = ["name", "content_sha256"]
 	filters = {"source_key": source_key, **scope_filters(scope)}
-	doc = source_key and frappe.db.get_value(DOCUMENT, filters, fields, as_dict=True)
+	doc = source_key and frappe.db.get_value(DOCUMENT, filters, fields, as_dict=True, for_update=True)
 	versions = []
 	while doc:
 		versions.append(doc)
 		doc = frappe.db.get_value(
-			DOCUMENT, {"replaces": doc.name}, fields, as_dict=True, order_by="creation desc"
+			DOCUMENT, {"replaces": doc.name}, fields, as_dict=True, order_by="creation desc", for_update=True
 		)
 	return versions
 

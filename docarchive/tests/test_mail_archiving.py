@@ -4,7 +4,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import now_datetime
 
-from docarchive import content, mail, run
+from docarchive import content, locks, mail, run
 from docarchive.document_types import CORRESPONDENCE, INTERNAL_CORRESPONDENCE
 from docarchive.mail import archiving
 from docarchive.permissions import MANAGER_ROLE
@@ -132,6 +132,17 @@ class TestArchive(MailArchivingTestCase):
 	def test_long_subject_is_cut(self):
 		doc = frappe.get_doc(DOCUMENT, archiving.archive(self.capture(eml(Subject="x" * 300))))
 		self.assertEqual(len(doc.title), 140)
+
+	def test_parallel_archive_of_the_same_message_waits(self):
+		original = self.capture()
+		row = frappe.get_doc("Mail Original", original)
+		key = f"docarchive:mail:{self.company}:{row.message_id}"
+		other = frappe.cache.lock(frappe.cache.make_key(key), timeout=60)
+		self.assertTrue(other.acquire(blocking=False))
+		self.addCleanup(other.release)
+		with patch("docarchive.locks.WAIT_SECONDS", 0.2), self.assertRaises(locks.Busy):
+			archiving.archive(original)
+		self.assertIsNone(frappe.db.get_value("Mail Original", original, "business_document"))
 
 	def test_same_message_id_twice_gives_one_document(self):
 		raw = eml()

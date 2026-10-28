@@ -51,7 +51,9 @@ def execute():
 	groups = {}
 	for doc in docs:
 		groups.setdefault(find(("doc", doc.name)), []).append(doc)
-	for members in groups.values():
+	for number, members in enumerate(groups.values(), 1):
+		if number % CHUNK == 0:
+			frappe.db.commit()
 		first = min(members, key=lambda doc: (doc.correspondence_at or doc.creation, doc.creation))
 		names = [doc.name for doc in members]
 		for index in range(0, len(names), CHUNK):

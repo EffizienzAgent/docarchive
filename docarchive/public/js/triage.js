@@ -317,7 +317,7 @@ function pick(values) {
 docarchive.show_file = function (file, file_name) {
 	if (preview_kind(file) === "other") return false;
 	const dialog = new frappe.ui.Dialog({
-		title: file_name || file.split(/[?#]/)[0].split("/").pop(),
+		title: esc(file_name || file.split(/[?#]/)[0].split("/").pop()),
 		size: "extra-large",
 		fields: [{ fieldname: "file", fieldtype: "HTML" }],
 	});

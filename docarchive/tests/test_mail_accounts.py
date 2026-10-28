@@ -73,3 +73,17 @@ class TestMailAccounts(IntegrationTestCase):
 		frappe.delete_doc("Email Account", self.account, ignore_permissions=True)
 		for name in (loose, archived):
 			self.assertEqual(frappe.db.get_value("Mail Original", name, "email_account"), self.account)
+
+	def test_renaming_account_keeps_its_originals(self):
+		from docarchive import mail
+		from docarchive.mail import archiving
+		from docarchive.tests.factories import eml, make_communication, make_own_company
+
+		make_settings(default_own_company=make_own_company().name)
+		make_mail_settings(self.account, mode="Manual")
+		loose = mail.capture(make_communication(self.account), eml(), "t")
+		document = archiving.archive(mail.capture(make_communication(self.account), eml(), "t"))
+		new = frappe.rename_doc("Email Account", self.account, f"{self.account}-renamed", force=True)
+		self.assertEqual(frappe.db.get_value("Mail Original", loose, "email_account"), new)
+		self.assertEqual(frappe.db.get_value("Business Document", document, "source_account"), new)
+		self.assertEqual(accounts.account_row(new).mode, "Manual")

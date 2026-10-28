@@ -5,7 +5,7 @@ Archive Settings has a **Storage Targets** table with one row per bucket (usuall
 - from the site config (`<prefix>_endpoint`, `<prefix>_region`, `<prefix>_bucket`), with the credentials in two named site config keys, or
 - from fields on the row, with the credentials in Password fields, which Frappe stores encrypted.
 
-Credentials are never stored in plain text. Endpoints must use https, must not be private, loopback or link-local addresses or local host names, and bucket names must be valid, for site config values once they are set too. Two targets cannot point to the same endpoint and bucket. The archive can only be enabled with at least one enabled target, and only when all its site config keys are set.
+Credentials are never stored in plain text. Endpoints must use https, must not be private, loopback or link-local addresses or local host names, and bucket names must be valid, for site config values once they are set too. Two targets cannot point to the same endpoint and bucket. A target that holds archived copies cannot be renamed, because the copies refer to it by name. The archive can only be enabled with at least one enabled target, and only when all its site config keys are set.
 
 Each row can also name an optional **archive admin key**: in site config mode two more config key names (**Admin Access Key Config Key**, **Admin Secret Key Config Key**, e.g. `s3_archive_admin_access_key` and `s3_archive_admin_secret_key`), in fields mode two more Password fields. Both or neither must be set. Archiving never uses the archive admin key. It is only used to release legal holds and to delete documents. When it is not configured, or its site config keys are empty, those actions are hidden and refused, and everything else keeps working.
 

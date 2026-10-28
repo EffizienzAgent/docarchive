@@ -159,6 +159,20 @@ class TestEligibility(ArchiveRunTestCase):
 			run.reassign()
 		self.assertEqual(frappe.db.get_value(DOCUMENT, doc.name, "counterparty"), party.name)
 
+	def test_failing_assign_hook_does_not_stop_the_run(self):
+		doc = self.document(counterparty_type=None, counterparty=None)
+		doc.flags.archive_write = True
+		doc.source_system = "Billing"
+		doc.save(ignore_permissions=True)
+		errors = frappe.db.count("Error Log")
+		with self.patch_hooks({"docarchive_assign": ["docarchive.tests.test_run.assign_broken"]}):
+			run.reassign()
+		self.assertEqual(frappe.db.count("Error Log"), errors + 1)
+
+
+def assign_broken(doc):
+	raise RuntimeError("host app is down")
+
 
 def assign_contact(doc):
 	if doc.source_system == "Billing" and not doc.counterparty:
@@ -323,6 +337,10 @@ class TestArchiveDocument(ArchiveRunTestCase):
 		self.assertEqual([c.status for c in doc.archive_copies], ["Archived", "Failed"])
 		self.assertIn("secondary: Storage error InternalError", doc.archive_error)
 		self.assertEqual(len(self.fake("primary").puts()), 2)
+
+		self.assertEqual(self.archive(doc), "Failed")
+		doc.reload()
+		self.assertEqual(doc.archive_error, "secondary: Storage error InternalError")
 
 		self.fake("secondary").fail.clear()
 		self.assertEqual(self.archive(doc), "Archived")

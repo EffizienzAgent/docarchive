@@ -81,7 +81,11 @@ docarchive.extend_retention = function (name, on_done) {
 			primary_action(values) {
 				frappe.confirm(NO_SHORTENING(), () =>
 					frappe
-						.call({ method: `${METHOD}.extend`, args: { name, ...values }, freeze: true })
+						.call({
+							method: `${METHOD}.extend`,
+							args: { name, current: options.current, ...values },
+							freeze: true,
+						})
 						.then(({ message }) => {
 							dialog.hide();
 							frappe.show_alert({

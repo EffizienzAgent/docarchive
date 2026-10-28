@@ -198,11 +198,18 @@ def options(name: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
-def extend(name: str, how: str, years=None, until=None, reason=None) -> dict:
+def extend(name: str, how: str, years=None, until=None, reason=None, current=None) -> dict:
 	check_manager()
 	doc = check(name)
 	if not current_until(doc):
 		frappe.throw(_("Only archived documents can be extended."), ExtensionError)
+	if current and current != run.utc_iso(current_until(doc)):
+		frappe.throw(
+			_("The retention was changed to {0} in the meantime. Please check it and try again.").format(
+				run.utc_iso(current_until(doc))
+			),
+			ExtensionError,
+		)
 	target = new_until(doc, how, years, until)
 	done = apply(doc, target, reason)
 	audit.log_if_changed(

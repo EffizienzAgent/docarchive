@@ -182,6 +182,7 @@ class Package:
 				message = email.message_from_binary_file(f, policy=email.policy.default)
 			body, attachments = render_mail(message)
 		except Exception:
+			frappe.log_error(title=f"docarchive export: mail preview {key}")
 			return
 		self.zip.writestr(f"{stem}.html", body, compress_type=zipfile.ZIP_DEFLATED)
 		entry["previews"][key] = f"{stem}.html"
