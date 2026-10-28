@@ -11,30 +11,46 @@
 
 	const svg = (paths) =>
 		`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+	const BOX = '<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/>';
 	const ICONS = {
-		archive: svg('<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>'),
+		archived: svg(`${BOX}<path d="m9 14 2 2 4-4"/>`),
+		archive: svg(`${BOX}<path d="M12 11v6"/><path d="M9 14h6"/>`),
+		filed: svg('<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>'),
+		failed: svg('<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>'),
+		ignored: svg('<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>'),
 		discard: svg('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
 	};
 	const ACTION_LABELS = { archive: "Archive", discard: "Discard", unignore: "Archive" };
+
+	function state_icon(badge, status) {
+		if (status.state === "archived") return "archived";
+		if (status.state === "filed") return badge.color === "red" ? "failed" : "filed";
+		if (status.state === "ignored" && !badge.actions.length) return "ignored";
+		if (status.state === "suggested" && !badge.actions.length) return "archive";
+		return null;
+	}
 
 	function state_html(badge, status) {
 		const esc = frappe.utils.escape_html;
 		const label = badge.label_html.split(" · ")[0];
 		const doc = status.business_document;
+		const icon = state_icon(badge, status);
 		const action = badge.actions.find((name) => name !== "unignore") || badge.actions[0];
 		const parts = [];
-		if (doc) {
+		if (icon && doc) {
 			parts.push(
-				`<a class="docarchive-icon ${badge.color}" href="${esc(frappe.utils.get_form_link("Business Document", doc))}" title="${label}: ${esc(doc)}">${ICONS.archive}</a>`,
+				`<a class="docarchive-icon ${badge.color}" href="${esc(frappe.utils.get_form_link("Business Document", doc))}" title="${label}: ${esc(doc)}">${ICONS[icon]}</a>`,
 			);
+		} else if (icon) {
+			parts.push(`<span class="docarchive-icon ${badge.color}" title="${label}">${ICONS[icon]}</span>`);
 		}
 		if (action) {
-			const title = doc ? __(ACTION_LABELS[action]) : `${__(ACTION_LABELS[action])} (${label})`;
+			const title = icon ? __(ACTION_LABELS[action]) : `${__(ACTION_LABELS[action])} (${label})`;
+			const color = status.state === "suggested" ? "yellow" : "";
 			parts.push(
-				`<button class="docarchive-icon docarchive-action ${doc ? "" : badge.color}" data-docarchive-action="${action}" title="${esc(title)}">${ICONS[action === "discard" ? "discard" : "archive"]}</button>`,
+				`<button class="docarchive-icon docarchive-action ${color}" data-docarchive-action="${action}" title="${esc(title)}">${ICONS[action === "discard" ? "discard" : "archive"]}</button>`,
 			);
 		}
-		if (!parts.length) parts.push(`<span class="docarchive-icon ${badge.color}" title="${label}">${ICONS.archive}</span>`);
 		return parts.join("");
 	}
 
