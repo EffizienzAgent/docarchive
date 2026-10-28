@@ -6,7 +6,6 @@
 ### Bug Fixes
 
 * compact archive icons in the Communication list ([9527b97](https://github.com/EffizienzAgent/docarchive/commit/9527b97fc39c4ec70000010fb2c52cf6e211be0d))
-* compact archive icons in the Communication list ([4b7e24b](https://github.com/EffizienzAgent/docarchive/commit/4b7e24b09a2d4b276245f91f9b02a1f61bda9dc8))
 
 ## [0.12.0](https://github.com/EffizienzAgent/docarchive/compare/v0.11.0...v0.12.0) (2026-10-28)
 
