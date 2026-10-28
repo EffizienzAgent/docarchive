@@ -59,3 +59,21 @@ The lock mode comes from the storage target and is recorded per copy. Switch a t
 ## Archive now
 
 Users who may write a document see **Archive now** on its form when archiving is enabled and the document is complete. The list view has the same action for selected documents. Both show the retain-until date and the mode and ask for confirmation, then queue the same archive code as the nightly run, without the minimum age wait. A failed target is retried by the next nightly run.
+
+## Mail states and suggestion
+
+Every e-mail of an account in Manual or Automatic mode shows where it stands (unfiled mails of accounts that are Off or not listed in Archive Settings show nothing; filed and archived mails always keep their state). The state is a colored bar on the Communication form, a badge next to each mail in any activity timeline (on any form with a mail thread) and a badge in the Communication list.
+
+| State | Color | Meaning |
+|---|---|---|
+| Should be archived | yellow | Not archived, and the suggestion found a signal (see below). |
+| Not archived | gray | Not archived, no signal. Automatic and internal mails show only a quiet note. |
+| Ignored | gray | Marked as not to be archived. "Undo" or "Archive" bring it back. |
+| Filed | blue | Archive was used, the Business Document exists but is not sealed yet. Also covers a run in progress. A failed run shows red ("Failed"). |
+| Archived | green | The document is archived (or deleted after retention) and shows its retain-until date. |
+
+The bar of a not archived mail names the rule next to the actions "Archive" and "Don't archive" and says when the stored original is removed (the account's keep days). The rule is the text under **Archive Settings → Archiving Rule**; when empty, the default applies: archive when the mail prepares, closes, performs or undoes a business deal (offer, acceptance, order, contract or change, binding commitment, invoice, credit note, dunning, cancellation, withdrawal, complaint with consequences), not notifications, newsletters, scheduling or support without contractual consequences. **When in doubt, archive.**
+
+The suggestion is only a hint, nothing is archived because of it. A mail is suggested when its subject contains a keyword at the start of a word (so "Auftragsbestätigung" matches "Auftrag") or it has a PDF or XML attachment. The bar shows which signals applied. Keywords come from **Archive Settings → Suggestion Keywords**, one per line; when empty, a default list of German and English terms (offer, order, contract, invoice, credit note, reminder, cancellation and similar) applies. Automatic and internal mails are never suggested.
+
+"Archive" only files the mail as a Business Document. It is sealed by the nightly run once it has not changed for **Minimum Age (Hours)** (default 24), so the next run after that, and in practice between 24 and 48 hours after filing. The bar of a filed mail shows the earliest date it is sealed and offers **Discard** until then (for users who may write the document): it removes the document again and returns the mail to "Not archived", or to "Should be archived" when the suggestion applies. After the run starts, the document is locked and cannot be discarded.

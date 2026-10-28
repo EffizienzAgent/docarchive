@@ -710,3 +710,23 @@ Archive Reason,Ablagegrund
 Filed automatically because the thread is filed,"Automatisch abgelegt, weil der Verlauf abgelegt ist"
 Archive {0} more e-mails of this thread,{0} weitere E-Mails dieses Verlaufs ablegen
 The browser blocked the download. The mail is in the package at {0}.,Der Browser hat den Download blockiert. Die E-Mail liegt im Paket unter {0}.
+Archiving Rule,Ablageregel
+Shown next to the archive action. Empty: default rule.,Wird neben der Ablage-Aktion angezeigt. Leer: Standardregel.
+Suggestion Keywords,Vorschlags-Stichwörter
+One per line. A mail whose subject contains one of them at the start of a word is suggested for archiving. Empty: default list.,"Eines pro Zeile. Eine E-Mail, deren Betreff eines davon am Wortanfang enthält, wird zur Ablage vorgeschlagen. Leer: Standardliste."
+"Archive when the mail prepares, closes, performs or undoes a business deal: offer, acceptance, order, contract or contract change, binding commitment, invoice, credit note, dunning, cancellation, withdrawal, complaint with consequences. Not: notifications, newsletters, scheduling, support without contractual consequences. When in doubt, archive.","Ablegen, wenn die E-Mail ein Geschäft anbahnt, abschließt, erfüllt oder rückabwickelt: Angebot, Annahme, Bestellung, Vertrag oder Vertragsänderung, verbindliche Zusage, Rechnung, Gutschrift, Mahnung, Kündigung, Widerruf, Reklamation mit Folgen. Nicht: Benachrichtigungen, Newsletter, Terminabsprachen, Support ohne vertragliche Folgen. Im Zweifel ablegen."
+Filed,Abgelegt
+Should be archived,Sollte archiviert werden
+Not archived,Nicht archiviert
+subject mentions “{0}”,Betreff erwähnt „{0}“
+PDF attachment,PDF-Anhang
+XML attachment,XML-Anhang
+Suggested: {0},Vorschlag: {0}
+The original is removed on {0}.,Das Original wird am {0} entfernt.
+Don't archive,Nicht archivieren
+Automatic e-mail,Automatische E-Mail
+Internal e-mail,Interne E-Mail
+Marked as not to be archived.,Als nicht zu archivieren markiert.
+Undo,Rückgängig
+Sealed on {0} at the earliest.,Frühestens am {0} festgeschrieben.
+"Counterparty missing, removed on {0}.","Gegenpartei fehlt, wird am {0} entfernt."

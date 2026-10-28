@@ -264,22 +264,26 @@ function warning_text(names, { automated, internal }) {
 	);
 }
 
-function archive_with_warnings(names, on_done, methods) {
+function archive_with_warnings(names, on_done, methods, options) {
 	return frappe.xcall(methods.warnings, { names }).then((found) => {
-		if (!found.automated.length && !found.internal.length) return archive_mails(names, on_done, methods);
+		if (!found.automated.length && !found.internal.length) {
+			return archive_mails(names, on_done, methods, options);
+		}
 		return new Promise((resolve) =>
 			frappe.confirm(warning_text(names, found), () =>
-				resolve(archive_mails(names, on_done, methods)),
+				resolve(archive_mails(names, on_done, methods, options)),
 			),
 		);
 	});
 }
 
-docarchive.archive_communications = function (names, on_done) {
-	return archive_with_warnings(names, on_done, {
-		warnings: `${ARCHIVING}.warnings`,
-		archive: `${ARCHIVING}.archive_communications`,
-	});
+docarchive.archive_communications = function (names, on_done, options = {}) {
+	return archive_with_warnings(
+		names,
+		on_done,
+		{ warnings: `${ARCHIVING}.warnings`, archive: `${ARCHIVING}.archive_communications` },
+		options,
+	);
 };
 
 docarchive.archive_originals = function (names, on_done) {
@@ -289,16 +293,24 @@ docarchive.archive_originals = function (names, on_done) {
 	});
 };
 
-function archive_mails(names, on_done, methods) {
+function archive_mails(names, on_done, methods, options = {}) {
 	return frappe
 		.call({ method: methods.archive, args: { names }, freeze: true })
 		.then(({ message: result }) => {
 			const archived = Object.entries(result.archived);
 			const refused = Object.entries(result.refused);
 			if (archived.length === 1 && !refused.length) {
-				frappe.show_alert({
-					message: __("Filed as {0}", [doc_link(archived[0][1])]),
+				const document = archived[0][1];
+				const discard = options.discard_link
+					? ` <a href="#" data-docarchive-discard>${esc(__("Discard"))}</a>`
+					: "";
+				const $alert = frappe.show_alert({
+					message: __("Filed as {0}", [doc_link(document)]) + discard,
 					indicator: "green",
+				});
+				$alert.on("click", "[data-docarchive-discard]", (event) => {
+					event.preventDefault();
+					docarchive.discard_documents([document], on_done);
 				});
 			} else {
 				report(

@@ -95,3 +95,98 @@ test("the archive headline follows the document's status", async () => {
 		color: "blue",
 	});
 });
+
+const state_t = (text, args = []) => args.reduce((out, arg, index) => out.replace(`{${index}}`, arg), text);
+const state_helpers = { t: state_t, link: (name) => `<a>${name}</a>`, date: (value) => value, rule: "R" };
+
+test("badge per state", async () => {
+	const { archive_badge } = await import("./mail_core.js");
+	const h = state_helpers;
+	assert.equal(archive_badge({ state: "none" }, h), null);
+	assert.deepEqual(archive_badge({ state: "suggested", can_archive: true }, h).actions, ["archive"]);
+	assert.equal(archive_badge({ state: "suggested", can_archive: true, reason: "pending" }, h).actions.length, 0);
+	assert.deepEqual(archive_badge({ state: "filed", business_document: "D-1", can_discard: true }, h).actions, ["discard"]);
+	assert.equal(archive_badge({ state: "suggested", can_archive: false }, h).actions.length, 0);
+	assert.equal(archive_badge({ state: "archived", business_document: "D-1" }, h).color, "green");
+	assert.deepEqual(archive_badge({ state: "ignored", can_archive: true }, h).actions, ["unignore", "archive"]);
+	assert.equal(archive_badge({ state: "filed" }, h).label_html, "Filed");
+	assert.match(archive_badge({ state: "filed", business_document: "D-1" }, h).label_html, /<a>D-1<\/a>/);
+});
+
+test("bar escapes reasons and names", async () => {
+	const { state_bar } = await import("./mail_core.js");
+	const bar = state_bar(
+		{ state: "suggested", can_archive: true, suggestion_reasons: ["keyword:<b>x</b>", "attachment:pdf"] },
+		state_helpers,
+	);
+	assert.match(bar.html, /&lt;b&gt;x&lt;\/b&gt;/);
+	assert.match(bar.html, /PDF attachment/);
+	assert.match(bar.html, /data-docarchive-action="archive"/);
+	assert.match(bar.html, /data-docarchive-action="ignore"/);
+	assert.equal(bar.color, "yellow");
+});
+
+test("suggestion bar shows the short rule with the full rule as tooltip", async () => {
+	const { state_bar } = await import("./mail_core.js");
+	const bar = state_bar(
+		{ state: "suggested", can_archive: true, suggestion_reasons: ["keyword:Angebot"] },
+		{ ...state_helpers, rule: 'Archive offers. Not: "news" <b>.' },
+	);
+	assert.match(bar.html, /<div class="text-muted small" title="Archive offers\. Not: &quot;news&quot; &lt;b&gt;\.">Archive offers<\/div>/);
+	assert.doesNotMatch(bar.html.replace(/title="[^"]*"/, ""), /Not:/);
+	assert.match(bar.html, /<strong>Suggested: subject mentions/);
+});
+
+test("automated mail gets a quiet gray line", async () => {
+	const { state_bar } = await import("./mail_core.js");
+	const bar = state_bar(
+		{ state: "not_archived", automated: true, can_archive: true },
+		{ ...state_helpers, rule: "RULE-TEXT" },
+	);
+	assert.equal(bar.color, "gray");
+	assert.match(bar.html, /Automatic e-mail/);
+	assert.doesNotMatch(bar.html, /RULE-TEXT/);
+	assert.match(bar.html, /data-docarchive-action="archive"/);
+});
+
+test("ignored bar offers undo and archive", async () => {
+	const { state_bar } = await import("./mail_core.js");
+	const bar = state_bar({ state: "ignored", can_archive: true }, state_helpers);
+	assert.match(bar.html, /data-docarchive-action="unignore"/);
+	assert.match(bar.html, /data-docarchive-action="archive"/);
+});
+
+test("failed archive run is red in badge and bar", async () => {
+	const { archive_badge, state_bar } = await import("./mail_core.js");
+	const status = { state: "filed", business_document: "D-1", archive_status: "Failed" };
+	assert.equal(archive_badge(status, state_helpers).color, "red");
+	assert.equal(archive_badge(status, state_helpers).label_html, "Failed · <a>D-1</a>");
+	const bar = state_bar(status, state_helpers);
+	assert.equal(bar.color, "red");
+	assert.match(bar.html, /D-1/);
+});
+
+test("filed bar shows seal date and discard", async () => {
+	const { state_bar } = await import("./mail_core.js");
+	const bar = state_bar(
+		{ state: "filed", business_document: "D-1", sealed_from: "2026-10-30 02:30", can_discard: true },
+		state_helpers,
+	);
+	assert.equal(bar.color, "blue");
+	assert.match(bar.html, /Sealed on 2026-10-30 02:30 at the earliest/);
+	assert.match(bar.html, /data-docarchive-action="discard"/);
+});
+
+test("filed bar without discard right has no button", async () => {
+	const { state_bar } = await import("./mail_core.js");
+	const bar = state_bar({ state: "filed", business_document: "D-1", expires_on: "2026-11-01" }, state_helpers);
+	assert.doesNotMatch(bar.html, /data-docarchive-action/);
+	assert.match(bar.html, /Counterparty missing, removed on 2026-11-01/);
+});
+
+test("archived delegates to archive_headline", async () => {
+	const { state_bar, archive_headline } = await import("./mail_core.js");
+	const status = { state: "archived", business_document: "D-1", archive_status: "Archived" };
+	assert.deepEqual(state_bar(status, state_helpers), archive_headline(status, state_helpers));
+	assert.equal(state_bar({ state: "none" }, state_helpers), null);
+});

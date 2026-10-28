@@ -470,3 +470,56 @@
 		display: none;
 	}
 }
+
+.docarchive-state {
+	white-space: nowrap;
+}
+
+.docarchive-state-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--padding-xs) var(--padding-sm);
+	align-items: center;
+}
+
+.form-message.docarchive-quiet {
+	padding-top: var(--padding-xs);
+	padding-bottom: var(--padding-xs);
+	color: var(--text-muted);
+	background-color: var(--subtle-fg);
+	border-color: var(--border-color);
+	font-size: var(--text-sm);
+}
+
+.docarchive-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--padding-xs) var(--padding-md);
+	align-items: center;
+	justify-content: space-between;
+}
+
+.docarchive-bar-text {
+	flex: 1 1 24rem;
+	min-width: 0;
+}
+
+.docarchive-bar-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--padding-xs);
+	align-items: center;
+}
+
+.list-row .docarchive-state {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: var(--padding-xs);
+	margin-right: var(--padding-xs);
+	white-space: nowrap;
+}
+
+.list-row .docarchive-state .btn-link {
+	padding: 0;
+}

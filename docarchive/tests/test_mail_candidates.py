@@ -86,6 +86,16 @@ class TestCandidates(CandidatesTestCase):
 			(row["automated"], row["internal"], row["suggested_counterparty"]), (False, False, None)
 		)
 
+	def test_subject_keyword_is_suggested(self):
+		self.capture(eml(Subject="Rechnung 42"))
+		self.capture(eml(Subject="Hello"))
+		rows = {row["subject"]: row for row in mail.candidates()}
+		self.assertEqual(
+			(rows["Rechnung 42"]["suggested"], rows["Rechnung 42"]["suggestion_reasons"]),
+			(True, ["keyword:Rechnung"]),
+		)
+		self.assertEqual((rows["Hello"]["suggested"], rows["Hello"]["suggestion_reasons"]), (False, []))
+
 	def test_only_manual_accounts(self):
 		self.capture()
 		for mode in ("Off", "Automatic"):

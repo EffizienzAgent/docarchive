@@ -45,7 +45,10 @@ def archive_with_outcome(original_name, own_company=None, check_permission=False
 def refusal(original_name: str | None) -> str | None:
 	if not original_name:
 		return _("No original was captured for this e-mail.")
-	status, attempts = frappe.db.get_value(ORIGINAL, original_name, ["status", "attempts"])
+	return refusal_for(*frappe.db.get_value(ORIGINAL, original_name, ["status", "attempts"]))
+
+
+def refusal_for(status, attempts) -> str | None:
 	if status == "Pending" and attempts:
 		return _("Storing the original of this e-mail failed. It will be retried automatically.")
 	if status == "Pending":
@@ -205,35 +208,14 @@ def assign(doc):
 
 @frappe.whitelist()
 def status(communication: str) -> dict:
-	if communication not in access.readable([communication]):
-		return {
-			"original": False,
-			"archived": False,
-			"business_document": None,
-			"automated": False,
-			"internal": False,
-			"archive_status": None,
-			"retain_until": None,
-			"reason": _("You cannot read this e-mail."),
-		}
-	original = (
-		frappe.db.get_value(
-			ORIGINAL,
-			{"communication": communication},
-			["name", "business_document", "automated", "internal"],
-			as_dict=True,
-		)
-		or frappe._dict()
-	)
-	document = original.business_document
-	return {
-		"original": bool(original.name),
-		"archived": bool(document),
-		**document_state(document),
-		"automated": bool(original.automated),
-		"internal": bool(original.internal),
-		"reason": refusal(original.name),
-	}
+	return statuses([communication])[communication]
+
+
+@frappe.whitelist()
+def statuses(names) -> dict[str, dict]:
+	from docarchive.mail import states
+
+	return states.statuses(_names(names))
 
 
 def document_state(document) -> dict:
