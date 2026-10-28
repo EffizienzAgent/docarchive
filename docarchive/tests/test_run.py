@@ -159,6 +159,20 @@ class TestEligibility(ArchiveRunTestCase):
 			run.reassign()
 		self.assertEqual(frappe.db.get_value(DOCUMENT, doc.name, "counterparty"), party.name)
 
+	def test_failing_assign_hook_does_not_stop_the_run(self):
+		doc = self.document(counterparty_type=None, counterparty=None)
+		doc.flags.archive_write = True
+		doc.source_system = "Billing"
+		doc.save(ignore_permissions=True)
+		errors = frappe.db.count("Error Log")
+		with self.patch_hooks({"docarchive_assign": ["docarchive.tests.test_run.assign_broken"]}):
+			run.reassign()
+		self.assertEqual(frappe.db.count("Error Log"), errors + 1)
+
+
+def assign_broken(doc):
+	raise RuntimeError("host app is down")
+
 
 def assign_contact(doc):
 	if doc.source_system == "Billing" and not doc.counterparty:
@@ -324,6 +338,10 @@ class TestArchiveDocument(ArchiveRunTestCase):
 		self.assertIn("secondary: Storage error InternalError", doc.archive_error)
 		self.assertEqual(len(self.fake("primary").puts()), 2)
 
+		self.assertEqual(self.archive(doc), "Failed")
+		doc.reload()
+		self.assertEqual(doc.archive_error, "secondary: Storage error InternalError")
+
 		self.fake("secondary").fail.clear()
 		self.assertEqual(self.archive(doc), "Archived")
 		doc.reload()
@@ -343,17 +361,17 @@ class TestArchiveDocument(ArchiveRunTestCase):
 		self.assertTrue(all(len(v) == 1 for v in self.fake("secondary").versions.values()))
 
 	def test_existing_object_must_carry_the_expected_lock(self):
-		doc = self.document()
-		with patch("docarchive.store.head", side_effect=RuntimeError):
-			self.archive(doc)
-		doc.reload()
-		data = run.content.read_bytes(doc.file)
 		cases = {
 			"wrong mode": ("COMPLIANCE", datetime(2035, 1, 2, tzinfo=UTC)),
 			"shorter date": ("GOVERNANCE", datetime(2030, 1, 1, tzinfo=UTC)),
 		}
 		for case, (mode, until) in cases.items():
 			with self.subTest(case):
+				doc = self.document()
+				with patch("docarchive.store.head", side_effect=RuntimeError):
+					self.archive(doc)
+				doc.reload()
+				data = run.content.read_bytes(doc.file)
 				self.fakes.clear()
 				store.put_locked(store.targets()[0], doc.object_key, data, mode, until)
 				self.assertEqual(self.archive(doc), "Failed")

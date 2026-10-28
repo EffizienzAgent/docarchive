@@ -83,6 +83,21 @@ class TestStorageTargets(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			make_settings(targets=[site_config_target(lock_mode="NONE")])
 
+	def test_target_with_copies_keeps_its_name(self):
+		make_settings(targets=[fields_target("direct"), fields_target("spare")])
+		frappe.db.sql(
+			"""insert into `tabArchive Copy` (name, parent, parenttype, parentfield, target_name)
+			values (%s, 'x', 'Business Document', 'archive_copies', 'direct')""",
+			frappe.generate_hash(),
+		)
+		settings = frappe.get_single("Archive Settings")
+		settings.storage_targets[1].target_name = "reserve"
+		settings.save(ignore_permissions=True)
+		settings = frappe.get_single("Archive Settings")
+		settings.storage_targets[0].target_name = "moved"
+		with self.assertRaisesRegex(frappe.ValidationError, "cannot change"):
+			settings.save(ignore_permissions=True)
+
 	def test_disabled_target_is_skipped(self):
 		with self.config():
 			make_settings(targets=[site_config_target("primary"), site_config_target("secondary", enabled=0)])

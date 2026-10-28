@@ -30,7 +30,7 @@ A type with **Counterparty Required** needs at least one of `source_party_id`, `
 
 Retries are safe:
 
-- The same `source_key` with the same content returns the existing document (`"status": "exists"`, only `name` and `status`). A `source_key` belongs to its `source_system` and `source_account`; reusing it from another source is refused. Two parallel requests with the same new `source_key` create one document.
+- The same `source_key` with the same content returns the existing document (`"status": "exists"`, only `name` and `status`). A `source_key` belongs to its `source_system` and `source_account`; reusing it from another source is refused. Parallel requests with the same `source_key` or the same content wait for each other, so they create one document; a request that waits longer than 30 seconds gets HTTP 409 and can retry.
 - The same content for the same document type and the same `source_system` and `source_account` returns the existing document, with or without a `source_key`. Uploads from another source never match, update or replace it; they create their own document.
 - Attachments are compared by SHA-256. When the main file is known and the request has attachments the document does not have yet: if archiving has not started, they are added to it (`"status": "updated"`); if it has, a new document with all sent files is created whose `replaces` points to it (`"status": "replaced"`). Attachments are never removed, so a request with fewer attachments returns `exists`.
 - A different file under a known `source_key` creates a new document whose `replaces` points to the latest version (`"status": "replaced"`). Apart from added attachments, existing documents are never changed.
@@ -64,7 +64,7 @@ Response (HTTP 200):
 
 `status` is `created`, `exists`, `updated` or `replaced`. `missing` lists what the document still needs before it can be archived (`File`, `Document Date`, `Counterparty`, `Document Number`, `Contract End Date`).
 
-Errors come back as JSON with an HTTP status: 400 for an invalid request (unknown type, missing or invalid date, missing required field, file type, size, empty or damaged file), 403 without the role, 417 for other validation errors, 429 when rate limited, and 5xx for storage or internal errors (retry those):
+Errors come back as JSON with an HTTP status: 400 for an invalid request (unknown type, missing or invalid date, missing required field, file type, size, empty or damaged file), 403 without the role, 409 when a parallel request files the same document, 417 for other validation errors, 429 when rate limited, and 5xx for storage or internal errors (retry those):
 
 ```json
 {"errors": [{"type": "UploadError", "message": "Unknown document type invoice."}]}

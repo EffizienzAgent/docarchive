@@ -10,6 +10,17 @@ def account_row(email_account):
 	return None
 
 
+def after_rename(doc, method, old, new, merge=False):
+	frappe.db.set_value("Mail Original", {"email_account": old}, "email_account", new, update_modified=False)
+	frappe.db.set_value(
+		"Business Document",
+		{"source_account": old, "source_system": "email", "archive_started_at": ("is", "not set")},
+		"source_account",
+		new,
+		update_modified=False,
+	)
+
+
 def account_settings(email_account):
 	row = account_row(email_account)
 	return row if row and row.mode != "Off" else None

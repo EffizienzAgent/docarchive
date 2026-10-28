@@ -2,7 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import get_datetime, getdate
 
-from docarchive import audit, content, counterparty, settings
+from docarchive import audit, content, counterparty, locks, settings
 from docarchive.document_types import CORRESPONDENCE, INTERNAL_CORRESPONDENCE
 from docarchive.mail import access, accounts, events, headers
 from docarchive.mail import thread as threads
@@ -36,6 +36,9 @@ def archive_with_outcome(original_name, own_company=None, check_permission=False
 	row = accounts.account_row(original.email_account) or frappe._dict()
 	own_company = settings.own_company_for(original.mail_at, own_company or row.own_company)
 	name, outcome = _existing(original, own_company), "linked"
+	linked = frappe.db.get_value(ORIGINAL, original_name, "business_document", for_update=True)
+	if linked:
+		return linked, "skipped"
 	if not name:
 		name, outcome = _create(original, own_company, check_permission, raw, reason), "created"
 	original.db_set("business_document", name, update_modified=False)
@@ -442,12 +445,13 @@ def _existing(original, own_company):
 
 
 def _existing_document(message_id, sha256, own_company):
+	locks.hold(f"mail:{own_company}:{message_id or sha256}")
 	filters = {"own_company": own_company}
 	if message_id:
 		filters["mail_message_id"] = message_id
 	else:
 		filters.update(content_sha256=sha256, source_system="email")
-	return frappe.db.get_value(DOCUMENT, filters)
+	return frappe.db.get_value(DOCUMENT, filters, for_update=True)
 
 
 def _create(original, own_company, check_permission=False, raw=None, reason=MANUAL):

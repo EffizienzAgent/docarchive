@@ -61,8 +61,8 @@ def run_failed(error):
 
 def after_run(summary):
 	"""Called after a nightly run that got to the end."""
-	frappe.db.set_value(
-		"Archive Settings", "Archive Settings", "last_run_finished_at", now_datetime(), update_modified=False
+	frappe.db.set_single_value(
+		"Archive Settings", "last_run_finished_at", now_datetime(), update_modified=False
 	)
 	frappe.db.commit()
 	archive_failed(summary["failed"])

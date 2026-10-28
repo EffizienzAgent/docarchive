@@ -143,12 +143,16 @@ def reassign():
 		or_filters={"source_system": ("is", "set"), "einvoice_data": ("is", "set")},
 		pluck="name",
 	):
-		doc = frappe.get_doc(DOCUMENT, name)
-		if assignment.assign(doc) and doc.counterparty:
-			try:
+		frappe.db.savepoint(SAVEPOINT)
+		try:
+			doc = frappe.get_doc(DOCUMENT, name)
+			if assignment.assign(doc) and doc.counterparty:
 				save(doc, archive_write=False)
-			except frappe.ValidationError:
-				frappe.db.rollback(save_point=SAVEPOINT)
+		except frappe.ValidationError:
+			frappe.db.rollback(save_point=SAVEPOINT)
+		except Exception:
+			frappe.db.rollback(save_point=SAVEPOINT)
+			frappe.log_error(title=f"docarchive: assign {name}")
 
 
 def missing_copies(target_names) -> list[str]:
@@ -247,9 +251,9 @@ def archive_locked(name, targets, outcomes) -> str:
 	except Exception as e:
 		frappe.db.rollback(save_point=SAVEPOINT)
 		doc = frappe.get_doc(DOCUMENT, name)
-		doc.archive_error = safe_error(e)
+		doc.flags.run_error = safe_error(e)
 		doc.flags.audit_reason = reason_code(e)
-		log(doc, None, doc.archive_error)
+		log(doc, None, doc.flags.run_error)
 	doc.archive_queued_at = None
 	status = finish(doc, targets)
 	if status == ARCHIVED:
@@ -463,7 +467,7 @@ def finish(doc, targets) -> str:
 	errors = [f"{copy.target_name}: {copy.error}" for copy in copies if copy.status == FAILED]
 	doc.archive_status = FAILED
 	doc.archive_attempts = (doc.archive_attempts or 0) + 1
-	doc.archive_error = "\n".join(filter(None, [doc.archive_error, *errors])) or None
+	doc.archive_error = "\n".join(filter(None, [doc.flags.run_error, *errors])) or None
 	store_result(doc)
 	return FAILED
 
@@ -770,8 +774,9 @@ def extend_document(doc, until, by_name) -> bool:
 		)
 	try:
 		save(doc)
-	except Exception:
+	except Exception as e:
 		frappe.db.rollback(save_point=SAVEPOINT)
+		log(doc, None, safe_error(e))
 		return False
 	return done
 

@@ -25,6 +25,7 @@ def execute():
 				frappe.db.set_value(DOCUMENT, row.name, "counterparty_name", name, update_modified=False)
 			else:
 				start += 1
+		frappe.db.commit()
 		if len(rows) < CHUNK:
 			return
 

@@ -7,7 +7,7 @@ from frappe.tests import IntegrationTestCase
 from werkzeug.test import EnvironBuilder
 from werkzeug.wrappers import Request
 
-from docarchive import api
+from docarchive import api, locks
 from docarchive.permissions import INTEGRATION_ROLE, MANAGER_ROLE
 from docarchive.tests.factories import (
 	make_business_document,
@@ -256,20 +256,19 @@ class TestUploadApi(IntegrationTestCase):
 					**{"source_system": "Billing", "source_account": "a", **scope},
 				)
 
-	def test_concurrent_source_key_returns_existing(self):
+	def test_parallel_upload_with_the_same_source_key_waits(self):
 		key = unique("race")
-		data = pdf(b"race")
-		real_find, real_versions = api.find_existing, api.source_versions
-		first = self.upload(data, source_key=key)
-		finds = iter([lambda *args: None, real_find])
-		versions = iter([lambda *args: [], real_versions, real_versions])
-		with (
-			patch("docarchive.api.find_existing", side_effect=lambda *args: next(finds)(*args)),
-			patch("docarchive.api.source_versions", side_effect=lambda *args: next(versions)(*args)),
-		):
-			result = self.upload(data, source_key=key)
-		self.assertEqual((result["status"], result["name"]), ("exists", first["name"]))
-		self.assertEqual(frappe.db.count("Business Document", {"source_key": key}), 1)
+		other = frappe.cache.lock(frappe.cache.make_key(f"docarchive:upload:key:{key}"), timeout=60)
+		self.assertTrue(other.acquire(blocking=False))
+		self.addCleanup(other.release)
+		with patch("docarchive.locks.WAIT_SECONDS", 0.2), self.assertRaises(locks.Busy):
+			self.upload(source_key=key)
+		self.assertFalse(frappe.db.exists("Business Document", {"source_key": key}))
+
+	def test_json_booleans_and_numbers_are_accepted(self):
+		result = self.upload(legal_hold=True, source_party_id=42, document_number=1001)
+		doc = frappe.get_doc("Business Document", result["name"])
+		self.assertEqual((doc.hold_on_archive, doc.source_party_id, doc.document_number), (1, "42", "1001"))
 
 	def test_storage_errors_are_not_client_errors(self):
 		with patch("frappe.core.doctype.file.file.File.insert", side_effect=RuntimeError("storage down")):

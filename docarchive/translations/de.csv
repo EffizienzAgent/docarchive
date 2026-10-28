@@ -730,3 +730,6 @@ Marked as not to be archived.,Als nicht zu archivieren markiert.
 Undo,Rückgängig
 Sealed on {0} at the earliest.,Frühestens am {0} festgeschrieben.
 "Counterparty missing, removed on {0}.","Gegenpartei fehlt, wird am {0} entfernt."
+Another request is filing the same document. Please try again.,Eine andere Anfrage legt gerade dasselbe Dokument ab. Bitte erneut versuchen.
+The retention was changed to {0} in the meantime. Please check it and try again.,Die Aufbewahrung wurde inzwischen auf {0} geändert. Bitte prüfen und erneut versuchen.
+"Storage target {0} holds archived copies, so its name cannot change.","Speicherziel {0} enthält archivierte Kopien, daher kann sich sein Name nicht ändern."

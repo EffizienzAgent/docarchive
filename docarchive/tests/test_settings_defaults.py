@@ -39,6 +39,15 @@ class TestSettingsDefaults(IntegrationTestCase):
 				apply_settings_defaults.execute()
 				self.assertEqual(stored(field), value, field)
 
+	def test_zero_written_by_older_versions_is_repaired(self):
+		from docarchive.patches import repair_zero_settings
+
+		for field in repair_zero_settings.FIELDS:
+			for value, expected in (("0", str(settings.DEFAULTS[field])), ("5", "5")):
+				store(field, value)
+				repair_zero_settings.execute()
+				self.assertEqual(stored(field), expected, (field, value))
+
 	def test_defaults_match_the_doctype(self):
 		meta = frappe.get_meta(SETTINGS)
 		for field, default in settings.DEFAULTS.items():

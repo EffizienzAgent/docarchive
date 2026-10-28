@@ -31,8 +31,20 @@ def validate(settings):
 				_("Storage target {0} points to the same bucket as another target.").format(row.target_name)
 			)
 		places.add(place)
+	validate_renames(settings)
 	if settings.enabled:
 		validate_enabled(settings)
+
+
+def validate_renames(settings):
+	before = settings.get_doc_before_save()
+	old_names = {row.name: row.target_name for row in before.storage_targets} if before else {}
+	for row in settings.storage_targets:
+		old = old_names.get(row.name)
+		if old and old != row.target_name and frappe.db.exists("Archive Copy", {"target_name": old}):
+			frappe.throw(
+				_("Storage target {0} holds archived copies, so its name cannot change.").format(old)
+			)
 
 
 def validate_row(row):

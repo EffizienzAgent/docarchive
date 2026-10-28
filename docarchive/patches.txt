@@ -8,3 +8,4 @@ docarchive.patches.apply_settings_defaults
 docarchive.patches.drop_stale_mail_index
 docarchive.patches.fill_counterparty_names
 docarchive.patches.join_mail_threads
+docarchive.patches.repair_zero_settings

@@ -55,6 +55,14 @@ class TestManualExtension(ArchiveRunTestCase):
 		self.assertEqual(json.loads(put["Body"])["extension"]["reason"], "Audit 2026")
 		self.assertEqual(put["ObjectLockRetainUntilDate"], datetime(2037, 1, 2, tzinfo=UTC))
 
+	def test_retry_with_the_old_retention_is_refused(self):
+		doc = self.archived()
+		seen = extension.options(doc.name)["current"]
+		extension.extend(doc.name, extension.ADD_YEARS, years=2, current=seen)
+		with self.assertRaisesRegex(frappe.ValidationError, "in the meantime"):
+			extension.extend(doc.name, extension.ADD_YEARS, years=2, current=seen)
+		self.assertEqual(self.copies(doc), ["2037-01-02 00:00:00"] * 2)
+
 	def test_at_least_counts_from_the_retention_start(self):
 		doc = self.archived()
 		extension.extend(doc.name, extension.AT_LEAST, years=10)
