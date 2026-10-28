@@ -361,17 +361,17 @@ class TestArchiveDocument(ArchiveRunTestCase):
 		self.assertTrue(all(len(v) == 1 for v in self.fake("secondary").versions.values()))
 
 	def test_existing_object_must_carry_the_expected_lock(self):
-		doc = self.document()
-		with patch("docarchive.store.head", side_effect=RuntimeError):
-			self.archive(doc)
-		doc.reload()
-		data = run.content.read_bytes(doc.file)
 		cases = {
 			"wrong mode": ("COMPLIANCE", datetime(2035, 1, 2, tzinfo=UTC)),
 			"shorter date": ("GOVERNANCE", datetime(2030, 1, 1, tzinfo=UTC)),
 		}
 		for case, (mode, until) in cases.items():
 			with self.subTest(case):
+				doc = self.document()
+				with patch("docarchive.store.head", side_effect=RuntimeError):
+					self.archive(doc)
+				doc.reload()
+				data = run.content.read_bytes(doc.file)
 				self.fakes.clear()
 				store.put_locked(store.targets()[0], doc.object_key, data, mode, until)
 				self.assertEqual(self.archive(doc), "Failed")

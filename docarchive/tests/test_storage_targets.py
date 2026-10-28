@@ -93,6 +93,7 @@ class TestStorageTargets(IntegrationTestCase):
 		settings = frappe.get_single("Archive Settings")
 		settings.storage_targets[1].target_name = "reserve"
 		settings.save(ignore_permissions=True)
+		settings = frappe.get_single("Archive Settings")
 		settings.storage_targets[0].target_name = "moved"
 		with self.assertRaisesRegex(frappe.ValidationError, "cannot change"):
 			settings.save(ignore_permissions=True)
