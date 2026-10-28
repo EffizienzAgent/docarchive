@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.12.0](https://github.com/EffizienzAgent/docarchive/compare/v0.11.0...v0.12.0) (2026-10-28)
+
+
+### Features
+
+* e-mails show whether they are archived, filed or should be archived, on the Communication form (bar with the archiving rule, reason, expiry, Archive / Don't archive, Discard while filed), in every activity timeline and in the Communication list; one-click archive where the mail is seen. Rule and suggestion keywords are configurable in Archive Settings. Host apps get `docarchive.mail.archiving.statuses` and `docarchive.mail.suggestion.rule` ([#53](https://github.com/EffizienzAgent/docarchive/pull/53))
+
+
+### Bug Fixes
+
+* concurrent first requests no longer fail with an import deadlock in `docarchive.mail`; the package resolves its exports lazily ([#53](https://github.com/EffizienzAgent/docarchive/pull/53))
+
 ## [0.11.0](https://github.com/EffizienzAgent/docarchive/compare/v0.10.0...v0.11.0) (2026-10-26)
 
 
