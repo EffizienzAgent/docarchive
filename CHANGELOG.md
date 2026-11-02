@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/EffizienzAgent/docarchive/compare/v0.12.2...v0.13.0) (2026-11-02)
+
+
+### Features
+
+* take the thread counterparty when another participant replies ([06843dd](https://github.com/EffizienzAgent/docarchive/commit/06843ddeb401f5c5f271602b8ff56096a78f13c4))
+
 ## [0.12.2](https://github.com/EffizienzAgent/docarchive/compare/v0.12.1...v0.12.2) (2026-10-28)
 
 
