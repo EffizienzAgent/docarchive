@@ -1,5 +1,7 @@
 A WORM document archive app for the Frappe Framework
 
+<img src="docs/images/logo.png" alt="" width="96" align="right">
+
 # docarchive
 
 docarchive files business documents such as invoices, contracts and bank statements in a Frappe site. It is meant to copy each one, unchanged, into write-once (WORM) object storage for its retention period.

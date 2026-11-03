@@ -9,6 +9,16 @@ app_license = "mit"
 
 required_apps = ["s3storage"]
 
+app_logo_url = "/assets/docarchive/images/docarchive-logo.svg"
+add_to_apps_screen = [
+	{
+		"name": "docarchive",
+		"logo": "/assets/docarchive/images/docarchive-logo.svg",
+		"title": "Document Archive",
+		"route": "/app/business-document",
+	}
+]
+
 app_include_js = "docarchive.bundle.js"
 app_include_css = "docarchive.bundle.css"
 doctype_js = {"Communication": "public/js/communication.js"}
