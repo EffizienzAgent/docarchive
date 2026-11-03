@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/EffizienzAgent/docarchive/compare/v0.13.0...v0.14.0) (2026-11-03)
+
+
+### Features
+
+* add app icon and apps screen entry ([c979e6f](https://github.com/EffizienzAgent/docarchive/commit/c979e6fa47f289a86137f879dde0e764d801f065))
+
 ## [0.13.0](https://github.com/EffizienzAgent/docarchive/compare/v0.12.2...v0.13.0) (2026-11-02)
 
 
