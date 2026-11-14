@@ -112,3 +112,35 @@ class TestArchiveNow(ArchiveRunTestCase):
 		self.fakes["archive-secondary"] = self.fake("secondary").__class__(fail={"put_object"})
 		archive_now.archive_now([doc.name])
 		self.assertIsNone(frappe.db.get_value(DOCUMENT, doc.name, "archive_queued_at"))
+
+	def failed_document(self):
+		doc = self.document(age_hours=0)
+		self.fakes["archive-secondary"] = self.fake("secondary").__class__(fail={"put_object"})
+		archive_now.archive_now([doc.name])
+		self.fakes["archive-secondary"] = self.fake("secondary").__class__()
+		return doc
+
+	def test_retry_writes_the_missing_copy(self):
+		doc = self.failed_document()
+		frappe.set_user(self.manager())
+		self.assertEqual(archive_now.retry(doc.name), {"queued": [doc.name]})
+		frappe.set_user("Administrator")
+		doc.reload()
+		self.assertEqual(doc.archive_status, "Archived")
+		self.assertEqual([c.status for c in doc.archive_copies], ["Archived", "Archived"])
+		self.assertEqual(self.enqueue.call_args.kwargs["names"], [doc.name])
+
+	def test_retry_refuses_documents_that_did_not_fail(self):
+		pending = self.document(age_hours=0)
+		archived = self.document(age_hours=0)
+		archive_now.archive_now([archived.name])
+		for doc in (pending, archived):
+			with self.subTest(doc.name), self.assertRaises(frappe.ValidationError):
+				archive_now.retry(doc.name)
+
+	def test_retry_needs_write_permission_and_post(self):
+		doc = self.failed_document()
+		frappe.set_user(make_outsider("archive-now-outsider@example.com"))
+		with self.assertRaises(frappe.PermissionError):
+			archive_now.retry(doc.name)
+		self.assertEqual(frappe.allowed_http_methods_for_whitelisted_func[archive_now.retry], ["POST"])
