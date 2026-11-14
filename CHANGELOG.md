@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/EffizienzAgent/docarchive/compare/v0.14.0...v0.15.0) (2026-11-14)
+
+
+### Features
+
+* retry failed archiving from the document form ([09f534e](https://github.com/EffizienzAgent/docarchive/commit/09f534eef5ce6b5a11d80b6ec90b3287695874da))
+
 ## [0.14.0](https://github.com/EffizienzAgent/docarchive/compare/v0.13.0...v0.14.0) (2026-11-03)
 
 
