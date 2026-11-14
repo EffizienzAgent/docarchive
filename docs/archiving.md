@@ -58,7 +58,7 @@ The lock mode comes from the storage target and is recorded per copy. Switch a t
 
 ## Archive now
 
-Users who may write a document see **Archive now** on its form when archiving is enabled and the document is complete. The list view has the same action for selected documents. Both show the retain-until date and the mode and ask for confirmation, then queue the same archive code as the nightly run, without the minimum age wait. A failed target is retried by the next nightly run.
+Users who may write a document see **Archive now** on its form when archiving is enabled and the document is complete. The list view has the same action for selected documents. Both show the retain-until date and the mode and ask for confirmation, then queue the same archive code as the nightly run, without the minimum age wait. A failed target is retried by the next nightly run. A document whose archiving failed shows **Retry archiving** instead, which queues the same job right away; it writes only the copies that are still missing.
 
 ## Mail states and suggestion
 

@@ -84,6 +84,27 @@ def archive_now(names) -> dict:
 	return {"queued": queued, "started": started, "refused": refused}
 
 
+@frappe.whitelist(methods=["POST"])
+def retry(name) -> dict:
+	doc = check(name)
+	if not settings.get().enabled:
+		frappe.throw(_("Archiving is switched off."))
+	if doc.archive_status != run.FAILED or not doc.archive_started_at:
+		frappe.throw(_("Only documents whose archiving failed can be retried."))
+	if not doc.archive_queued_at:
+		frappe.db.set_value(DOCUMENT, name, "archive_queued_at", now_datetime(), update_modified=False)
+		frappe.enqueue(
+			"docarchive.archive_now.run_job",
+			queue="long",
+			job_id="docarchive-retry-" + name,
+			deduplicate=True,
+			enqueue_after_commit=True,
+			names=[name],
+			user=frappe.session.user,
+		)
+	return {"queued": [name]}
+
+
 def run_job(names, user=None):
 	targets = store.targets() if settings.get().enabled else None
 	outcomes = {}

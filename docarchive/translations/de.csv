@@ -175,6 +175,8 @@ There is no storage target named {0}.,Es gibt kein Speicherziel namens {0}.
 {0} already exists with different content.,{0} existiert bereits mit anderem Inhalt.
 Archive now,Jetzt festschreiben
 Archiving started.,Archivierung gestartet.
+Retry archiving,Festschreiben erneut versuchen
+Only documents whose archiving failed can be retried.,Nur Dokumente mit fehlgeschlagener Festschreibung können erneut versucht werden.
 Archive status: {0},Archivstatus: {0}
 "After this, the file and the archived fields of {0} document(s) can no longer be changed or deleted. They are kept unchangeable until {1} (mode {2}).",Danach können die Datei und die archivierten Felder von {0} Dokument(en) nicht mehr geändert oder gelöscht werden. Sie werden bis {1} unveränderbar aufbewahrt (Modus {2}).
 {0} selected document(s) cannot be archived yet and are skipped.,{0} der ausgewählten Dokumente können noch nicht archiviert werden und werden übersprungen.

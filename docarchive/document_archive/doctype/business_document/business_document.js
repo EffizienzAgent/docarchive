@@ -126,6 +126,14 @@ frappe.ui.form.on("Business Document", {
 					);
 				});
 		}
+		if (status === "Failed" && frm.doc.archive_started_at && !frm.doc.archive_queued_at && frm.perm[0].write) {
+			frm.add_custom_button(__("Retry archiving"), () =>
+				frappe.xcall("docarchive.archive_now.retry", { name: frm.doc.name }).then(() => {
+					frappe.show_alert({ message: __("Archiving started."), indicator: "blue" });
+					frm.reload_doc();
+				}),
+			);
+		}
 		if (frm.doc.archive_status === "Archived") {
 			docarchive.extension_options(frm.doc.name).then((options) => {
 				if (options.pending) {
