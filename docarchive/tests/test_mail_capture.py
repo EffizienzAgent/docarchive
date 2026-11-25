@@ -681,7 +681,11 @@ class TestMailCaptureOnS3(IntegrationTestCase):
 		fresh = eml()
 		mail.capture(self.comm, fresh, "t")
 		self.assertIn(old, self.s3.keys())
+		frappe.db.after_commit.reset()
 		originals.store(name)
+		self.assertEqual(self.row(name, "status"), "Stored")
+		# frappe >= 16.60 removes a deleted File's content only after the commit
+		frappe.db.after_commit.run()
 		self.assertNotIn(old, self.s3.keys())
 		self.assertEqual(self.s3.content(self.key(name)), fresh)
 
